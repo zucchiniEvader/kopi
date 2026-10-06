@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/egoist/godiff/internal/diff"
-	"github.com/egoist/godiff/internal/highlight"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/diff"
+	"github.com/zucchiniEvader/kopi/internal/highlight"
 )
 
 // fileState is a changed file as the review shows it: its change, the

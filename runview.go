@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egoist/godiff/internal/dap"
-	"github.com/egoist/godiff/internal/highlight"
-	"github.com/egoist/godiff/internal/launch"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/dap"
+	"github.com/zucchiniEvader/kopi/internal/highlight"
+	"github.com/zucchiniEvader/kopi/internal/launch"
 )
 
 // mainEntry is a class of the work tree with a main method.

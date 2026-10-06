@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egoist/godiff/internal/editor"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/editor"
 )
 
 func TestFindAndReplaceInEditor(t *testing.T) {

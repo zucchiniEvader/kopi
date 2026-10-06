@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egoist/godiff/internal/icontheme"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/icontheme"
 )
 
 // iconThemes holds the file icon theme the windows share: the one the
@@ -43,7 +43,7 @@ func (s *iconState) themeFor(setting string) *icontheme.Theme {
 	go func() {
 		t, err := loadIconTheme(setting)
 		if err != nil {
-			log.Printf("godiff: icon theme %q: %v", setting, err)
+			log.Printf("kopi: icon theme %q: %v", setting, err)
 		}
 		s.mu.Lock()
 		if s.setting == setting {

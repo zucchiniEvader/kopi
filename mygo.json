@@ -1,7 +1,7 @@
 {
-  "name": "Godiff",
-  "identifier": "dev.egoist.godiff",
+  "name": "Kopi",
+  "identifier": "io.github.zucchinievader.kopi",
   "version": "0.1.0",
-  "copyright": "© 2026 EGOIST",
+  "copyright": "© 2026 zucchiniEvader; Godiff © 2026 EGOIST",
   "out": "build"
 }

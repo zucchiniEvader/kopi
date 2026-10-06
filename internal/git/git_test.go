@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egoist/godiff/internal/diff"
+	"github.com/zucchiniEvader/kopi/internal/diff"
 )
 
 func gitIn(t *testing.T, dir string, args ...string) string {

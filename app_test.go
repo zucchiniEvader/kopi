@@ -13,14 +13,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/egoist/godiff/internal/git"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/git"
 )
 
 func TestMain(m *testing.M) {
 	// Keep the user's settings out of the tests, and the tests' out of them.
-	dir, _ := os.MkdirTemp("", "godiff-config")
-	cfg.path = filepath.Join(dir, "godiff.jsonc")
+	dir, _ := os.MkdirTemp("", "kopi-config")
+	cfg.path = filepath.Join(dir, "kopi.jsonc")
 	cfg.settings = defaultSettings()
 	// Tests download no icons, but those that ask.
 	cfg.settings.IconTheme = "none"
@@ -131,9 +131,9 @@ func launchTestWindow(t *testing.T, dir string) (*window, *ui.Tester) {
 	return w, tt
 }
 
-// snapshot saves the tester's frame in $GODIFF_SNAPSHOTS, to look at.
+// snapshot saves the tester's frame in $KOPI_SNAPSHOTS, to look at.
 func snapshot(t *testing.T, tt *ui.Tester, name string) {
-	dir := os.Getenv("GODIFF_SNAPSHOTS")
+	dir := os.Getenv("KOPI_SNAPSHOTS")
 	if dir == "" {
 		return
 	}

@@ -10,10 +10,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/egoist/godiff/internal/editor"
-	"github.com/egoist/godiff/internal/lsp"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/editor"
+	"github.com/zucchiniEvader/kopi/internal/lsp"
 )
 
 // maxEditSize is the largest file an editor opens.

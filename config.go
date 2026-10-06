@@ -13,7 +13,7 @@ import (
 	"github.com/egoist/mygo"
 )
 
-// Settings are the user's preferences, in ~/.godiff/godiff.jsonc as
+// Settings are the user's preferences, in ~/.kopi/kopi.jsonc as
 // codiff keeps its own in ~/.codiff/codiff.jsonc.
 type Settings struct {
 	CodeFontFamily      string `json:"codeFontFamily"`
@@ -90,7 +90,7 @@ var cfg = newConfig()
 
 func newConfig() *config {
 	home, _ := os.UserHomeDir()
-	c := &config{path: filepath.Join(home, ".godiff", "godiff.jsonc"), settings: defaultSettings()}
+	c := &config{path: filepath.Join(home, ".kopi", "kopi.jsonc"), settings: defaultSettings()}
 	c.load()
 	return c
 }
@@ -161,7 +161,7 @@ func (c *config) load() bool {
 		Settings json.RawMessage `json:"settings"`
 	}
 	if err := json.Unmarshal(stripJSONC(data), &file); err != nil {
-		log.Printf("godiff: %s: %v", c.path, err)
+		log.Printf("kopi: %s: %v", c.path, err)
 		return false
 	}
 	s := defaultSettings()
@@ -188,7 +188,7 @@ func (c *config) write(s Settings) {
 		return
 	}
 	if err := os.WriteFile(c.path, append(data, '\n'), 0o644); err != nil {
-		log.Printf("godiff: %v", err)
+		log.Printf("kopi: %v", err)
 		return
 	}
 	if fi, err := os.Stat(c.path); err == nil {

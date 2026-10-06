@@ -7,20 +7,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egoist/godiff/internal/editor"
-	"github.com/egoist/godiff/internal/highlight"
-	"github.com/egoist/godiff/internal/java"
+	"github.com/zucchiniEvader/kopi/internal/editor"
+	"github.com/zucchiniEvader/kopi/internal/highlight"
+	"github.com/zucchiniEvader/kopi/internal/java"
 )
 
 // TestRealJDTLS runs the real jdtls, downloaded when the machine has none,
-// on a project: GODIFF_JDTLS=1, and GODIFF_JAVA_HOME for its Java unless
+// on a project: KOPI_JDTLS=1, and KOPI_JAVA_HOME for its Java unless
 // the machine's is found.
 func TestRealJDTLS(t *testing.T) {
-	if os.Getenv("GODIFF_JDTLS") == "" {
-		t.Skip("GODIFF_JDTLS=1 runs the real Java language server")
+	if os.Getenv("KOPI_JDTLS") == "" {
+		t.Skip("KOPI_JDTLS=1 runs the real Java language server")
 	}
 	dir := testRepo(t)
-	if os.Getenv("GODIFF_JDTLS") == "maven" {
+	if os.Getenv("KOPI_JDTLS") == "maven" {
 		writeFile(t, dir, "pom.xml", `<project xmlns="http://maven.apache.org/POM/4.0.0">
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.example</groupId>
@@ -35,7 +35,7 @@ func TestRealJDTLS(t *testing.T) {
 	}
 	writeFile(t, dir, "src/Main.java", "public class Main {\n    public static void main(String[] args) {\n        System.out.println(greet());\n        missing();\n    }\n\n    static String greet() { return \"hi\"; }\n}\n")
 	w, tt := newTestWindow(t, dir)
-	w.settings.JavaHome = os.Getenv("GODIFF_JAVA_HOME")
+	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
 	w.javaLaunch = launchJava
 	defer w.javaStop()
@@ -100,10 +100,10 @@ func TestRealJDTLS(t *testing.T) {
 }
 
 // TestRealJDTLSLombok runs jdtls on a Maven project with Lombok, which
-// Maven must have downloaded: GODIFF_JDTLS=1.
+// Maven must have downloaded: KOPI_JDTLS=1.
 func TestRealJDTLSLombok(t *testing.T) {
-	if os.Getenv("GODIFF_JDTLS") == "" {
-		t.Skip("GODIFF_JDTLS=1 runs the real Java language server")
+	if os.Getenv("KOPI_JDTLS") == "" {
+		t.Skip("KOPI_JDTLS=1 runs the real Java language server")
 	}
 	if java.FindLombok() == "" {
 		t.Skip("no Lombok in ~/.m2 or Gradle's cache")
@@ -124,7 +124,7 @@ func TestRealJDTLSLombok(t *testing.T) {
 	main := "package com.example;\n\nimport java.util.List;\n\npublic class App {\n    public static void main(String[] args) {\n        Person p = new Person();\n        p.setName(\"Ada\");\n        List<String> names = List.of(p.getName());\n    }\n}\n"
 	writeFile(t, dir, "src/main/java/com/example/App.java", main)
 	w, tt := newTestWindow(t, dir)
-	w.settings.JavaHome = os.Getenv("GODIFF_JAVA_HOME")
+	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
 	w.javaLaunch = launchJava
 	defer w.javaStop()
@@ -176,10 +176,10 @@ func TestRealJDTLSLombok(t *testing.T) {
 }
 
 // TestRealRun runs a Maven project's class with the class path the real
-// jdtls resolves: GODIFF_JDTLS=1.
+// jdtls resolves: KOPI_JDTLS=1.
 func TestRealRun(t *testing.T) {
-	if os.Getenv("GODIFF_JDTLS") == "" {
-		t.Skip("GODIFF_JDTLS=1 runs the real Java language server")
+	if os.Getenv("KOPI_JDTLS") == "" {
+		t.Skip("KOPI_JDTLS=1 runs the real Java language server")
 	}
 	dir := testRepo(t)
 	writeFile(t, dir, "pom.xml", `<project xmlns="http://maven.apache.org/POM/4.0.0">
@@ -194,7 +194,7 @@ func TestRealRun(t *testing.T) {
 	writeFile(t, dir, "src/main/java/com/example/App.java", "package com.example;\n\npublic class App {\n    public static void main(String[] args) {\n        System.out.println(Greeter.greet(args.length > 0 ? args[0] : \"nobody\"));\n    }\n}\n")
 	writeFile(t, dir, ".vscode/launch.json", `{"configurations": [{"type": "java", "name": "App", "request": "launch", "mainClass": "com.example.App", "args": "Ada"}]}`)
 	w, tt := newTestWindow(t, dir)
-	w.settings.JavaHome = os.Getenv("GODIFF_JAVA_HOME")
+	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
 	w.javaLaunch = launchJava
 	defer w.javaStop()
@@ -239,15 +239,15 @@ func TestRealRun(t *testing.T) {
 }
 
 // TestRealDebug debugs a class with java-debug, downloaded when the
-// machine has none: GODIFF_JDTLS=1.
+// machine has none: KOPI_JDTLS=1.
 func TestRealDebug(t *testing.T) {
-	if os.Getenv("GODIFF_JDTLS") == "" {
-		t.Skip("GODIFF_JDTLS=1 runs the real Java language server")
+	if os.Getenv("KOPI_JDTLS") == "" {
+		t.Skip("KOPI_JDTLS=1 runs the real Java language server")
 	}
 	dir := testRepo(t)
 	writeFile(t, dir, "src/App.java", "public class App {\n    public static void main(String[] args) {\n        int total = 0;\n        for (int i = 1; i <= 3; i++) {\n            total += i;\n        }\n        String name = \"Ada\";\n        System.out.println(name + \" \" + total);\n    }\n}\n")
 	w, tt := newTestWindow(t, dir)
-	w.settings.JavaHome = os.Getenv("GODIFF_JAVA_HOME")
+	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
 	w.javaLaunch = launchJava
 	defer w.javaStop()

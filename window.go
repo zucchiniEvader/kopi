@@ -14,11 +14,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/egoist/godiff/internal/diff"
-	"github.com/egoist/godiff/internal/git"
-	"github.com/egoist/godiff/internal/highlight"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/diff"
+	"github.com/zucchiniEvader/kopi/internal/git"
+	"github.com/zucchiniEvader/kopi/internal/highlight"
 )
 
 // sourceKind is what a window reviews.
@@ -136,7 +136,7 @@ type window struct {
 	focusList        bool
 	focusedOnce      bool
 	focusHistory     bool
-	switchedAt       time.Time // when the source last changed, for GODIFF_DEBUG
+	switchedAt       time.Time // when the source last changed, for KOPI_DEBUG
 	debugPressed     bool
 	// hold keeps the background work of tests in held, to run frames
 	// while it waits.
@@ -321,7 +321,7 @@ func newWindow(repo *git.Repo, src source) *window {
 	return w
 }
 
-// windowTitle is "<repository>[/<source>] · Godiff".
+// windowTitle is "<repository>[/<source>] · Kopi".
 func windowTitle(root string, src source) string {
 	name := filepath.Base(root)
 	switch src.kind {
@@ -330,7 +330,7 @@ func windowTitle(root string, src source) string {
 	case sourceBranch:
 		name += "/" + src.ref
 	}
-	return name + " · Godiff"
+	return name + " · Kopi"
 }
 
 func shortHash(h string) string {
@@ -1076,11 +1076,11 @@ func probeMainThread(d time.Duration) {
 	log.Printf("main thread: worst wait %v, average %v, %d of %d waits over 16ms", worst, total/time.Duration(max(n, 1)), slow, n)
 }
 
-// watchMainThread logs, for GODIFF_DEBUG, whenever the main thread keeps
+// watchMainThread logs, for KOPI_DEBUG, whenever the main thread keeps
 // a function waiting over 30ms: when the window cannot respond.
 func watchMainThread() {
 	limit := 30 * time.Millisecond
-	if ms, err := strconv.Atoi(os.Getenv("GODIFF_DEBUG_BLOCK_MS")); err == nil {
+	if ms, err := strconv.Atoi(os.Getenv("KOPI_DEBUG_BLOCK_MS")); err == nil {
 		limit = time.Duration(ms) * time.Millisecond
 	}
 	var gc debug.GCStats

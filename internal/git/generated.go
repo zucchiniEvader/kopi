@@ -5,7 +5,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/egoist/godiff/internal/diff"
+	"github.com/zucchiniEvader/kopi/internal/diff"
 )
 
 // generatedDirs are directories of build output and dependencies, whose

@@ -20,7 +20,7 @@ const sample = `{
       "args": "--name 'Ada Lovelace' -v",
       "vmArgs": ["-Xmx1g", "-Dhome=${userHome}"],
       "cwd": "${workspaceFolder}/run",
-      "env": {"MODE": "dev", "PATHS": "${env:GODIFF_TEST_X}"},
+      "env": {"MODE": "dev", "PATHS": "${env:KOPI_TEST_X}"},
       "envFile": "${workspaceFolder}/.env",
       "classPaths": ["$Auto", "lib/extra.jar", "!target/old"],
     },
@@ -52,7 +52,7 @@ func TestParseAndResolve(t *testing.T) {
 		t.Errorf("cwd %q, vmArgs %q", r.Cwd, r.VMArgs)
 	}
 	// env wins over envFile.
-	if r.Env["TOKEN"] != "s3cret" || r.Env["MODE"] != "dev" || r.Env["PATHS"] != "env-GODIFF_TEST_X" {
+	if r.Env["TOKEN"] != "s3cret" || r.Env["MODE"] != "dev" || r.Env["PATHS"] != "env-KOPI_TEST_X" {
 		t.Errorf("env %v", r.Env)
 	}
 	got := Paths(r.ClassPaths, []string{"/p/target/classes", filepath.Join(root, "target/old")})

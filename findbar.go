@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/egoist/godiff/internal/editor"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/editor"
 )
 
 // editorFind is the search of the editor shown, and its replacement.

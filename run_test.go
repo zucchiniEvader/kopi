@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egoist/godiff/internal/java"
+	"github.com/zucchiniEvader/kopi/internal/java"
 )
 
 const appJava = `package com.example;

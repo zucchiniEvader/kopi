@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"bytes"
-	"github.com/egoist/godiff/internal/highlight"
+	"github.com/zucchiniEvader/kopi/internal/highlight"
 	"strings"
 	"testing"
 	"time"

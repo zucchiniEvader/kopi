@@ -1,10 +1,12 @@
-// Godiff is a native, minimal, local diff viewer for reviewing Git changes
-// and committing them, after codiff, drawn by MyGo.
+// Kopi is a native, minimal editor of Java projects, with Java's language
+// server, running and debugging, and the review of their Git changes and
+// committing them, drawn by MyGo. It grew out of Godiff, EGOIST's diff
+// viewer after codiff.
 //
-//	godiff                 the uncommitted changes of the repository here
-//	godiff <path>          those of another repository
-//	godiff <commit>        a commit, as HEAD~1 or a1b2c3d
-//	godiff <branch>        the work tree's changes since it branched off
+//	kopi                 the uncommitted changes of the repository here
+//	kopi <path>          those of another repository
+//	kopi <commit>        a commit, as HEAD~1 or a1b2c3d
+//	kopi <branch>        the work tree's changes since it branched off
 package main
 
 import (
@@ -20,12 +22,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/egoist/godiff/internal/git"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/git"
 )
 
-const usage = `Usage: godiff [<commit> | <branch>] [<path>]
+const usage = `Usage: kopi [<commit> | <branch>] [<path>]
 
 Review the uncommitted changes of the Git repository at <path> (default:
 the current directory), a commit, or the work tree's changes since it
@@ -145,7 +147,7 @@ func showWelcome(err error) {
 	}
 	v := &welcome{err: err}
 	welcomeWin = mygo.NewWindow(mygo.WindowOptions{
-		Title:         "Godiff",
+		Title:         "Kopi",
 		Width:         640,
 		Height:        420,
 		MinWidth:      480,
@@ -191,19 +193,23 @@ func main() {
 		return
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "godiff:", err)
+		fmt.Fprintln(os.Stderr, "kopi:", err)
 		os.Exit(2)
 	}
 	fromUser := len(args) > 0 || (wd != "/" && wd != "")
 
-	name := "Godiff"
-	if n := os.Getenv("GODIFF_NAME"); n != "" {
+	name := "Kopi"
+	if n := os.Getenv("KOPI_NAME"); n != "" {
 		// Another name runs apart from the installed app, for testing.
 		name = n
 	}
 	mygo.App.SetName(name)
 	if !mygo.App.RequestSingleInstanceLock() {
 		return // the running instance opens the window
+	}
+	if name == "Kopi" {
+		migrateFromGodiff()
+		cfg.load()
 	}
 	mygo.App.OnSecondInstance(func(args []string, workingDir string) {
 		if len(args) > 0 {
@@ -212,7 +218,7 @@ func main() {
 		args, workingDir = takeCwd(args, workingDir)
 		req, err := parseArgs(args, workingDir)
 		if err != nil {
-			go mygo.Dialog.Error("Godiff", err.Error())
+			go mygo.Dialog.Error("Kopi", err.Error())
 			return
 		}
 		go open(req, true)
@@ -240,7 +246,7 @@ func main() {
 			go open(request{dir: state.lastRepository()}, false)
 		}
 	})
-	if path := os.Getenv("GODIFF_CPUPROFILE"); path != "" {
+	if path := os.Getenv("KOPI_CPUPROFILE"); path != "" {
 		// The whole session, written as the app quits.
 		if f, err := os.Create(path); err == nil {
 			pprof.StartCPUProfile(f)
@@ -250,7 +256,7 @@ func main() {
 			})
 		}
 	}
-	if path := os.Getenv("GODIFF_STARTUP_PROFILE"); path != "" {
+	if path := os.Getenv("KOPI_STARTUP_PROFILE"); path != "" {
 		// The first seconds, which draw the window for the first time.
 		if f, err := os.Create(path); err == nil {
 			pprof.StartCPUProfile(f)

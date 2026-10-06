@@ -11,9 +11,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/egoist/godiff/internal/editor"
-	"github.com/egoist/godiff/internal/java"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/editor"
+	"github.com/zucchiniEvader/kopi/internal/java"
 )
 
 // fakeAdapter is a debug adapter on a TCP port, as java-debug is: it has

@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egoist/godiff/internal/editor"
-	"github.com/egoist/godiff/internal/highlight"
-	"github.com/egoist/godiff/internal/java"
-	"github.com/egoist/godiff/internal/lsp"
-	"github.com/egoist/godiff/internal/proc"
+	"github.com/zucchiniEvader/kopi/internal/editor"
+	"github.com/zucchiniEvader/kopi/internal/highlight"
+	"github.com/zucchiniEvader/kopi/internal/java"
+	"github.com/zucchiniEvader/kopi/internal/lsp"
+	"github.com/zucchiniEvader/kopi/internal/proc"
 )
 
 // The states of a window's Java language server.
@@ -230,7 +230,7 @@ func initializeParams(root string, bundles []string) map[string]any {
 		"workspaceFolders": []map[string]string{
 			{"uri": uri, "name": filepath.Base(root)},
 		},
-		"clientInfo": map[string]string{"name": "Godiff"},
+		"clientInfo": map[string]string{"name": "Kopi"},
 		"capabilities": map[string]any{
 			"workspace": map[string]any{
 				"configuration":    true,
@@ -689,8 +689,8 @@ func cacheDir() string {
 	if err != nil {
 		dir = os.TempDir()
 	}
-	name := "godiff"
-	if n := os.Getenv("GODIFF_NAME"); n != "" {
+	name := "kopi"
+	if n := os.Getenv("KOPI_NAME"); n != "" {
 		name = n
 	}
 	return filepath.Join(dir, name)
@@ -742,7 +742,7 @@ func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, e
 		if jar, err := java.DownloadDebugger(context.Background(), cache); err == nil {
 			debugger = jar
 		} else {
-			log.Printf("godiff: java-debug: %v", err)
+			log.Printf("kopi: java-debug: %v", err)
 		}
 	}
 	if debugger != "" {

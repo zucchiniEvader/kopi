@@ -1,4 +1,4 @@
-module github.com/egoist/godiff
+module github.com/zucchiniEvader/kopi
 
 go 1.27.1
 

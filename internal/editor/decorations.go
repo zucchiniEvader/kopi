@@ -3,7 +3,7 @@ package editor
 import (
 	"slices"
 
-	"github.com/egoist/godiff/internal/highlight"
+	"github.com/zucchiniEvader/kopi/internal/highlight"
 	"strings"
 	"time"
 	"unicode/utf8"

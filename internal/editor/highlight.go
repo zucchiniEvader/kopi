@@ -1,6 +1,6 @@
 package editor
 
-import "github.com/egoist/godiff/internal/highlight"
+import "github.com/zucchiniEvader/kopi/internal/highlight"
 
 // highlighter colors a buffer's lines by the classes of their tokens,
 // again whenever the buffer changes.

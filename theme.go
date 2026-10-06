@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/egoist/godiff/internal/highlight"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/highlight"
 )
 
 // palette is the colors of the review, in the light or the dark: those

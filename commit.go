@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/egoist/godiff/internal/diff"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/diff"
 )
 
 // toggleCommit shows the commit view, or the review again.

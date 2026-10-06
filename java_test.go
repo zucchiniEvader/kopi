@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egoist/godiff/internal/editor"
-	"github.com/egoist/godiff/internal/highlight"
-	"github.com/egoist/godiff/internal/lsp"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/editor"
+	"github.com/zucchiniEvader/kopi/internal/highlight"
+	"github.com/zucchiniEvader/kopi/internal/lsp"
 )
 
 // fakeJDTLS is a language server on the other end of a pipe, which

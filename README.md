@@ -1,36 +1,37 @@
-# Godiff
+# Kopi
 
-A native, minimal, local diff viewer for reviewing Git changes and committing
-them: a reimplementation of [codiff](https://github.com/nkzw-tech/codiff) in Go
-with [MyGo](https://mygo.egoist.dev/)'s native UI. No webview, no JavaScript:
-the window is drawn by MyGo on the GPU, with the system's fonts, accent color,
-dark mode, menus and vibrancy.
+A native, minimal editor of Java projects, drawn by
+[MyGo](https://mygo.egoist.dev/)'s native UI on the GPU: no webview, no
+JavaScript, with the system's fonts, accent color, dark mode, menus and
+vibrancy. It edits with Java's language server, runs and debugs programs
+with VS Code's launch configurations, and reviews and commits the work
+tree's Git changes.
 
-<img width="1222" height="844" alt="截屏 2026-10-05 at 00 12 00 (2)" src="https://github.com/user-attachments/assets/a665076b-af70-4c70-b487-fe93b70cfa71" />
-
+Kopi grew out of [Godiff](https://github.com/egoist/godiff), EGOIST's diff
+viewer, itself a reimplementation of
+[codiff](https://github.com/nkzw-tech/codiff): its review, history and commits
+are Godiff's.
 
 ## Features
 
-- **Review local changes**: staged, unstaged and untracked files against
-  `HEAD`, in one scrolling surface of file cards with sticky headers.
-- **Split and unified diffs** with syntax highlighting (codiff's Licht and
-  Dunkel palettes), word-level change highlighting, and unchanged lines that
-  expand 100 at a time or all at once. New and deleted files show in one
-  column.
-- **Viewed files**: marking a file viewed collapses it, and it opens again
-  once it changes. Generated files (lockfiles, `*.min.js`,
-  `linguist-generated`, …) and dependency folders start collapsed.
-- **Review comments**: click a line, or press <kbd>J</kbd>/<kbd>K</kbd> to
-  choose a hunk and <kbd>Enter</kbd>, then copy every comment as Markdown,
-  with the diff around it, for an agent or a colleague.
-- **Commit** the files you choose, with a subject and a summary, from the
-  sidebar's Commit button. Other staged work stays staged.
-- **History**: browse commits and review any of them, or compare the work
-  tree with a branch.
-- **Find in diffs** (<kbd>⌘F</kbd>), a **file filter** (<kbd>⌘P</kbd>) and a
-  **command bar** (<kbd>⌘K</kbd>).
-- Image previews of changed pictures, a file tree with change counts and
-  status letters, and a banner when the work tree changes.
+- **Editor**: an explorer of the work tree (Java's package folders in one
+  row), tabs, syntax and semantic highlighting, find and replace
+  (<kbd>⌘F</kbd>, <kbd>⌥⌘F</kbd>), go to a file (<kbd>⌘P</kbd>), files changed
+  on disk read again, and VS Code's file icon themes (Material Icon Theme by
+  default).
+- **Java**: Eclipse JDT Language Server (jdtls), downloaded once, on Java 21
+  or later: problems as you type, hovers, go to definition (<kbd>⌘</kbd>-click,
+  <kbd>F12</kbd>) into the JDK's and the libraries' sources, Maven, Gradle and
+  Lombok.
+- **Run and debug**: `.vscode/launch.json` as VS Code's Java debugger reads
+  it, or the Java file shown; Run | Debug on main methods; a Run and Debug
+  tab with breakpoints, variables and the call stack, through Microsoft's
+  java-debug; the program's input and output in a panel (<kbd>⌘J</kbd>),
+  its stack traces linked to their sources.
+- **Review** (from Godiff): staged, unstaged and untracked changes against
+  `HEAD`, split and unified diffs with word-level highlighting, viewed files,
+  review comments as Markdown, commits, history, and comparisons with a
+  branch.
 
 ## Usage
 
@@ -38,44 +39,51 @@ dark mode, menus and vibrancy.
 go run . [<commit> | <branch>] [<path>]
 ```
 
-- `godiff` reviews the uncommitted changes of the repository you are in.
-- `godiff HEAD~1` reviews a commit, against its first parent.
-- `godiff main` compares the work tree, committed or not, with where it
+- `kopi` opens the repository you are in.
+- `kopi HEAD~1` reviews a commit, against its first parent.
+- `kopi main` compares the work tree, committed or not, with where it
   branched off `main`.
-- `godiff ../other-repo` opens another repository.
+- `kopi ../other-repo` opens another repository.
 
-Every repository opens in a window of its own. **Godiff → Install Command Line
-Tool…** installs a `godiff` command that opens the app on the repository it
+Every repository opens in a window of its own. **Kopi → Install Command Line
+Tool…** installs a `kopi` command that opens the app on the repository it
 runs in.
 
 ### Keyboard
 
 | Keys | |
 |---|---|
+| <kbd>⌘P</kbd> | Go to a file (`Main.java:42` goes to a line) |
+| <kbd>⌘F</kbd> / <kbd>⌥⌘F</kbd> | Find / replace in the file |
+| <kbd>⌘S</kbd> / <kbd>⌘W</kbd> | Save / close the tab |
+| <kbd>⌘</kbd>-click, <kbd>F12</kbd> | Go to the definition |
+| <kbd>F5</kbd> / <kbd>⌃F5</kbd> | Debug / run |
+| <kbd>⇧F5</kbd> / <kbd>⇧⌘F5</kbd> | Stop / restart |
+| <kbd>F9</kbd> | Toggle a breakpoint |
+| <kbd>F10</kbd> / <kbd>F11</kbd> / <kbd>⇧F11</kbd> | Step over / into / out |
+| <kbd>⌘J</kbd> | The run panel |
+| <kbd>⌘1</kbd> … <kbd>⌘3</kbd>, <kbd>⇧⌘D</kbd> | Explorer, changes, history, run and debug |
+| <kbd>⇧⌘R</kbd> | The review of the changes |
+| <kbd>J</kbd> / <kbd>K</kbd> | Next / previous hunk, in the review |
 | <kbd>⌘K</kbd> | Command bar |
-| <kbd>⌘P</kbd> | Filter files |
-| <kbd>⌘F</kbd> | Find in diffs |
-| <kbd>J</kbd> / <kbd>K</kbd> | Next / previous hunk |
-| <kbd>Enter</kbd> | Comment on the hunk chosen |
-| <kbd>⌘↩</kbd> | Add the comment; commit, in the commit view |
 | <kbd>⌘⇧B</kbd> | Toggle the sidebar |
-| <kbd>⌘1</kbd> / <kbd>⌘2</kbd> | Files / History |
-| <kbd>⌥Z</kbd> | Toggle word wrap |
-| <kbd>⌘⇧O</kbd> | Open the file in your editor |
-| <kbd>⌘R</kbd> | Refresh the changes |
 | <kbd>⌘+</kbd> / <kbd>⌘-</kbd> / <kbd>⌘0</kbd> | Code font size |
 | <kbd>⇧?</kbd> | All the shortcuts |
 
 ## Configuration
 
-Settings live in `~/.godiff/godiff.jsonc` (**Godiff → Open Config File…**),
-with codiff's names, and apply to open windows as the file changes:
+Settings live in `~/.kopi/kopi.jsonc` (**Kopi → Open Config File…**), and
+apply to open windows as the file changes; the first run takes Godiff's,
+from `~/.godiff/godiff.jsonc`:
 
 ```jsonc
 {
   "settings": {
     "codeFontFamily": "",          // e.g. "JetBrains Mono"; empty is SF Mono
     "codeFontSize": 13,
+    "javaHome": "",                // the JDK running jdtls; empty finds one
+    "jdtlsPath": "",               // a jdtls installation; empty downloads one
+    "iconTheme": "material",       // "none", or a VS Code icon theme's folder
     "copyCommentsOnClose": false,
     "diffStyle": "split",          // or "unified"
     "editorCommand": "",           // e.g. "zed {file}:{line}"
@@ -88,39 +96,39 @@ with codiff's names, and apply to open windows as the file changes:
 }
 ```
 
-Files open in `$GODIFF_EDITOR` or `editorCommand` (`{file}`, `{line}` and
-`{repo}` are replaced), else VS Code, else the app the system opens them with.
+Files open in another editor with `$KOPI_EDITOR` or `editorCommand` (`{file}`,
+`{line}` and `{repo}` are replaced), else VS Code, else the app the system
+opens them with.
 
 ## Development
 
 ```sh
 go tool mygo dev          # the app, rebuilt as you edit
 go test ./...             # including the views, run without a window
-go tool mygo build        # Godiff.app and a disk image in build/
+go tool mygo build        # Kopi.app and a disk image in build/
 go run ./tools/genicon    # render resources/icon.svg to the app icon
 ```
 
-`GODIFF_SNAPSHOTS=<dir> go test .` saves PNGs of the views the tests drive, and
-`GODIFF_CAPTURE=<file.png>` makes the app save a picture of its window once
-loaded, then quit. `GODIFF_DEBUG=1` logs every git command with its duration, the
-frames that take more than 4ms to build, and whenever the main thread keeps
-work waiting over 30ms. `GODIFF_NAME=<name>` runs a build apart from the
-installed app, which would otherwise take its windows, and
-`GODIFF_STARTUP_PROFILE=<file>` writes a CPU profile of the first seconds.
+`KOPI_SNAPSHOTS=<dir> go test .` saves PNGs of the views the tests drive, and
+`KOPI_JDTLS=1 go test -run TestReal .` runs the real jdtls and java-debug
+(`KOPI_JAVA_HOME` for their Java). `KOPI_CAPTURE=<file.png>` makes the app save
+a picture of its window once loaded, then quit. `KOPI_DEBUG=1` logs every git
+command with its duration, the frames that take more than 4ms to build, and
+whenever the main thread keeps work waiting over 30ms. `KOPI_NAME=<name>` runs
+a build apart from the installed app, which would otherwise take its windows,
+and `KOPI_STARTUP_PROFILE=<file>` writes a CPU profile of the first seconds.
 
 The code is in a few parts:
 
-- `internal/git`: the repository through the `git` command: changes,
-  history, commits, generated files, file contents (`git cat-file --batch`).
-- `internal/diff`: parsing patches, and word-level differences.
-- `internal/highlight`: syntax highlighting with Chroma.
-- The `main` package: the window and its views (`view.go`, `sidebar.go`,
-  `diffview.go`, `commit.go`, `palette.go`), the rows of the diff surface
-  (`rows.go`), comments, find, settings and menus.
-
-## Not (yet) carried over from codiff
-
-LLM walkthroughs, GitHub and GitLab pull request review, Markdown previews,
-editing files in place, definition lookup, `a..b` ranges, and separate cards
-for the staged and unstaged parts of a file (Godiff shows a file's changes
-against `HEAD` as one).
+- `internal/editor`: the code editor: its buffer, history, drawing, input
+  methods, diagnostics, hovers, breakpoints and lenses.
+- `internal/lsp` and `internal/dap`: the Language Server and Debug Adapter
+  protocols; `internal/java`: finding Java, and downloading jdtls and
+  java-debug; `internal/launch`: launch.json.
+- `internal/icontheme`: VS Code's file icon themes.
+- `internal/git`, `internal/diff`, `internal/highlight`: Godiff's repository,
+  patches and highlighting.
+- The `main` package: the window and its views: the explorer and editors
+  (`explorer.go`, `editors.go`), Java (`java.go`), running and debugging
+  (`run.go`, `debug.go`, `runview.go`), and Godiff's review (`view.go`,
+  `sidebar.go`, `diffview.go`, `commit.go`, `palette.go`).

@@ -20,8 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egoist/godiff/internal/diff"
-	"github.com/egoist/godiff/internal/proc"
+	"github.com/zucchiniEvader/kopi/internal/diff"
+	"github.com/zucchiniEvader/kopi/internal/proc"
 )
 
 // EmptyTree is the hash of git's empty tree, the base of a repository
@@ -127,7 +127,7 @@ func run(ctx context.Context, dir string, stdin io.Reader, args ...string) ([]by
 }
 
 // debug logs every git command with how long it took.
-var debug = os.Getenv("GODIFF_DEBUG") != ""
+var debug = os.Getenv("KOPI_DEBUG") != ""
 
 // Git runs git in the repository and returns what it printed.
 func (r *Repo) Git(args ...string) ([]byte, error) {
@@ -508,7 +508,7 @@ func (r *Repo) CommitChanges(message string, paths []string) (string, error) {
 	if _, err := run(context.Background(), r.Root, pathspecs(), "--literal-pathspecs", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"); err != nil {
 		return "", err
 	}
-	msg, err := os.CreateTemp("", "godiff-message-*")
+	msg, err := os.CreateTemp("", "kopi-message-*")
 	if err != nil {
 		return "", err
 	}

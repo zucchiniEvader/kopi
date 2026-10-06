@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/egoist/godiff/internal/highlight"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/highlight"
 )
 
 const (

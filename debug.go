@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/godiff/internal/dap"
-	"github.com/egoist/godiff/internal/editor"
-	"github.com/egoist/godiff/internal/launch"
-	"github.com/egoist/godiff/internal/lsp"
+	"github.com/zucchiniEvader/kopi/internal/dap"
+	"github.com/zucchiniEvader/kopi/internal/editor"
+	"github.com/zucchiniEvader/kopi/internal/launch"
+	"github.com/zucchiniEvader/kopi/internal/lsp"
 )
 
 // debugState is the debug session of a window: java-debug's connection,
@@ -111,7 +111,7 @@ func (w *window) debugLaunch(cfg launch.Config, main string, classpath, modulepa
 			w.run.status = "Debugging " + d.name
 		})
 		if err := client.Call(ctx, "initialize", map[string]any{
-			"clientID": "godiff", "clientName": "Godiff", "adapterID": "java",
+			"clientID": "kopi", "clientName": "Kopi", "adapterID": "java",
 			"linesStartAt1": true, "columnsStartAt1": true, "pathFormat": "path",
 			"supportsVariableType": true, "supportsRunInTerminalRequest": true,
 		}, nil); err != nil {

@@ -15,11 +15,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egoist/godiff/internal/java"
-	"github.com/egoist/godiff/internal/launch"
-	"github.com/egoist/godiff/internal/lsp"
-	"github.com/egoist/godiff/internal/proc"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/java"
+	"github.com/zucchiniEvader/kopi/internal/launch"
+	"github.com/zucchiniEvader/kopi/internal/lsp"
+	"github.com/zucchiniEvader/kopi/internal/proc"
 )
 
 // The kinds of the lines of the run panel.
@@ -305,7 +305,7 @@ func classPathArgs(paths []string) []string {
 	if len(cp) < 8000 {
 		return []string{"-cp", cp}
 	}
-	f, err := os.CreateTemp("", "godiff-cp-*.txt")
+	f, err := os.CreateTemp("", "kopi-cp-*.txt")
 	if err != nil {
 		return []string{"-cp", cp}
 	}

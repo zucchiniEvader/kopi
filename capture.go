@@ -10,18 +10,18 @@ import (
 	"github.com/egoist/mygo"
 )
 
-// captureIfAsked writes a PNG of the window to $GODIFF_CAPTURE once it has
+// captureIfAsked writes a PNG of the window to $KOPI_CAPTURE once it has
 // loaded, then quits: for checking how the app looks from scripts.
 func (w *window) captureIfAsked() {
-	path := os.Getenv("GODIFF_CAPTURE")
+	path := os.Getenv("KOPI_CAPTURE")
 	if path == "" {
 		return
 	}
 	go func() {
 		time.Sleep(2500 * time.Millisecond)
-		if setup := os.Getenv("GODIFF_CAPTURE_SETUP"); setup != "" {
+		if setup := os.Getenv("KOPI_CAPTURE_SETUP"); setup != "" {
 			var prof *os.File
-			if path := os.Getenv("GODIFF_CPUPROFILE"); path != "" {
+			if path := os.Getenv("KOPI_CPUPROFILE"); path != "" {
 				prof, _ = os.Create(path)
 				pprof.StartCPUProfile(prof)
 			}

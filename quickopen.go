@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egoist/godiff/internal/proc"
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/proc"
 )
 
 // quickOpen is the bar going to a file of the work tree by its name.
