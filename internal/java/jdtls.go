@@ -287,6 +287,9 @@ func Command(jdk JDK, home, configDir, dataDir string, jvmArgs ...string) (*exec
 		"-Dosgi.sharedConfiguration.area=" + shared,
 		"-Dosgi.sharedConfiguration.area.readOnly=true",
 		"-Dosgi.configuration.cascaded=true",
+		// Without it, the first use of AWT, as when jdtls reads an image
+		// or a font, puts a Java icon in the Dock of macOS.
+		"-Djava.awt.headless=true",
 		"-Xms256m",
 		"-XX:+UseParallelGC",
 		"--add-modules=ALL-SYSTEM",

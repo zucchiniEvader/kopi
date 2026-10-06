@@ -114,7 +114,7 @@ func TestCommand(t *testing.T) {
 	if args[0] != filepath.Join("/jdk", "bin", map[bool]string{true: "java.exe", false: "java"}[runtime.GOOS == "windows"]) {
 		t.Errorf("command %s", args[0])
 	}
-	for _, want := range []string{"-jar", "-configuration", "/cfg", "-data", "/data", "-Dosgi.sharedConfiguration.area=" + filepath.Join(home, configNames()[0])} {
+	for _, want := range []string{"-jar", "-configuration", "/cfg", "-data", "/data", "-Djava.awt.headless=true", "-Dosgi.sharedConfiguration.area=" + filepath.Join(home, configNames()[0])} {
 		if !slices.Contains(args, want) {
 			t.Errorf("no %s in %q", want, args)
 		}
