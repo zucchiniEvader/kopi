@@ -287,9 +287,6 @@ func Command(jdk JDK, home, configDir, dataDir string, jvmArgs ...string) (*exec
 		"-Dosgi.sharedConfiguration.area=" + shared,
 		"-Dosgi.sharedConfiguration.area.readOnly=true",
 		"-Dosgi.configuration.cascaded=true",
-		// Without it, the first use of AWT, as when jdtls reads an image
-		// or a font, puts a Java icon in the Dock of macOS.
-		"-Djava.awt.headless=true",
 		"-Xms256m",
 		"-XX:+UseParallelGC",
 		"--add-modules=ALL-SYSTEM",
@@ -298,6 +295,13 @@ func Command(jdk JDK, home, configDir, dataDir string, jvmArgs ...string) (*exec
 	}
 	args = append(args, jvmArgs...)
 	args = append(args, "-jar", jar, "-configuration", configDir, "-data", dataDir)
+	if runtime.GOOS == "darwin" {
+		// The native library of the launcher, there for its splash, links
+		// Cocoa, which makes Java an app of its own in the Dock, bouncing.
+		// A library that does not load leaves it out, as the launcher goes
+		// on without it.
+		args = append(args, "--launcher.library", jar)
+	}
 	cmd := exec.Command(jdk.Java(), args...)
 	cmd.Env = append(os.Environ(), "JAVA_HOME="+jdk.Home)
 	return cmd, nil
