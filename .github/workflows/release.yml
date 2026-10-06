@@ -58,8 +58,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          # Each file says its platform and architecture: the Windows
+          # installers of amd64 and arm64 are otherwise named alike.
           shopt -s nullglob
-          files=(build/*/*.dmg build/*/*Setup*.exe build/*/*.deb build/*/*.tar.gz)
+          version="$(jq -r .version mygo.json)"
+          mkdir -p dist
+          for dir in build/*/; do
+            target="$(basename "$dir")" # as windows-amd64
+            for f in "$dir"*.dmg; do cp "$f" "dist/Kopi-$version-macos-${target#darwin-}.dmg"; done
+            for f in "$dir"*Setup*.exe; do cp "$f" "dist/Kopi-$version-$target-setup.exe"; done
+            for f in "$dir"*.deb "$dir"*.tar.gz; do cp "$f" dist/; done
+          done
+          files=(dist/*)
           if [ ${#files[@]} -eq 0 ]; then
             echo "Nothing was built" >&2
             exit 1
