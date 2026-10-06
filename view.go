@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -96,21 +95,8 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 		if !w.sidebarShown {
 			w.sidebarToggle(c)
 		}
-		// The repository: its name, and where it is.
-		ui.Column(c).Gap(1).Shrink(1).MinWidth(0).Tooltip(w.repo.Root).Children(func() {
-			ui.Text(c, filepath.Base(w.repo.Root)).FontSize(13).Bold().SingleLine()
-			ui.Text(c, filepath.Dir(abbreviateHome(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine()
-		})
-		if w.branch != "" {
-			chip(c, pal, iconBranch, w.branch, t.TextMuted).Tooltip("Branch " + w.branch)
-		}
-		switch w.source.kind {
-		case sourceCommit:
-			label := shortHash(w.source.ref)
-			chip(c, pal, iconCommit, label, pal.ref).Font(w.codeFont()).Tooltip(w.source.ref)
-		case sourceBranch:
-			chip(c, pal, iconBranch, "Local + branch vs "+w.source.ref, pal.ref)
-		}
+		// The repository's name and place show in the explorer, its branch
+		// in the Git tab.
 		if w.loading && len(w.files) > 0 {
 			ui.Spinner(c).Label("Loading").Size(14, 14)
 		}

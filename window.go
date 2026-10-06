@@ -315,9 +315,12 @@ func newWindow(repo *git.Repo, src source) *window {
 		activeEditor: -1,
 	}
 	// The window opens on the explorer, which takes the keys; the review
-	// opens when asked.
+	// opens when asked, or at once on a commit or a branch to compare.
 	w.explorer.reset()
 	w.explorer.focus = true
+	if src.kind != sourceWorkingTree {
+		w.tab, w.reviewOpen = tabGit, true
+	}
 	w.dragWidth = w.sidebarWidth
 	w.list.Key = func(i int) any { return w.key(&w.rows[i]) }
 	w.list.Header = func(i int) bool { return w.rows[i].kind == rowHeader }

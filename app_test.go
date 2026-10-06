@@ -493,7 +493,7 @@ func TestBranchCompare(t *testing.T) {
 	}
 	tt := ui.NewTester(w.view, 1280, 860)
 	tt.Frame()
-	if !tt.HasText("Local + branch vs base") {
+	if w.tab != tabGit || !w.reviewVisible() || !tt.HasText("vs base") {
 		t.Errorf("texts %q", tt.Texts())
 	}
 }

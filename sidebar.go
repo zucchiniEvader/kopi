@@ -243,8 +243,10 @@ func (w *window) sidebar(c *ui.Context) {
 		ui.Column(c).Padding(2, 10, 8).Children(func() {
 			switch w.tab {
 			case tabExplorer:
-				ui.Row(c).Height(28).Padding(0, 4).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, filepath.Base(w.repo.Root)).FontSize(12).Bold().SingleLine().Grow(1).Shrink(1).MinWidth(0)
+				// The repository: its name, and where it is.
+				ui.Column(c).Padding(2, 4).Gap(1).Tooltip(w.repo.Root).Children(func() {
+					ui.Text(c, filepath.Base(w.repo.Root)).FontSize(12).Bold().SingleLine()
+					ui.Text(c, abbreviateHome(filepath.Dir(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine()
 				})
 			case tabSearch:
 				w.searchHeader(c)
@@ -816,6 +818,18 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 		})
 	}
 	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
+		// The branch, and what the review shows other than the work tree.
+		ui.Row(c).Shrink(0).Padding(0, 10, 8).Gap(6).AlignItems(ui.Center).Children(func() {
+			if w.branch != "" {
+				chip(c, pal, iconBranch, w.branch, t.Text).Tooltip("Branch " + w.branch)
+			}
+			switch w.source.kind {
+			case sourceCommit:
+				chip(c, pal, iconCommit, shortHash(w.source.ref), pal.ref).Font(w.codeFont()).Tooltip(w.source.ref)
+			case sourceBranch:
+				chip(c, pal, iconBranch, "vs "+w.source.ref, pal.ref).Tooltip("The work tree, committed or not, since it branched off " + w.source.ref)
+			}
+		})
 		badge := ""
 		if n := len(w.files); n > 0 && w.source.kind == sourceWorkingTree {
 			badge = compact(n)
