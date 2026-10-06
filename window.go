@@ -95,10 +95,11 @@ type window struct {
 	reloaded  map[string]bool
 	dragWidth float32
 
-	// The files open in editors, and the one shown, -1 while the review
-	// shows.
+	// The files open in editors, and the one shown, -1 for the review,
+	// which shows while reviewOpen, the tab it has being open.
 	editors      []*editorTab
 	activeEditor int
+	reviewOpen   bool
 	// closing is set once the window may close with unsaved changes.
 	closing bool
 
@@ -286,10 +287,13 @@ func newWindow(repo *git.Repo, src source) *window {
 		fileMatches:  map[int]bool{},
 		selFile:      -1,
 		selHunk:      -1,
-		tab:          tabChanges,
+		tab:          tabExplorer,
 		activeEditor: -1,
 	}
+	// The window opens on the explorer, which takes the keys; the review
+	// opens when asked.
 	w.explorer.reset()
+	w.explorer.focus = true
 	w.dragWidth = w.sidebarWidth
 	w.list.Key = func(i int) any { return w.key(&w.rows[i]) }
 	w.list.Header = func(i int) bool { return w.rows[i].kind == rowHeader }
@@ -402,6 +406,7 @@ func (w *window) setSource(src source) {
 		go probeMainThread(time.Second)
 	}
 	w.commitOpen = false
+	w.showReview()
 	// The review takes the focus as the window opens only: the user, who
 	// chose this source, keeps the focus where they put it, as on the
 	// history.
@@ -566,13 +571,6 @@ func (w *window) load() {
 					l.file = f
 					l.apply()
 				}
-			}
-			if !w.loadedOnce && len(files) == 0 && src.kind != sourceCommit {
-				// Nothing to review: the history shows instead, and takes
-				// the keys in place of the review.
-				w.tab = tabHistory
-				w.focusHistory = w.sidebarShown
-				w.focusedOnce = true
 			}
 			w.loadedOnce = true
 			if err == nil {
@@ -991,7 +989,7 @@ func (w *window) openExternal(path string, line int) {
 		line = 0
 	}
 	go func() {
-		if err := openEditor(w.settings.EditorCommand, w.repo.Root, abs, line); err != nil {
+		if err := launchEditor(w.settings.EditorCommand, w.repo.Root, abs, line); err != nil {
 			mygo.Dialog.Error("Could not open the file", err.Error())
 		}
 	}()

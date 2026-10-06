@@ -31,6 +31,8 @@ type explorer struct {
 	sel      string
 	list     ui.ListState
 	el       *ui.Element
+	// focus gives the tree the keys in the next frame.
+	focus bool
 }
 
 // reset forgets what was read, to read it again, keeping the directories
@@ -221,6 +223,10 @@ func (w *window) explorerView(c *ui.Context) {
 		})
 	}).Grow(1).Padding(2, 8).Gap(1).Focusable().FocusRing(false).Label("Files")
 	e.el = list
+	if e.focus {
+		list.Focus()
+		e.focus = false
+	}
 
 	// The keys move the choice, open and close directories, and open files.
 	at := slices.IndexFunc(rows, func(r explorerRow) bool { return r.key == e.sel })

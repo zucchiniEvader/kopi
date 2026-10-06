@@ -35,7 +35,8 @@ func (w *window) commands() []command {
 	}
 	return []command{
 		{title: "Focus File Filter", keys: "⌘P", run: w.focusFilter},
-		{title: "Find in Diffs", keys: "⌘F", run: func() { w.finding = true }},
+		{title: "Find in Diffs", keys: "⌘F", run: func() { w.showReview(); w.finding = true }},
+		{title: "Show Review", hint: "The changes", keys: "⌘⇧R", run: w.showReview},
 		{title: "Open Commit", hint: "Review a commit", run: func() { w.openDialog(dialogCommit) }},
 		{title: "Open Branch", hint: "Compare with a branch", run: func() { w.openDialog(dialogBranch) }},
 		{title: "Open Folder", keys: "⌘O", run: openFolder},
@@ -44,9 +45,10 @@ func (w *window) commands() []command {
 		{title: "Show History", keys: "⌘3", run: func() { w.tab, w.sidebarShown = tabHistory, true }},
 		{title: "Save", keys: "⌘S", run: w.saveEditor},
 		{title: "Close Tab", keys: "⌘W", run: w.closeTab},
-		{title: "Show Uncommitted Changes", run: func() { w.setSource(w.launchWorkTree()) }},
+		{title: "Show Uncommitted Changes", run: func() { w.setSource(w.launchWorkTree()); w.showReview() }},
 		{title: "Commit…", run: func() {
 			if w.source.kind == sourceWorkingTree && !w.commitOpen {
+				w.showReview()
 				w.toggleCommit()
 			}
 		}},
@@ -108,7 +110,7 @@ func changeFontSize(delta int) {
 func openConfig() {
 	path := cfg.ensure()
 	go func() {
-		if err := openEditor(cfg.Get().EditorCommand, "", path, 0); err != nil {
+		if err := launchEditor(cfg.Get().EditorCommand, "", path, 0); err != nil {
 			mygo.Dialog.Error("Could not open the config file", err.Error())
 		}
 	}()

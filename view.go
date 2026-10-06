@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -111,7 +112,7 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 			ui.Spinner(c).Label("Loading").Size(14, 14)
 		}
 		ui.Spacer(c)
-		if !w.commitOpen && w.activeTab() == nil {
+		if !w.commitOpen && w.reviewVisible() {
 			// Find, the comments, and the layout.
 			if iconButton(c, iconSearch, "Find in diffs (⌘F)").Clicked() {
 				w.finding = !w.finding
@@ -182,13 +183,17 @@ func (w *window) layoutControl(c *ui.Context, pal *palette) {
 // mainArea shows the review, the commit view, or why there is nothing.
 func (w *window) mainArea(c *ui.Context, pal *palette) {
 	t := c.Theme()
-	if len(w.editors) > 0 {
+	if len(w.editors) > 0 || w.reviewOpen {
 		w.editorTabs(c, pal)
 	}
-	if e := w.activeTab(); e != nil {
+	if !w.reviewVisible() {
 		// The review's keys are not the editor's.
 		w.diffListEl = nil
-		w.editorArea(c, pal, e)
+		if e := w.activeTab(); e != nil {
+			w.editorArea(c, pal, e)
+		} else {
+			w.nothingOpen(c, pal)
+		}
 		return
 	}
 	if w.commitOpen && w.source.kind == sourceWorkingTree {
@@ -344,7 +349,7 @@ func (w *window) shortcuts(c *ui.Context) {
 	// had the focus in the last frame.
 	typing := w.typing
 	w.typing = false
-	if w.commitOpen || w.paletteOpen || w.dialogOpen || w.help || typing || w.diffListEl == nil || w.activeTab() != nil {
+	if w.commitOpen || w.paletteOpen || w.dialogOpen || w.help || typing || w.diffListEl == nil || !w.reviewVisible() {
 		return
 	}
 	if c.Shortcut(0, ui.KeyJ) || c.Shortcut(ui.Ctrl, ui.KeyDown) {
@@ -389,6 +394,26 @@ func (v *welcome) view(c *ui.Context) {
 	emptyPanel(c, pal, title, detail, func() {
 		if ui.PrimaryButton(c, "Open Folder…").Clicked() {
 			openFolder()
+		}
+	})
+}
+
+// nothingOpen is the main area without a tab open: how to open a file,
+// or the review of the changes.
+func (w *window) nothingOpen(c *ui.Context, pal *palette) {
+	detail := "Choose a file in the explorer."
+	if !w.sidebarShown {
+		detail = "Show the sidebar (⌘⇧B) to choose a file."
+	}
+	emptyPanel(c, pal, "No file open", detail, func() {
+		if n := len(w.files); n > 0 && w.source.kind == sourceWorkingTree {
+			label := fmt.Sprintf("Review %d Changes", n)
+			if n == 1 {
+				label = "Review 1 Change"
+			}
+			if ui.Button(c, label).Clicked() {
+				w.showReview()
+			}
 		}
 	})
 }

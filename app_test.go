@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/egoist/godiff/internal/git"
@@ -21,6 +22,13 @@ func TestMain(m *testing.M) {
 	dir, _ := os.MkdirTemp("", "godiff-config")
 	cfg.path = filepath.Join(dir, "godiff.jsonc")
 	cfg.settings = defaultSettings()
+	// Tests open no editor of the machine.
+	launchEditor = func(command, repo, file string, line int) error {
+		launchedMu.Lock()
+		editorLaunches = append(editorLaunches, file)
+		launchedMu.Unlock()
+		return nil
+	}
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -85,8 +93,25 @@ func testRepo(t *testing.T) string {
 	return dir
 }
 
-// newTestWindow opens a window's state on a repository, loaded.
+var (
+	launchedMu     sync.Mutex
+	editorLaunches []string // the files the tests opened in the user's editor
+)
+
+// newTestWindow opens a window's state on a repository, loaded, showing
+// the review and the changed files, which most tests look at.
 func newTestWindow(t *testing.T, dir string) (*window, *ui.Tester) {
+	t.Helper()
+	w, tt := launchTestWindow(t, dir)
+	w.tab = tabChanges
+	w.showReview()
+	tt.Frame()
+	return w, tt
+}
+
+// launchTestWindow opens a window's state on a repository, loaded, as the
+// app opens it.
+func launchTestWindow(t *testing.T, dir string) (*window, *ui.Tester) {
 	t.Helper()
 	repo, err := git.Open(dir)
 	if err != nil {
@@ -263,12 +288,16 @@ func TestHistory(t *testing.T) {
 }
 
 func TestHistoryTakesFocus(t *testing.T) {
-	// A clean work tree: the review has no rows to take the focus as the
-	// window opens, so the history shows and takes it.
+	// The history, shown, takes the keys.
 	dir := testRepo(t)
 	gitIn(t, dir, "add", ".")
 	gitIn(t, dir, "commit", "-q", "-m", "Second commit")
 	w, tt := newTestWindow(t, dir)
+	if err := tt.Click("History (⌘3)"); err != nil {
+		t.Fatal(err)
+	}
+	w.historyEl.Focus()
+	tt.Frame()
 	if w.tab != tabHistory || w.historyEl == nil || !w.historyEl.FocusWithin() {
 		t.Fatalf("tab %d: the history did not take the focus", w.tab)
 	}

@@ -103,11 +103,24 @@ func (w *window) editorOf(p string) *editorTab {
 	return nil
 }
 
-// showReview shows the review in the main area, in place of an editor.
+// showReview opens the review's tab, and shows it in the main area, in
+// place of an editor.
 func (w *window) showReview() {
-	if w.activeEditor >= 0 {
+	if w.activeEditor >= 0 || !w.reviewOpen {
 		w.activeEditor = -1
+		w.reviewOpen = true
 		w.focusList = true
+	}
+}
+
+// reviewVisible reports whether the main area shows the review.
+func (w *window) reviewVisible() bool { return w.reviewOpen && w.activeTab() == nil }
+
+// closeReview closes the review's tab, showing the last editor.
+func (w *window) closeReview() {
+	w.reviewOpen, w.commitOpen = false, false
+	if w.activeEditor < 0 && len(w.editors) > 0 {
+		w.show(w.editors[len(w.editors)-1])
 	}
 }
 
@@ -265,7 +278,10 @@ func (w *window) removeEditor(i int) {
 	w.editors = slices.Delete(w.editors, i, i+1)
 	switch {
 	case len(w.editors) == 0:
-		w.showReview()
+		w.activeEditor = -1
+		if w.reviewOpen {
+			w.focusList = true
+		}
 	case w.activeEditor > i || w.activeEditor == len(w.editors):
 		w.activeEditor--
 	}
@@ -285,11 +301,15 @@ func (w *window) dirtyEditors() []string {
 	return names
 }
 
-// closeTab closes the editor shown, or the window when the review shows.
+// closeTab closes the editor shown, or the review, or the window when no
+// tab is open.
 func (w *window) closeTab() {
-	if w.activeTab() != nil {
+	switch {
+	case w.activeTab() != nil:
 		w.closeEditor(w.activeEditor)
-	} else if w.win != nil {
+	case w.reviewOpen:
+		w.closeReview()
+	case w.win != nil:
 		w.win.Close()
 	}
 }
@@ -342,14 +362,19 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 				}
 				return b
 			}
-			review := tab(w.activeTab() == nil, false).Padding(0, 12).Label("Review")
-			if review.Clicked() {
-				w.showReview()
+			if w.reviewOpen {
+				review := tab(w.activeTab() == nil, false).Label("Review")
+				if review.Clicked() {
+					w.showReview()
+				}
+				review.Children(func() {
+					ui.Icon(c, iconFileDiff).FontSize(14)
+					ui.Text(c, "Review").FontSize(13).SingleLine()
+					if closeButton(c, "Close Review", w.activeTab() == nil || review.Hovered(), false).Clicked() {
+						closing = -2
+					}
+				})
 			}
-			review.Children(func() {
-				ui.Icon(c, iconFileDiff).FontSize(14)
-				ui.Text(c, "Review").FontSize(13).SingleLine()
-			})
 			for i, e := range w.editors {
 				b := tab(i == w.activeEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
 				if e.library {
@@ -372,26 +397,17 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 						ui.Icon(c, iconFile).FontSize(14)
 						ui.Text(c, e.title()).FontSize(13).SingleLine()
 					}
-					// A dot for unsaved changes, which turns into the close
-					// button under the pointer.
-					x := ui.ButtonBase(c).Size(20, 20).Center().Radius(5).Label("Close " + e.title()).Tooltip("Close (⌘W)")
-					mark := iconClose
-					if x.Hovered() {
-						x.Background(ui.RGBA(127, 127, 127, 0.16))
-					} else if e.ed != nil && e.ed.Dirty() {
-						mark = iconDot
-					} else if i != w.activeEditor && !b.Hovered() {
-						x.Opacity(0)
-					}
-					x.Children(func() { ui.Icon(c, mark).FontSize(13) })
-					if x.Clicked() {
+					if closeButton(c, "Close "+e.title(), i == w.activeEditor || b.Hovered(), e.ed != nil && e.ed.Dirty()).Clicked() {
 						closing = i
 					}
 				})
 			}
 		})
 	})
-	if closing >= 0 {
+	switch {
+	case closing == -2:
+		w.closeReview()
+	case closing >= 0:
 		w.closeEditor(closing)
 	}
 }
@@ -480,3 +496,21 @@ func (w *window) javaChip(c *ui.Context) {
 // libraryBg is the background of the documents of libraries, lighter than
 // the code of the repository.
 func libraryBg(pal *palette) ui.Color { return pal.gapBg }
+
+// closeButton is the button closing a tab, shown while the tab is chosen
+// or hovered; a dot for unsaved changes, which turns into the button under
+// the pointer.
+func closeButton(c *ui.Context, label string, shown, dirty bool) *ui.Element {
+	x := ui.ButtonBase(c).Size(20, 20).Center().Radius(5).Label(label).Tooltip("Close (⌘W)")
+	mark := iconClose
+	switch {
+	case x.Hovered():
+		x.Background(ui.RGBA(127, 127, 127, 0.16))
+	case dirty:
+		mark = iconDot
+	case !shown:
+		x.Opacity(0)
+	}
+	x.Children(func() { ui.Icon(c, mark).FontSize(13) })
+	return x
+}

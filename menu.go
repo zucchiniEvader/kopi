@@ -57,6 +57,7 @@ func buildMenu() *mygo.Menu {
 			mygo.Separator(),
 			{Label: "Commit…", Accelerator: "CmdOrCtrl+Shift+Enter", Click: inWindow(func(w *window) {
 				if w.source.kind == sourceWorkingTree && !w.commitOpen && len(w.files) > 0 {
+					w.showReview()
 					w.toggleCommit()
 				}
 			})},
@@ -78,7 +79,7 @@ func buildMenu() *mygo.Menu {
 			{Role: mygo.RolePaste},
 			{Role: mygo.RoleSelectAll},
 			mygo.Separator(),
-			{Label: "Find in Diffs", Accelerator: "CmdOrCtrl+F", Click: inWindow(func(w *window) { w.finding = true })},
+			{Label: "Find in Diffs", Accelerator: "CmdOrCtrl+F", Click: inWindow(func(w *window) { w.showReview(); w.finding = true })},
 			{Label: "Filter Files", Accelerator: "CmdOrCtrl+P", Click: inWindow(func(w *window) { w.focusFilter() })},
 			mygo.Separator(),
 			{Label: "Copy Review Comments", Accelerator: "CmdOrCtrl+Shift+M", Click: inWindow(func(w *window) { w.copyComments() })},
@@ -89,6 +90,7 @@ func buildMenu() *mygo.Menu {
 			{Label: "Explorer", Accelerator: "CmdOrCtrl+1", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = tabExplorer, true })},
 			{Label: "Changes", Accelerator: "CmdOrCtrl+2", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = tabChanges, true })},
 			{Label: "History", Accelerator: "CmdOrCtrl+3", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = tabHistory, true })},
+			{Label: "Review", Accelerator: "CmdOrCtrl+Shift+R", Click: inWindow(func(w *window) { w.showReview() })},
 			mygo.Separator(),
 			{Label: "Diff", Submenu: []*mygo.MenuItem{
 				{ID: "split", Label: "Split", Type: mygo.MenuItemRadio, Checked: s.DiffStyle == "split", Click: func(*mygo.MenuItem, *mygo.Window) {

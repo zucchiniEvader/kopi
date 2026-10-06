@@ -14,6 +14,10 @@ import (
 	"github.com/egoist/mygo"
 )
 
+// launchEditor opens a file in the user's editor; tests, which must
+// open nothing, replace it.
+var launchEditor = openEditor
+
 var editorArgs = regexp.MustCompile(`"[^"]+"|'[^']+'|\S+`)
 
 // openEditor opens a file at a line in the user's editor: the command of
