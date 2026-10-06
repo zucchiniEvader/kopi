@@ -82,7 +82,9 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 	t := c.Theme()
 	bar := c.TitleBar()
 	sidebarRight := w.sidebarShown && w.settings.SidebarPosition == "right"
-	left := float32(8)
+	// The tabs start at the sidebar's edge, else after the traffic
+	// lights and the sidebar's toggle.
+	left := float32(0)
 	if !w.sidebarShown || sidebarRight {
 		left = bar.Left + 8
 	}

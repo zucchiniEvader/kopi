@@ -360,24 +360,28 @@ func (w *window) editorStyle(t *ui.Theme, pal *palette) editor.Style {
 
 // editorTabs is the row of tabs above the main area while files are open:
 // the review, then the files.
-// The tabs show in the toolbar, as pills: the one chosen on the code's
-// background, a library's lighter.
+// The tabs show in the toolbar, its height, the one chosen on the code's
+// background under a line of the accent, a library's lighter.
 func (w *window) editorTabs(c *ui.Context, pal *palette) {
 	t := c.Theme()
 	closing := -1
-	ui.ScrollHorizontal(c).Shrink(1).MinWidth(0).Label("Tabs").Children(func() {
-		ui.Row(c).Height(titleBarHeight).Gap(4).AlignItems(ui.Center).Children(func() {
+	ui.ScrollHorizontal(c).Shrink(1).MinWidth(0).FillHeight().Label("Tabs").Children(func() {
+		ui.Row(c).Height(titleBarHeight).Children(func() {
 			tab := func(active, library bool) *ui.Element {
-				b := ui.ButtonBase(c).Height(30).Padding(0, 4, 0, 10).Gap(6).Radius(8).Shrink(0).TextColor(t.TextMuted)
+				b := ui.ButtonBase(c).FillHeight().Padding(0, 6, 0, 12).Gap(6).Shrink(0).BorderWidth(0, 1, 0, 0).BorderColor(pal.cardBorder).TextColor(t.TextMuted)
 				switch {
 				case active && library:
 					// A library's document is no source of the
-					// repository: lighter, its name muted.
-					b.Background(libraryBg(pal)).Border(1, pal.cardBorder)
+					// repository: lighter, its mark muted.
+					b.Background(libraryBg(pal)).DrawOver(func(p *ui.Painter, r ui.Rect) {
+						p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: 2}, t.TextMuted.Alpha(0.6), 0)
+					})
 				case active:
-					b.Background(pal.codeBg).Border(1, pal.cardBorder).TextColor(t.Text).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.06))
+					b.Background(pal.codeBg).TextColor(t.Text).DrawOver(func(p *ui.Painter, r ui.Rect) {
+						p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: 2}, t.Accent, 0)
+					})
 				case b.Hovered():
-					b.Background(ui.RGBA(127, 127, 127, 0.1))
+					b.Background(ui.RGBA(127, 127, 127, 0.08))
 				}
 				return b
 			}

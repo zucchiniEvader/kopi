@@ -238,7 +238,10 @@ func openWindow(dir string, src source) error {
 		MinHeight:      420,
 		StateKey:       "main",
 		TitleBarStyle:  mygo.TitleBarHiddenInset,
-		TitleBarHeight: 52,
+		TitleBarHeight: titleBarHeight,
+		// The traffic lights in the middle of the title bar's height,
+		// lower than the window's own: room below them as above.
+		TrafficLightPosition: &mygo.Point{X: 14, Y: (titleBarHeight - 14) / 2},
 		Vibrancy:       mygo.VibrancySidebar,
 		Content:        ui.View(w.view),
 	})

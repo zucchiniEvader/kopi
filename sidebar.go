@@ -281,7 +281,7 @@ func (w *window) sidebarBg(t *ui.Theme) ui.Color {
 
 // titleBarHeight is the height of the bars along the top, which centers
 // their controls on the traffic lights of a window with an inset title bar.
-const titleBarHeight = 52
+const titleBarHeight = 40
 
 // tabControl switches the sidebar between the files and the history, and
 // reports a switch.
