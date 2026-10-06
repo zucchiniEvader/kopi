@@ -231,7 +231,7 @@ func TestLaunch(t *testing.T) {
 		t.Errorf("after ⌘W on the review: %+v, review %v", e, w.reviewOpen)
 	}
 	// A changed file chosen in the changes opens the review.
-	if err := tt.Click("Changes (⌘2)"); err != nil {
+	if err := tt.Click("Git (⌃⇧G)"); err != nil {
 		t.Fatal(err)
 	}
 	if err := tt.Click("new.go"); err != nil {

@@ -71,23 +71,26 @@ type window struct {
 	// The sidebar.
 	sidebarShown bool
 	sidebarWidth float32
-	tab          int // tabExplorer, tabChanges or tabHistory
-	explorer     explorer
-	filter       string
-	filterFocus  bool
-	treeList     ui.ListState
-	treeEl       *ui.Element
-	treeSel      string // the key of the row chosen
-	treeRows     []treeRow
-	closedDirs   map[string]bool
-	treeItems    map[string]*treeNode
-	treeRoots    []string
-	history      []git.Commit
-	historyLimit int
-	historyMore  bool
-	historyList  ui.ListState
-	historyEl    *ui.Element
-	commitTimes  map[string]commitTime
+	tab          int // tabExplorer, tabSearch, tabGit or tabRun
+	// The Git tab's sections closed, and the search.
+	gitChangesClosed, gitHistoryClosed bool
+	search                             searchState
+	explorer                           explorer
+	filter                             string
+	filterFocus                        bool
+	treeList                           ui.ListState
+	treeEl                             *ui.Element
+	treeSel                            string // the key of the row chosen
+	treeRows                           []treeRow
+	closedDirs                         map[string]bool
+	treeItems                          map[string]*treeNode
+	treeRoots                          []string
+	history                            []git.Commit
+	historyLimit                       int
+	historyMore                        bool
+	historyList                        ui.ListState
+	historyEl                          *ui.Element
+	commitTimes                        map[string]commitTime
 	// historyFilter filters the History tab, apart from the files'.
 	historyFilter  string
 	historyLoading bool
@@ -978,6 +981,8 @@ func (w *window) checkChanges() {
 	}
 	if now := w.repo.StatusSignature(); now != sig {
 		w.win.Update(func() {
+			// Files came or went: the explorer reads its folders again.
+			w.explorer.reset()
 			if w.source == src && !w.loading {
 				w.changed = true
 			}

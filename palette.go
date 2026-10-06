@@ -43,15 +43,15 @@ func (w *window) commands() []command {
 		{title: "Open launch.json", run: w.openLaunchConfig},
 		{title: "Find", keys: "⌘F", run: func() { w.find(false) }},
 		{title: "Replace", keys: "⌥⌘F", run: func() { w.find(true) }},
-		{title: "Focus File Filter", run: w.focusFilter},
+		{title: "Find in Files", keys: "⇧⌘F", run: w.focusSearch},
 		{title: "Find in Diffs", run: func() { w.showReview(); w.finding = true }},
 		{title: "Show Review", hint: "The changes", keys: "⌘⇧R", run: w.showReview},
 		{title: "Open Commit", hint: "Review a commit", run: func() { w.openDialog(dialogCommit) }},
 		{title: "Open Branch", hint: "Compare with a branch", run: func() { w.openDialog(dialogBranch) }},
 		{title: "Open Folder", keys: "⌘O", run: openFolder},
 		{title: "Show Explorer", keys: "⌘1", run: func() { w.tab, w.sidebarShown = tabExplorer, true }},
-		{title: "Show Changed Files", keys: "⌘2", run: func() { w.tab, w.sidebarShown = tabChanges, true }},
-		{title: "Show History", keys: "⌘3", run: func() { w.tab, w.sidebarShown = tabHistory, true }},
+		{title: "Show Search", keys: "⌘2", run: w.focusSearch},
+		{title: "Show Git", hint: "Changes and history", keys: "⌘3", run: func() { w.tab, w.sidebarShown = tabGit, true }},
 		{title: "Save", keys: "⌘S", run: w.saveEditor},
 		{title: "Close Tab", keys: "⌘W", run: w.closeTab},
 		{title: "Show Uncommitted Changes", run: func() { w.setSource(w.launchWorkTree()); w.showReview() }},
@@ -123,12 +123,6 @@ func openConfig() {
 			mygo.Dialog.Error("Could not open the config file", err.Error())
 		}
 	}()
-}
-
-func (w *window) focusFilter() {
-	w.sidebarShown = true
-	w.tab = tabChanges
-	w.filterFocus = true
 }
 
 func (w *window) openCurrent() {

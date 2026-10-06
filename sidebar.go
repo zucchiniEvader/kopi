@@ -245,33 +245,23 @@ func (w *window) sidebar(c *ui.Context) {
 			case tabExplorer:
 				ui.Row(c).Height(28).Padding(0, 4).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, filepath.Base(w.repo.Root)).FontSize(12).Bold().SingleLine().Grow(1).Shrink(1).MinWidth(0)
-					if iconButton(c, iconRefresh, "Refresh (⌘R)").Size(24, 24).Clicked() {
-						w.refresh()
-					}
 				})
+			case tabSearch:
+				w.searchHeader(c)
 			case tabRun:
 				w.runHeader(c)
-			case tabChanges:
-				if searchInput(c, &w.filter, "Filter files", &w.filterFocus, &w.typing) {
-					w.matchesFor = "\x00"
-					w.buildTree()
-					w.rowsDirty = true
-				}
-			default:
-				searchInput(c, &w.historyFilter, "Filter history", &w.filterFocus, &w.typing)
 			}
 		})
 		switch w.tab {
 		case tabExplorer:
 			w.explorerView(c)
-		case tabChanges:
-			w.fileTree(c)
+		case tabSearch:
+			w.searchView(c)
 		case tabRun:
 			w.runView(c)
 		default:
-			w.historyView(c)
+			w.gitView(c, pal)
 		}
-		w.sidebarFooter(c, pal)
 	})
 }
 
@@ -302,7 +292,7 @@ func (w *window) tabControl(c *ui.Context) bool {
 		for i, it := range []struct {
 			icon *ui.SVG
 			name string
-		}{{iconFiles, "Explorer (⌘1)"}, {iconTree, "Changes (⌘2)"}, {iconHistory, "History (⌘3)"}, {iconBugPlay, "Run and Debug (⇧⌘D)"}} {
+		}{{iconFiles, "Explorer (⌘1)"}, {iconSearch, "Search (⇧⌘F)"}, {iconBranch, "Git (⌃⇧G)"}, {iconBugPlay, "Run and Debug (⇧⌘D)"}} {
 			s := seg.Segment(i).Size(30, 24).Radius(6).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
 			if i == tab {
 				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
@@ -750,12 +740,12 @@ func (w *window) sidebarFooter(c *ui.Context, pal *palette) {
 			counted = true
 		}
 	}
-	canCommit := w.tab == tabChanges && w.source.kind == sourceWorkingTree && len(w.files) > 0
-	if !(counted && w.tab == tabChanges) && !canCommit {
+	canCommit := w.source.kind == sourceWorkingTree && len(w.files) > 0
+	if !counted && !canCommit {
 		return
 	}
 	ui.Row(c).MinHeight(40).Padding(6, 10).Gap(8).BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Children(func() {
-		if counted && w.tab == tabChanges {
+		if counted {
 			ui.Row(c).Gap(6).Tooltip("Total change: " + lines(adds, "added") + ", " + lines(dels, "removed")).Children(func() {
 				ui.Text(c, "Total:").FontSize(11).FontWeight(600).TextColor(t.TextMuted)
 				ui.Text(c, "+"+thousands(adds)).Font(w.codeFont()).FontSize(11).FontWeight(600).TextColor(pal.addText)
@@ -798,6 +788,57 @@ func (w *window) sidebarResizer(c *ui.Context, pal *palette) {
 				go state.setLayout(w.sidebarWidth, w.sidebarShown)
 			}
 			w.dragWidth = w.sidebarWidth
+		}
+	})
+}
+
+// gitView is the Git tab: the changes, with the commit's button, and the
+// history, each under a title that closes and opens it; open, they share
+// the tab's height.
+func (w *window) gitView(c *ui.Context, pal *palette) {
+	t := c.Theme()
+	header := func(title, badge string, closed *bool) {
+		row := ui.Row(c).Height(28).Shrink(0).Padding(0, 10, 0, 8).Gap(4).AlignItems(ui.Center).Label(title)
+		if row.Hovered() {
+			row.Background(ui.RGBA(127, 127, 127, 0.06))
+		}
+		if row.Clicked() {
+			*closed = !*closed
+		}
+		row.Children(func() {
+			ic := ui.Icon(c, iconChevronDown).FontSize(12).TextColor(t.TextMuted)
+			ic.Rotate(ic.Animate("rot", map[bool]float32{false: 0, true: -90}[*closed], 150*time.Millisecond))
+			ui.Text(c, strings.ToUpper(title)).FontSize(11).Bold().TextColor(t.TextMuted)
+			if badge != "" {
+				ui.Text(c, badge).FontSize(10).FontWeight(600).TextColor(t.TextMuted).
+					Padding(0, 6).Radius(8).Background(ui.RGBA(127, 127, 127, 0.15))
+			}
+		})
+	}
+	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
+		badge := ""
+		if n := len(w.files); n > 0 && w.source.kind == sourceWorkingTree {
+			badge = compact(n)
+		}
+		header("Changes", badge, &w.gitChangesClosed)
+		if !w.gitChangesClosed {
+			ui.Column(c).Grow(1).MinHeight(0).Children(func() {
+				w.fileTree(c)
+				w.sidebarFooter(c, pal)
+			})
+		}
+		ui.Box(c).Height(1).Shrink(0).Background(pal.cardBorder)
+		header("History", "", &w.gitHistoryClosed)
+		if !w.gitHistoryClosed {
+			ui.Column(c).Grow(1).MinHeight(0).Children(func() {
+				ui.Column(c).Padding(0, 10, 6).Children(func() {
+					searchInput(c, &w.historyFilter, "Filter history", &w.filterFocus, &w.typing)
+				})
+				w.historyView(c)
+			})
+		}
+		if w.gitChangesClosed && w.gitHistoryClosed {
+			ui.Spacer(c)
 		}
 	})
 }

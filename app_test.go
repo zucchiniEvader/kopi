@@ -105,7 +105,7 @@ var (
 func newTestWindow(t *testing.T, dir string) (*window, *ui.Tester) {
 	t.Helper()
 	w, tt := launchTestWindow(t, dir)
-	w.tab = tabChanges
+	w.tab = tabGit
 	w.showReview()
 	tt.Frame()
 	return w, tt
@@ -272,7 +272,7 @@ func TestCommit(t *testing.T) {
 
 func TestHistory(t *testing.T) {
 	w, tt := newTestWindow(t, testRepo(t))
-	if err := tt.Click("History (⌘3)"); err != nil {
+	if err := tt.Click("Git (⌃⇧G)"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -296,12 +296,12 @@ func TestHistoryTakesFocus(t *testing.T) {
 	gitIn(t, dir, "add", ".")
 	gitIn(t, dir, "commit", "-q", "-m", "Second commit")
 	w, tt := newTestWindow(t, dir)
-	if err := tt.Click("History (⌘3)"); err != nil {
+	if err := tt.Click("Git (⌃⇧G)"); err != nil {
 		t.Fatal(err)
 	}
 	w.historyEl.Focus()
 	tt.Frame()
-	if w.tab != tabHistory || w.historyEl == nil || !w.historyEl.FocusWithin() {
+	if w.tab != tabGit || w.historyEl == nil || !w.historyEl.FocusWithin() {
 		t.Fatalf("tab %d: the history did not take the focus", w.tab)
 	}
 	// Down goes to the commit under the uncommitted changes.

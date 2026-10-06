@@ -60,7 +60,7 @@ func (w *window) debugSetup(setup string) {
 		w.settings.DiffStyle = "unified"
 		w.rowsDirty = true
 	case "history":
-		w.tab = tabHistory
+		w.tab = tabGit
 	case "commit":
 		w.toggleCommit()
 	case "palette":

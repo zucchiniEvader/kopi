@@ -270,7 +270,7 @@ func (w *window) mainArea(c *ui.Context, pal *palette) {
 		emptyPanel(c, pal, title, detail, func() {
 			if w.source.kind == sourceWorkingTree && len(w.history) > 0 {
 				if ui.Button(c, "Show History").Clicked() {
-					w.tab, w.sidebarShown = tabHistory, true
+					w.tab, w.sidebarShown, w.gitHistoryClosed = tabGit, true, false
 				}
 			}
 		})

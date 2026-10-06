@@ -73,7 +73,7 @@ func TestCommentOnExpandedLine(t *testing.T) {
 
 func TestSwitchSourceOnFilesTab(t *testing.T) {
 	w, tt := newTestWindow(t, testRepo(t))
-	w.tab = tabChanges
+	w.tab = tabGit
 	tt.Frame()
 	hash, err := w.repo.Resolve("HEAD")
 	if err != nil {

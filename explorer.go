@@ -14,8 +14,8 @@ import (
 // The sidebar's tabs.
 const (
 	tabExplorer = iota // every file of the work tree
-	tabChanges         // the files changed
-	tabHistory         // the commits
+	tabSearch          // the search of the files' contents
+	tabGit             // the changes, and the commits
 	tabRun             // running and debugging
 )
 

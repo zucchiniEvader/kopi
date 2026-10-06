@@ -16,7 +16,8 @@ are Godiff's.
 
 - **Editor**: an explorer of the work tree (Java's package folders in one
   row), tabs, syntax and semantic highlighting, find and replace
-  (<kbd>⌘F</kbd>, <kbd>⌥⌘F</kbd>), go to a file (<kbd>⌘P</kbd>), files changed
+  (<kbd>⌘F</kbd>, <kbd>⌥⌘F</kbd>), search in files (<kbd>⇧⌘F</kbd>, through
+  `git grep`), go to a file (<kbd>⌘P</kbd>), files changed
   on disk read again, and VS Code's file icon themes (Material Icon Theme by
   default).
 - **Java**: Eclipse JDT Language Server (jdtls), downloaded once, on Java 21
@@ -55,6 +56,7 @@ runs in.
 |---|---|
 | <kbd>⌘P</kbd> | Go to a file (`Main.java:42` goes to a line) |
 | <kbd>⌘F</kbd> / <kbd>⌥⌘F</kbd> | Find / replace in the file |
+| <kbd>⇧⌘F</kbd> | Search in files |
 | <kbd>⌘S</kbd> / <kbd>⌘W</kbd> | Save / close the tab |
 | <kbd>⌘</kbd>-click, <kbd>F12</kbd> | Go to the definition |
 | <kbd>F5</kbd> / <kbd>⌃F5</kbd> | Debug / run |
@@ -62,7 +64,7 @@ runs in.
 | <kbd>F9</kbd> | Toggle a breakpoint |
 | <kbd>F10</kbd> / <kbd>F11</kbd> / <kbd>⇧F11</kbd> | Step over / into / out |
 | <kbd>⌘J</kbd> | The run panel |
-| <kbd>⌘1</kbd> … <kbd>⌘3</kbd>, <kbd>⇧⌘D</kbd> | Explorer, changes, history, run and debug |
+| <kbd>⌘1</kbd> … <kbd>⌘3</kbd>, <kbd>⇧⌘D</kbd> | Explorer, search, Git (changes and history), run and debug |
 | <kbd>⇧⌘R</kbd> | The review of the changes |
 | <kbd>J</kbd> / <kbd>K</kbd> | Next / previous hunk, in the review |
 | <kbd>⌘K</kbd> | Command bar |
