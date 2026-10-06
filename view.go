@@ -82,7 +82,7 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 	t := c.Theme()
 	bar := c.TitleBar()
 	sidebarRight := w.sidebarShown && w.settings.SidebarPosition == "right"
-	left := float32(14)
+	left := float32(8)
 	if !w.sidebarShown || sidebarRight {
 		left = bar.Left + 8
 	}
@@ -95,8 +95,11 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 		if !w.sidebarShown {
 			w.sidebarToggle(c)
 		}
-		// The repository's name and place show in the explorer, its branch
-		// in the Git tab.
+		// The tabs; the repository's name and place show in the explorer,
+		// its branch in the Git tab. What the tabs leave drags the window.
+		if len(w.editors) > 0 || w.reviewOpen {
+			w.editorTabs(c, pal)
+		}
 		if w.loading && len(w.files) > 0 {
 			ui.Spinner(c).Label("Loading").Size(14, 14)
 		}
@@ -172,9 +175,6 @@ func (w *window) layoutControl(c *ui.Context, pal *palette) {
 // mainArea shows the review, the commit view, or why there is nothing.
 func (w *window) mainArea(c *ui.Context, pal *palette) {
 	t := c.Theme()
-	if len(w.editors) > 0 || w.reviewOpen {
-		w.editorTabs(c, pal)
-	}
 	if !w.reviewVisible() {
 		// The review's keys are not the editor's.
 		w.diffListEl = nil
