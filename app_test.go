@@ -22,6 +22,8 @@ func TestMain(m *testing.M) {
 	dir, _ := os.MkdirTemp("", "godiff-config")
 	cfg.path = filepath.Join(dir, "godiff.jsonc")
 	cfg.settings = defaultSettings()
+	// Tests download no icons, but those that ask.
+	cfg.settings.IconTheme = "none"
 	// Tests open no editor of the machine.
 	launchEditor = func(command, repo, file string, line int) error {
 		launchedMu.Lock()
@@ -119,6 +121,7 @@ func launchTestWindow(t *testing.T, dir string) (*window, *ui.Tester) {
 	}
 	w := newWindow(repo, source{})
 	w.settings = defaultSettings()
+	w.settings.IconTheme = "none"
 	w.sidebarShown, w.sidebarWidth = true, sidebarDefault
 	w.load()
 	w.loadHistory()

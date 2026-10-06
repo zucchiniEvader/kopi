@@ -24,7 +24,11 @@ type Settings struct {
 	// JavaHome is the JDK that runs the Java language server, found on
 	// the machine when empty; JdtlsPath its installation, downloaded when
 	// empty and the machine has none.
-	JavaHome             string `json:"javaHome"`
+	JavaHome string `json:"javaHome"`
+	// IconTheme is the file icon theme: material, as VS Code's Material
+	// Icon Theme, downloaded once; none; or the folder of a VS Code
+	// extension contributing an icon theme of SVGs, or its theme's JSON.
+	IconTheme            string `json:"iconTheme"`
 	JdtlsPath            string `json:"jdtlsPath"`
 	ReviewCommentsPrefix string `json:"reviewCommentsPrefix"`
 	SidebarPosition      string `json:"sidebarPosition"` // left or right
@@ -39,6 +43,7 @@ func defaultSettings() Settings {
 		DiffStyle:            "split",
 		ReviewCommentsPrefix: "# Address these Review Comments",
 		SidebarPosition:      "left",
+		IconTheme:            "material",
 		Theme:                "system",
 	}
 }
@@ -48,6 +53,9 @@ func (s *Settings) normalize() {
 	d := defaultSettings()
 	s.CodeFontFamily = strings.TrimSpace(s.CodeFontFamily)
 	s.JavaHome = strings.TrimSpace(s.JavaHome)
+	if s.IconTheme = strings.TrimSpace(s.IconTheme); s.IconTheme == "" {
+		s.IconTheme = d.IconTheme
+	}
 	s.JdtlsPath = strings.TrimSpace(s.JdtlsPath)
 	if s.CodeFontSize == 0 {
 		s.CodeFontSize = d.CodeFontSize

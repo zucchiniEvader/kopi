@@ -187,7 +187,7 @@ func (w *window) quickBar(c *ui.Context) {
 				open(i)
 			}
 			item.Children(func() {
-				ui.Icon(c, iconFile).FontSize(14).Shrink(0)
+				w.fileIcon(c, f, false, false, t.TextMuted)
 				ui.Text(c, path.Base(f)).FontSize(13).Shrink(0)
 				if dir := path.Dir(f); dir != "." {
 					d := ui.Text(c, dir).FontSize(12).SingleLine().Shrink(1).MinWidth(0)

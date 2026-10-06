@@ -188,14 +188,16 @@ func (w *window) explorerView(c *ui.Context) {
 					}
 					ic.Rotate(ic.Animate("rot", target, 150*time.Millisecond))
 				})
-				ui.Icon(c, iconFolder).FontSize(14).TextColor(muted)
+				// A chain of folders, as java/com/example, has its first's.
+				first, _, _ := strings.Cut(rows[i].label, "/")
+				w.fileIcon(c, first, true, e.open[p], muted)
 				name := ui.Text(c, rows[i].label).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 				if w.java.errors[p] > 0 && !(selected && focused) {
 					name.TextColor(pal.delText)
 				}
 				return
 			}
-			ui.Icon(c, iconFile).FontSize(14).TextColor(muted)
+			w.fileIcon(c, p, false, false, muted)
 			name := ui.Text(c, path.Base(p)).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 			errs := w.java.errors[p]
 			switch {

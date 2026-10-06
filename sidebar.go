@@ -477,13 +477,14 @@ func (w *window) fileTree(c *ui.Context) {
 					}
 					ic.Rotate(ic.Animate("rot", target, 150*time.Millisecond))
 				})
-				ui.Icon(c, iconFolder).FontSize(14).TextColor(muted)
+				first, _, _ := strings.Cut(n.name, "/")
+				w.fileIcon(c, first, true, !w.closedDirs[key], muted)
 				ui.Text(c, n.name).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 				return
 			}
 			f := w.files[n.file]
 			viewed := w.isViewed(f)
-			ui.Icon(c, iconFile).FontSize(14).TextColor(muted)
+			w.fileIcon(c, n.name, false, false, muted)
 			name := ui.Text(c, n.name).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 			if viewed && !(selected && focused) {
 				name.TextColor(t.TextMuted)
