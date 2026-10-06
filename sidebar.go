@@ -577,25 +577,18 @@ func (w *window) selectTreeFile(i int) {
 func (w *window) historyView(c *ui.Context) {
 	t := c.Theme()
 	pal := paletteFor(t)
-	q := strings.ToLower(strings.TrimSpace(w.historyFilter))
+	// The commits: the uncommitted changes are the Changes section's.
 	type entry struct {
-		local  bool
 		commit *git.Commit
 	}
-	var entries []entry
-	if q == "" {
-		entries = append(entries, entry{local: true})
-	}
+	entries := make([]entry, len(w.history))
 	for i := range w.history {
-		cm := &w.history[i]
-		if q == "" || strings.Contains(strings.ToLower(cm.Subject), q) || strings.HasPrefix(cm.Hash, q) || strings.Contains(strings.ToLower(cm.Author), q) {
-			entries = append(entries, entry{commit: cm})
-		}
+		entries[i] = entry{commit: &w.history[i]}
 	}
 	target := w.source
 	current := -1
 	for i, e := range entries {
-		if (e.local && target.kind != sourceCommit) || (e.commit != nil && target.kind == sourceCommit && target.ref == e.commit.Hash) {
+		if target.kind == sourceCommit && target.ref == e.commit.Hash {
 			current = i
 		}
 	}
@@ -605,34 +598,15 @@ func (w *window) historyView(c *ui.Context) {
 		}
 		w.commitOpen = false
 		w.historyList.ScrollIntoView(i)
-		if entries[i].local {
-			w.setSource(w.launchWorkTree())
-		} else {
-			w.setSource(source{kind: sourceCommit, ref: entries[i].commit.Hash})
-		}
+		w.setSource(source{kind: sourceCommit, ref: entries[i].commit.Hash})
 	}
-	w.historyList.Key = func(i int) any {
-		if entries[i].local {
-			return "local"
-		}
-		return entries[i].commit.Hash
-	}
-	w.historyList.Label = func(i int) string {
-		if entries[i].local {
-			return "Uncommitted changes"
-		}
-		return entries[i].commit.Subject
-	}
+	w.historyList.Key = func(i int) any { return entries[i].commit.Hash }
+	w.historyList.Label = func(i int) string { return entries[i].commit.Subject }
 	focused := w.focusHistory || w.historyEl != nil && w.historyEl.FocusWithin()
 	now := time.Now()
 	list := ui.List(c, &w.historyList, len(entries), func(i int) {
 		e := entries[i]
-		row := ui.Row(c).Gap(8).Padding(5, 8).Radius(6).AlignItems(ui.Start).Role(ui.RoleButton)
-		if e.local {
-			row.Label("Uncommitted changes")
-		} else {
-			row.Label(e.commit.Subject)
-		}
+		row := ui.Row(c).Gap(8).Padding(5, 8).Radius(6).AlignItems(ui.Start).Role(ui.RoleButton).Label(e.commit.Subject)
 		muted, ref := t.TextMuted, pal.ref
 		switch {
 		case i == current && focused:
@@ -650,11 +624,6 @@ func (w *window) historyView(c *ui.Context) {
 			open(i)
 		}
 		row.Children(func() {
-			if e.local {
-				ui.Text(c, "local").Font(w.codeFont()).FontSize(12).TextColor(ref).Width(56).Shrink(0)
-				ui.Text(c, "Uncommitted changes").FontSize(12).SingleLine().Grow(1)
-				return
-			}
 			cm := e.commit
 			when := w.commitTimes[cm.Hash]
 			if when.at != now.Truncate(time.Minute) {
@@ -679,7 +648,7 @@ func (w *window) historyView(c *ui.Context) {
 	}
 	list.Children(func() {
 		if len(entries) == 0 {
-			ui.Text(c, "No matching commits").FontSize(12).TextColor(t.TextMuted).Padding(12)
+			ui.Text(c, "No commits yet").FontSize(12).TextColor(t.TextMuted).Padding(12)
 		}
 	})
 	if list.Shortcut(0, ui.KeyDown) {
@@ -690,7 +659,7 @@ func (w *window) historyView(c *ui.Context) {
 	}
 	// More commits load well before the end comes into view, so that
 	// scrolling does not stop there.
-	if q == "" && w.historyMore && !w.historyLoading {
+	if w.historyMore && !w.historyLoading {
 		if _, last := w.historyList.Visible(); last >= len(entries)-historyPage/2 {
 			w.historyLimit += historyPage
 			w.loadHistory()
@@ -829,6 +798,11 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 			case sourceBranch:
 				chip(c, pal, iconBranch, "vs "+w.source.ref, pal.ref).Tooltip("The work tree, committed or not, since it branched off " + w.source.ref)
 			}
+			// Back from a commit or a branch to the local changes, which
+			// the history no longer lists.
+			if w.source.kind != sourceWorkingTree && iconButton(c, iconClose, "Back to Local Changes").Size(22, 22).Clicked() {
+				w.setSource(w.launchWorkTree())
+			}
 		})
 		badge := ""
 		if n := len(w.files); n > 0 && w.source.kind == sourceWorkingTree {
@@ -845,9 +819,6 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 		header("History", "", &w.gitHistoryClosed)
 		if !w.gitHistoryClosed {
 			ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-				ui.Column(c).Padding(0, 10, 6).Children(func() {
-					searchInput(c, &w.historyFilter, "Filter history", &w.filterFocus, &w.typing)
-				})
 				w.historyView(c)
 			})
 		}

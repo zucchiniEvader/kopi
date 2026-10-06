@@ -276,8 +276,12 @@ func TestHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("Uncommitted changes") || !tt.HasText("First commit") {
+	// The local changes are the Changes section's, not the history's.
+	if tt.HasText("Uncommitted changes") || !tt.HasText("First commit") {
 		t.Fatalf("texts %q", tt.Texts())
+	}
+	if _, ok := tt.Find("Filter history"); ok {
+		t.Error("a filter of the history")
 	}
 	if err := tt.Click("First commit"); err != nil {
 		t.Fatal(err)
@@ -288,6 +292,14 @@ func TestHistory(t *testing.T) {
 		t.Fatalf("source %+v, %d files", w.source, len(w.files))
 	}
 	snapshot(t, tt, "history")
+	// Back to the local changes.
+	if err := tt.Click("Back to Local Changes"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if w.source.kind != sourceWorkingTree || len(w.files) != 4 {
+		t.Errorf("source %+v, %d files", w.source, len(w.files))
+	}
 }
 
 func TestHistoryTakesFocus(t *testing.T) {

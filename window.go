@@ -91,9 +91,7 @@ type window struct {
 	historyList                        ui.ListState
 	historyEl                          *ui.Element
 	commitTimes                        map[string]commitTime
-	// historyFilter filters the History tab, apart from the files'.
-	historyFilter  string
-	historyLoading bool
+	historyLoading                     bool
 	// reloaded are the files that changed in the last refresh.
 	reloaded  map[string]bool
 	dragWidth float32
