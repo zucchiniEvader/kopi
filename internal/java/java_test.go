@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -205,5 +206,39 @@ func TestLombok(t *testing.T) {
 	agent, jar := slices.Index(cmd.Args, "-javaagent:/l.jar"), slices.Index(cmd.Args, "-jar")
 	if agent < 0 || agent > jar {
 		t.Errorf("args %q", cmd.Args)
+	}
+}
+
+func TestDebugger(t *testing.T) {
+	jar := []byte("PK fake jar")
+	sum := sha1.Sum(jar)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/maven-metadata.xml":
+			w.Write([]byte("<metadata><versioning><latest>0.53.1</latest><release>0.53.1</release></versioning></metadata>"))
+		case "/0.53.1/com.microsoft.java.debug.plugin-0.53.1.jar":
+			w.Write(jar)
+		case "/0.53.1/com.microsoft.java.debug.plugin-0.53.1.jar.sha1":
+			w.Write([]byte(hex.EncodeToString(sum[:])))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	old := DebuggerBase
+	DebuggerBase = srv.URL + "/"
+	defer func() { DebuggerBase = old }()
+	cache := t.TempDir()
+	if FindDebugger(cache) != "" {
+		t.Fatal("a debugger before downloading")
+	}
+	got, err := DownloadDebugger(context.Background(), cache)
+	if err != nil || filepath.Base(got) != "com.microsoft.java.debug.plugin-0.53.1.jar" || FindDebugger(cache) != got {
+		t.Fatalf("%q, %v", got, err)
+	}
+	os.Remove(got)
+	jar = []byte("tampered")
+	if _, err := DownloadDebugger(context.Background(), cache); err == nil || FindDebugger(cache) != "" {
+		t.Errorf("a bad download: %v", err)
 	}
 }

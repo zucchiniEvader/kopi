@@ -57,10 +57,20 @@ type runState struct {
 	list    ui.ListState
 	stdin   string
 	status  string
-	// waiting tells a run waiting for the language server; restart one
-	// to start once the program running stops.
-	waiting, restart bool
-	gen              int
+	// waiting tells a run waiting for the language server; next is the
+	// one to start once the program running stops.
+	waiting bool
+	pending *pendingRun
+	next    *pendingRun
+	last    *pendingRun // the run last asked for, which Restart runs again
+	loaded  bool        // launch.json was read for the Run and Debug tab
+	gen     int
+}
+
+// pendingRun is a configuration to run, or to debug.
+type pendingRun struct {
+	cfg   launch.Config
+	debug bool
 }
 
 // runProc is a program running, with its output gathered between frames.
@@ -118,26 +128,44 @@ func (w *window) currentJavaFile() *editorTab {
 	return nil
 }
 
-// runStart runs the configuration chosen, after the program running
-// stops: it saves the files, builds the workspace, and asks the language
-// server for the class path.
+// runStart runs the configuration chosen.
 func (w *window) runStart() {
+	if err := w.runConfigs(); err != nil {
+		w.run.open, w.run.lines = true, nil
+		w.say(lineFail, "%v", err)
+		return
+	}
+	w.launchConfig(w.chosenConfig(), false)
+}
+
+// configFor returns the configuration of launch.json running a class,
+// as it has its arguments, or one of the class alone.
+func (w *window) configFor(class string) launch.Config {
+	w.runConfigs()
+	for _, c := range w.run.configs {
+		if c.MainClass == class {
+			return c
+		}
+	}
+	return launch.Config{Name: class[strings.LastIndexByte(class, '.')+1:], MainClass: class}
+}
+
+// launchConfig runs a configuration, or debugs it, after the program
+// running stops: it saves the files, builds the workspace, and asks the
+// language server for the class path.
+func (w *window) launchConfig(cfg launch.Config, debug bool) {
 	r := &w.run
 	r.open = true
-	if r.proc != nil {
-		r.restart = true
-		w.runStop()
+	if r.proc != nil || w.debug.client != nil {
+		r.next = &pendingRun{cfg, debug}
+		w.stopAll()
 		return
 	}
 	r.gen++
 	gen := r.gen
-	r.lines, r.waiting, r.status = nil, false, ""
+	r.lines, r.waiting, r.status, r.pending = nil, false, "", nil
+	r.last = &pendingRun{cfg, debug}
 	r.list.ScrollToEnd()
-	if err := w.runConfigs(); err != nil {
-		w.say(lineFail, "%v", err)
-		return
-	}
-	cfg := w.chosenConfig()
 	file := ""
 	if e := w.currentJavaFile(); e != nil {
 		file = e.abs
@@ -187,9 +215,13 @@ func (w *window) runStart() {
 	}
 	j := &w.java
 	if j.state != javaReady {
-		r.waiting = true
+		r.waiting, r.pending = true, &pendingRun{cfg, debug}
 		w.say(lineInfo, "Waiting for the Java language server…")
 		w.javaStart()
+		return
+	}
+	if debug && !j.debugger {
+		w.say(lineFail, "The debugger could not be downloaded: it needs the network once. Run without debugging works.")
 		return
 	}
 	if src == "" {
@@ -249,6 +281,12 @@ func (w *window) runStart() {
 			}
 			args = append(args, main)
 			args = append(args, resolved.Args...)
+			classpath := launch.Paths(resolved.ClassPaths, cp.Classpaths)
+			modulepath := launch.Paths(resolved.ModulePaths, cp.Modulepaths)
+			if debug {
+				w.debugLaunch(resolved, main, classpath, modulepath, javaCmd)
+				return
+			}
 			cmd := exec.Command(javaCmd, args...)
 			cmd.Dir = resolved.Cwd
 			cmd.Env = os.Environ()
@@ -314,6 +352,11 @@ func (w *window) findSource(suffix string) string {
 
 // runExec starts a program, its output going to the panel.
 func (w *window) runExec(cmd *exec.Cmd, name string) {
+	w.runExecAs(cmd, name, "Running")
+}
+
+// runExecAs starts a program, saying what it does, as Debugging.
+func (w *window) runExecAs(cmd *exec.Cmd, name, verb string) {
 	r := &w.run
 	proc.HideConsole(cmd)
 	stdout, err1 := cmd.StdoutPipe()
@@ -324,13 +367,13 @@ func (w *window) runExec(cmd *exec.Cmd, name string) {
 		return
 	}
 	short := path.Base(strings.ReplaceAll(name, ".", "/"))
-	w.say(lineInfo, "Running %s", name)
+	w.say(lineInfo, "%s %s", verb, name)
 	if err := cmd.Start(); err != nil {
 		w.say(lineFail, "Could not start %s: %v", short, err)
 		return
 	}
 	p := &runProc{cmd: cmd, stdin: stdin, name: short, done: make(chan struct{})}
-	r.proc, r.status = p, "Running "+short
+	r.proc, r.status = p, verb+" "+short
 	gen := r.gen
 	var wg sync.WaitGroup
 	read := func(rd io.Reader, kind int) {
@@ -373,10 +416,7 @@ func (w *window) runExec(cmd *exec.Cmd, name string) {
 			default:
 				w.say(lineFail, "%s exited with code %d.", short, code)
 			}
-			if r.restart {
-				r.restart = false
-				w.runStart()
-			}
+			w.runNext()
 		})
 	}()
 }
@@ -439,7 +479,6 @@ func (w *window) runFlush(p *runProc) {
 func (w *window) runStop() {
 	p := w.run.proc
 	if p == nil {
-		w.run.restart = false
 		return
 	}
 	p.stopping = true
@@ -566,15 +605,22 @@ func (w *window) runPanel(c *ui.Context, pal *palette) {
 				ui.Text(c, r.status).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
 			}
 			ui.Spacer(c)
-			if iconButton(c, iconPlay, "Run (⌃F5)").Size(26, 26).Clicked() {
-				w.runStart()
-			}
-			stop := iconButton(c, iconStop, "Stop (⇧F5)").Size(26, 26).Disabled(r.proc == nil)
-			if r.proc == nil {
-				stop.Opacity(0.4)
-			}
-			if stop.Clicked() {
-				w.runStop()
+			if w.debugging() {
+				w.debugControls(c, 26)
+			} else {
+				if iconButton(c, iconPlay, "Run (⌃F5)").Size(26, 26).Clicked() {
+					w.runStart()
+				}
+				if iconButton(c, iconBugPlay, "Debug (F5)").Size(26, 26).Clicked() {
+					w.debugOrContinue()
+				}
+				stop := iconButton(c, iconStop, "Stop (⇧F5)").Size(26, 26).Disabled(r.proc == nil)
+				if r.proc == nil {
+					stop.Opacity(0.4)
+				}
+				if stop.Clicked() {
+					w.runStop()
+				}
 			}
 			if iconButton(c, iconTrash, "Clear").Size(26, 26).Clicked() {
 				r.lines = nil
@@ -644,4 +690,34 @@ func (w *window) runRow(c *ui.Context, pal *palette, l runLine) {
 		}
 		ui.Text(c, text[m[7]:]).Font(w.codeFont()).FontSize(12).TextColor(color)
 	})
+}
+
+// runNext starts the run asked for while a program ran, once nothing
+// runs.
+func (w *window) runNext() {
+	r := &w.run
+	if r.next == nil || r.proc != nil || w.debug.client != nil {
+		return
+	}
+	next := r.next
+	r.next = nil
+	w.launchConfig(next.cfg, next.debug)
+}
+
+// stopAll stops the program running, debugged or not.
+func (w *window) stopAll() {
+	if w.debug.client != nil {
+		w.debugStop()
+		return
+	}
+	w.runStop()
+}
+
+// restart runs again what ran last, debugged as it was.
+func (w *window) restart() {
+	if l := w.run.last; l != nil {
+		w.launchConfig(l.cfg, l.debug)
+		return
+	}
+	w.runStart()
 }

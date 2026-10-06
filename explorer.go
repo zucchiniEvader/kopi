@@ -16,6 +16,7 @@ const (
 	tabExplorer = iota // every file of the work tree
 	tabChanges         // the files changed
 	tabHistory         // the commits
+	tabRun             // running and debugging
 )
 
 // explorerHidden are the entries the explorer leaves out.

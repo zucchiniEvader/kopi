@@ -23,8 +23,10 @@ type fakeJDTLS struct {
 	mu   sync.Mutex
 	got  []string // methods, and the text of edits
 	main string   // the URI of Main.java
-	// classpath is what java.project.getClasspaths answers.
+	// classpath is what java.project.getClasspaths answers; debugPort the
+	// port of the debug adapter vscode.java.startDebugSession gives.
 	classpath []string
+	debugPort int
 }
 
 func (f *fakeJDTLS) record(s string) {
@@ -100,6 +102,11 @@ func (f *fakeJDTLS) Request(method string, params json.RawMessage) (any, error) 
 	case "java/buildWorkspace":
 		return 1, nil
 	case "workspace/executeCommand":
+		var cmd struct{ Command string }
+		json.Unmarshal(params, &cmd)
+		if cmd.Command == "vscode.java.startDebugSession" {
+			return f.debugPort, nil
+		}
 		return map[string]any{"classpaths": f.classpath, "modulepaths": []string{}}, nil
 	case "java/classFileContents":
 		return "package java.lang;\n\n// The JDK's.\npublic final class String {}\n", nil
@@ -115,13 +122,13 @@ func javaWindow(t *testing.T) (*window, *ui.Tester, *fakeJDTLS) {
 	w, tt := newTestWindow(t, dir)
 	w.posted = make(chan func(), 1024)
 	fake := &fakeJDTLS{main: lsp.FileURI(filepath.Join(dir, "src", "Main.java"))}
-	w.javaLaunch = func(w *window, gen int, s Settings) (io.ReadWriteCloser, error) {
+	w.javaLaunch = func(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, error) {
 		client, server := net.Pipe()
 		conn := lsp.NewConn(server, fake)
 		fake.mu.Lock()
 		fake.conn = conn
 		fake.mu.Unlock()
-		return client, nil
+		return client, nil, nil
 	}
 	t.Cleanup(func() {
 		fake.mu.Lock()
@@ -231,8 +238,8 @@ func TestJavaLanguageServer(t *testing.T) {
 
 func TestJavaServerFails(t *testing.T) {
 	w, tt, _ := javaWindow(t)
-	w.javaLaunch = func(*window, int, Settings) (io.ReadWriteCloser, error) {
-		return nil, errString("no Java 21 or newer found: set javaHome in the settings")
+	w.javaLaunch = func(*window, int, Settings) (io.ReadWriteCloser, []string, error) {
+		return nil, nil, errString("no Java 21 or newer found: set javaHome in the settings")
 	}
 	w.openFile("src/Main.java", 0)
 	pump(t, w, tt, "the failure", func() bool { return w.java.state == javaFailed })

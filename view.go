@@ -116,20 +116,6 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 			ui.Spinner(c).Label("Loading").Size(14, 14)
 		}
 		ui.Spacer(c)
-		if !w.reviewVisible() {
-			// Running Java programs.
-			if w.currentJavaFile() != nil || w.run.proc != nil {
-				if w.run.proc != nil && iconButton(c, iconStop, "Stop (⇧F5)").Clicked() {
-					w.runStop()
-				}
-				if iconButton(c, iconPlay, "Run (⌃F5)").Clicked() {
-					w.runStart()
-				}
-			}
-			if iconButton(c, iconTerminal, "Toggle Run Panel (⌘J)").Clicked() {
-				w.run.open = !w.run.open
-			}
-		}
 		if !w.commitOpen && w.reviewVisible() {
 			// Find, the comments, and the layout.
 			if iconButton(c, iconSearch, "Find in diffs").Clicked() {

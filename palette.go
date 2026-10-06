@@ -36,7 +36,9 @@ func (w *window) commands() []command {
 	return []command{
 		{title: "Go to File", keys: "⌘P", run: w.openQuick},
 		{title: "Run", hint: "The launch configuration, or the Java file shown", keys: "⌃F5", run: w.runStart},
-		{title: "Stop", keys: "⇧F5", run: w.runStop},
+		{title: "Start Debugging", keys: "F5", run: w.debugOrContinue},
+		{title: "Stop", keys: "⇧F5", run: w.stopAll},
+		{title: "Show Run and Debug", keys: "⇧⌘D", run: func() { w.tab, w.sidebarShown = tabRun, true }},
 		{title: "Toggle Run Panel", keys: "⌘J", run: func() { w.run.open = !w.run.open }},
 		{title: "Open launch.json", run: w.openLaunchConfig},
 		{title: "Find", keys: "⌘F", run: func() { w.find(false) }},

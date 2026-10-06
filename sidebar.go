@@ -249,6 +249,8 @@ func (w *window) sidebar(c *ui.Context) {
 						w.refresh()
 					}
 				})
+			case tabRun:
+				w.runHeader(c)
 			case tabChanges:
 				if searchInput(c, &w.filter, "Filter files", &w.filterFocus, &w.typing) {
 					w.matchesFor = "\x00"
@@ -264,6 +266,8 @@ func (w *window) sidebar(c *ui.Context) {
 			w.explorerView(c)
 		case tabChanges:
 			w.fileTree(c)
+		case tabRun:
+			w.runView(c)
 		default:
 			w.historyView(c)
 		}
@@ -293,12 +297,12 @@ func (w *window) tabControl(c *ui.Context) bool {
 	t := c.Theme()
 	pal := paletteFor(t)
 	tab := w.tab
-	seg := ui.SegmentedBase(c, &tab, 3)
+	seg := ui.SegmentedBase(c, &tab, 4)
 	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.12)).Label("Sidebar").Children(func() {
 		for i, it := range []struct {
 			icon *ui.SVG
 			name string
-		}{{iconFiles, "Explorer (⌘1)"}, {iconTree, "Changes (⌘2)"}, {iconHistory, "History (⌘3)"}} {
+		}{{iconFiles, "Explorer (⌘1)"}, {iconTree, "Changes (⌘2)"}, {iconHistory, "History (⌘3)"}, {iconBugPlay, "Run and Debug (⇧⌘D)"}} {
 			s := seg.Segment(i).Size(30, 24).Radius(6).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
 			if i == tab {
 				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)

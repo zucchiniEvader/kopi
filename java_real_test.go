@@ -237,3 +237,84 @@ func TestRealRun(t *testing.T) {
 		t.Error("the edit did not run")
 	}
 }
+
+// TestRealDebug debugs a class with java-debug, downloaded when the
+// machine has none: GODIFF_JDTLS=1.
+func TestRealDebug(t *testing.T) {
+	if os.Getenv("GODIFF_JDTLS") == "" {
+		t.Skip("GODIFF_JDTLS=1 runs the real Java language server")
+	}
+	dir := testRepo(t)
+	writeFile(t, dir, "src/App.java", "public class App {\n    public static void main(String[] args) {\n        int total = 0;\n        for (int i = 1; i <= 3; i++) {\n            total += i;\n        }\n        String name = \"Ada\";\n        System.out.println(name + \" \" + total);\n    }\n}\n")
+	w, tt := newTestWindow(t, dir)
+	w.settings.JavaHome = os.Getenv("GODIFF_JAVA_HOME")
+	w.posted = make(chan func(), 4096)
+	w.javaLaunch = launchJava
+	defer w.javaStop()
+	wait := func(what string, d time.Duration, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(d)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("waiting for %s: paused %v frames %v\n%s", what, w.debug.paused, w.debug.frames, w.runText())
+			}
+			select {
+			case fn := <-w.posted:
+				fn()
+			case <-time.After(20 * time.Millisecond):
+			}
+			tt.Frame()
+		}
+	}
+	w.openFile("src/App.java", 0)
+	e := w.activeTab()
+	tt.Frame()
+	if len(e.ed.Diagnostics()) != 0 {
+		t.Log(e.ed.Diagnostics())
+	}
+	// The lens of main, and a breakpoint on name's line.
+	if l := e.lensDone; !l {
+		t.Error("no lens")
+	}
+	w.toggleBreakpoint(e, 6)
+	start := time.Now()
+	w.launchConfig(w.configFor("App"), true)
+	wait("the breakpoint", 5*time.Minute, func() bool { return w.debug.paused && len(w.debug.frames) > 0 })
+	t.Logf("paused after %v: %s, frame %s line %d", time.Since(start), w.debug.reason, w.debug.frames[0].Name, w.debug.frames[0].Line)
+	if w.debug.frames[0].Line != 7 {
+		t.Errorf("stopped on line %d", w.debug.frames[0].Line)
+	}
+	value := func(name string) string {
+		for _, s := range w.debug.scopes {
+			for _, v := range w.debug.vars[s.VariablesReference] {
+				if v.Name == name {
+					return v.Value
+				}
+			}
+		}
+		return ""
+	}
+	wait("the variables", time.Minute, func() bool { return value("total") != "" })
+	if value("total") != "6" {
+		t.Errorf("total %q", value("total"))
+	}
+	if e.ed.Selection().Caret.Line != 6 {
+		t.Errorf("caret %v", e.ed.Selection().Caret)
+	}
+	// Over the line: name is Ada.
+	w.debugStep("next")
+	wait("the step", time.Minute, func() bool { return w.debug.paused && len(w.debug.frames) > 0 && value("name") != "" })
+	if w.debug.frames[0].Line != 8 || value("name") != `"Ada"` {
+		t.Errorf("after the step: line %d, name %q", w.debug.frames[0].Line, value("name"))
+	}
+	// The hover's value.
+	e.ed.Hover(editor.Pos{Line: 7, Col: 28})
+	wait("the hover", time.Minute, func() bool { return strings.Contains(e.ed.HoverText(), "name = ") })
+	t.Logf("hover %q", e.ed.HoverText())
+	w.debugStep("continue")
+	wait("the end", time.Minute, func() bool { return !w.debugging() && w.run.proc == nil })
+	t.Logf("\n%s", w.runText())
+	if !strings.Contains(w.runText(), "Ada 6") {
+		t.Error("no output")
+	}
+}

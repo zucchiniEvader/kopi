@@ -51,6 +51,8 @@ type javaServer struct {
 	order    []string         // the tokens, oldest first
 	// legend names the server's semantic token types and modifiers.
 	legend semanticLegend
+	// debugger tells that the server loaded java-debug.
+	debugger bool
 }
 
 // work is a task the server reports the progress of.
@@ -74,8 +76,9 @@ func (k *work) String() string {
 }
 
 // javaLauncher starts a language server for a window and returns its
-// input and output, which closing stops it.
-type javaLauncher func(w *window, gen int, s Settings) (io.ReadWriteCloser, error)
+// input and output, which closing stops it, and the plugins it is to load,
+// as the debugger.
+type javaLauncher func(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, error)
 
 func isJava(p string) bool { return strings.HasSuffix(p, ".java") || strings.HasPrefix(p, "jdt://") }
 
@@ -137,13 +140,13 @@ func (w *window) javaStart() {
 				if j.gen == gen {
 					j.state, j.status, j.detail, j.conn = javaFailed, "Unavailable", err.Error(), nil
 					if w.run.waiting {
-						w.run.waiting = false
+						w.run.waiting, w.run.pending = false, nil
 						w.say(lineFail, "The Java language server is unavailable: %v", err)
 					}
 				}
 			})
 		}
-		rwc, err := launch(w, gen, settings)
+		rwc, bundles, err := launch(w, gen, settings)
 		if err != nil {
 			fail(err)
 			return
@@ -158,7 +161,7 @@ func (w *window) javaStart() {
 				} `json:"semanticTokensProvider"`
 			} `json:"capabilities"`
 		}
-		if err := conn.Call(ctx, "initialize", initializeParams(root), &init); err != nil {
+		if err := conn.Call(ctx, "initialize", initializeParams(root, bundles), &init); err != nil {
 			conn.Close()
 			fail(fmt.Errorf("the Java language server did not start: %w", err))
 			return
@@ -179,9 +182,11 @@ func (w *window) javaStart() {
 					w.javaOpen(e)
 				}
 			}
-			if w.run.waiting {
-				w.run.waiting = false
-				w.runStart()
+			j.debugger = len(bundles) > 0
+			if r := &w.run; r.waiting && r.pending != nil {
+				p := r.pending
+				r.waiting, r.pending = false, nil
+				w.launchConfig(p.cfg, p.debug)
 			}
 		})
 		<-conn.Done()
@@ -217,7 +222,7 @@ func shutdown(conn *lsp.Conn) {
 	conn.Close()
 }
 
-func initializeParams(root string) map[string]any {
+func initializeParams(root string, bundles []string) map[string]any {
 	uri := lsp.FileURI(root)
 	return map[string]any{
 		"processId": os.Getpid(),
@@ -251,6 +256,7 @@ func initializeParams(root string) map[string]any {
 			},
 		},
 		"initializationOptions": map[string]any{
+			"bundles": bundles,
 			"extendedClientCapabilities": map[string]any{
 				"classFileContentsSupport": true,
 				"progressReportProvider":   false,
@@ -527,6 +533,9 @@ func counts(e *editorTab) (errors, warnings int) {
 
 // javaHover asks the server about what the pointer rests on.
 func (w *window) javaHover(e *editorTab, p editor.Pos) {
+	if w.debugEvaluate(e, p) {
+		return // the value, while the program is paused
+	}
 	j := &w.java
 	if j.state != javaReady {
 		return
@@ -689,7 +698,7 @@ func cacheDir() string {
 
 // launchJava finds Java and jdtls, downloading jdtls when the machine has
 // none, and starts it on the window's repository.
-func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, error) {
+func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, error) {
 	status := func(text string) {
 		w.post(func() {
 			if w.java.gen == gen && w.java.state == javaStarting {
@@ -699,12 +708,12 @@ func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, error) {
 	}
 	jdk, err := java.FindJDK(s.JavaHome)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cache := cacheDir()
 	home, err := java.FindServer(s.JdtlsPath, cache)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if home == "" {
 		status("Downloading the language server")
@@ -721,8 +730,23 @@ func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, error) {
 			}
 		})
 		if err != nil {
-			return nil, fmt.Errorf("downloading jdtls: %w", err)
+			return nil, nil, fmt.Errorf("downloading jdtls: %w", err)
 		}
+	}
+	// The debugger, a plugin of jdtls: without it, programs run but do not
+	// debug.
+	var bundles []string
+	debugger := java.FindDebugger(cache)
+	if debugger == "" {
+		status("Downloading the debugger")
+		if jar, err := java.DownloadDebugger(context.Background(), cache); err == nil {
+			debugger = jar
+		} else {
+			log.Printf("godiff: java-debug: %v", err)
+		}
+	}
+	if debugger != "" {
+		bundles = append(bundles, debugger)
 	}
 	status("Starting")
 	root := w.repo.Root
@@ -738,7 +762,7 @@ func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, error) {
 	}
 	cmd, err := java.Command(jdk, home, config, data, jvmArgs...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cmd.Dir = root
 	proc.HideConsole(cmd)
@@ -747,7 +771,11 @@ func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, error) {
 	if err == nil {
 		cmd.Stderr = logFile
 	}
-	return startProcess(cmd, logFile)
+	p, err := startProcess(cmd, logFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	return p, bundles, nil
 }
 
 // process is a server's process, as its output to read and its input to

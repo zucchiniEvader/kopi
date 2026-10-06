@@ -41,6 +41,9 @@ type editorTab struct {
 	disk        int
 	onDisk      string
 	keptDeleted bool
+	// lensVersion is the text's version the lenses were found in.
+	lensVersion int
+	lensDone    bool
 }
 
 // origin says where a library's document comes from: the module or jar
@@ -163,6 +166,7 @@ func (w *window) openAbs(abs string) *editorTab {
 		}
 		w.editors = append(w.editors, e)
 		w.javaAttach(e)
+		w.debugAttach(e)
 	}
 	w.show(e)
 	if inRepo {
@@ -343,6 +347,10 @@ func (w *window) editorStyle(t *ui.Theme, pal *palette) editor.Style {
 		// The find bar's matches, lit as the review's are.
 		Match:        pal.match,
 		CurrentMatch: pal.matchNow,
+		// Breakpoints, and the line the program debugged stopped on.
+		Breakpoint: ui.RGB(229, 20, 0),
+		ExecLine:   ui.RGBA(255, 204, 0, 0.28),
+		ExecArrow:  ui.RGB(242, 178, 0),
 
 		HoverBackground: pal.headerBg,
 		HoverBorder:     pal.cardBorder,
@@ -443,6 +451,7 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 			style.Background = libraryBg(pal)
 		}
 		e.ed.SetStyle(style)
+		w.updateLenses(e)
 		w.diskBanner(c, pal, e)
 		w.findBar(c, pal, e)
 		editor.View(c, e.ed).Grow(1).FillWidth()

@@ -477,3 +477,54 @@ func TestReload(t *testing.T) {
 		t.Errorf("undo %q", ed.Text())
 	}
 }
+
+func TestBreakpointsAndLens(t *testing.T) {
+	ed, tt := open(t, "class A {\n  void main() {\n    run();\n  }\n}")
+	tt.Frame()
+	var toggled []int
+	ed.OnToggleBreakpoint = func(l int) {
+		toggled = append(toggled, l)
+		lines := ed.Breakpoints()
+		if i := slices.Index(lines, l); i >= 0 {
+			lines = slices.Delete(lines, i, i+1)
+		} else {
+			lines = append(lines, l)
+		}
+		ed.SetBreakpoints(lines)
+	}
+	var moved []int
+	ed.OnBreakpointsMoved = func(l []int) { moved = l }
+	// A click at the gutter's left, and F9 at the caret.
+	tt.ClickAt(4, padTop+ed.lineH*2.5)
+	ed.SetSelection(Selection{Pos{3, 0}, Pos{3, 0}})
+	tt.Key(0, ui.KeyF9)
+	if !slices.Equal(ed.Breakpoints(), []int{2, 3}) {
+		t.Fatalf("breakpoints %v, toggled %v", ed.Breakpoints(), toggled)
+	}
+	// Lines typed above move them.
+	ed.SetSelection(Selection{Pos{1, 0}, Pos{1, 0}})
+	tt.Type("// x")
+	tt.Key(0, ui.KeyEnter)
+	if !slices.Equal(ed.Breakpoints(), []int{3, 4}) || !slices.Equal(moved, []int{3, 4}) {
+		t.Errorf("after a line above: %v, moved %v", ed.Breakpoints(), moved)
+	}
+	// The lens's items.
+	var chosen [2]int
+	ed.OnLens = func(line, item int) { chosen = [2]int{line, item} }
+	ed.SetLenses([]Lens{{Line: 2, Items: []string{"▶ Run", "Debug"}}})
+	tt.Frame()
+	spans := ed.lensSpans(2)
+	x := ed.gutterWidth() + padLeft + (spans[1][0]+spans[1][1])/2
+	y := padTop + ed.lineH*2.5
+	tt.Move(x, y)
+	tt.Frame()
+	if tt.Cursor() != ui.CursorPointer {
+		t.Errorf("cursor %v over the lens", tt.Cursor())
+	}
+	tt.ClickAt(x, y)
+	if chosen != [2]int{2, 1} {
+		t.Errorf("chose %v", chosen)
+	}
+	ed.SetExecLine(3)
+	tt.Frame()
+}

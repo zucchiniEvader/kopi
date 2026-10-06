@@ -45,6 +45,9 @@ type Style struct {
 	Link ui.Color
 	// Match and CurrentMatch are the backgrounds of a search's matches.
 	Match, CurrentMatch ui.Color
+	// Breakpoint colors breakpoints' dots; ExecLine the background of the
+	// line where the program debugged stopped, and ExecArrow its arrow.
+	Breakpoint, ExecLine, ExecArrow ui.Color
 }
 
 // defaultStyle is the style of the theme, without colors for tokens.
@@ -69,6 +72,7 @@ func defaultStyle(t *ui.Theme) Style {
 	s.HoverBackground, s.HoverBorder = t.Surface, t.Border
 	s.Link = t.Accent
 	s.Match, s.CurrentMatch = ui.RGBA(255, 216, 92, 0.5), ui.RGBA(255, 176, 46, 0.9)
+	s.Breakpoint, s.ExecLine, s.ExecArrow = ui.RGB(229, 20, 0), ui.RGBA(255, 204, 0, 0.25), ui.RGB(255, 196, 0)
 	return s
 }
 
@@ -128,6 +132,19 @@ type Editor struct {
 	// The matches of a search, in order, and the current one.
 	matches []Range
 	current int
+
+	// OnToggleBreakpoint, when set, is asked to set or clear a breakpoint
+	// on a line: a click at the gutter's left or F9 asks.
+	// OnBreakpointsMoved hears of breakpoints edits moved, with their
+	// lines; OnLens of an action of a lens chosen.
+	OnToggleBreakpoint func(line int)
+	OnBreakpointsMoved func(lines []int)
+	OnLens             func(line, item int)
+
+	breakpoints map[int]bool
+	execLine    int
+	lenses      []Lens
+	lensHover   [2]int
 }
 
 // dragState is a selection the pointer makes: by runes, words (2) or lines
@@ -141,7 +158,7 @@ type dragState struct {
 // New returns an editor of text, highlighted as the language of the file
 // at path.
 func New(path, text string) *Editor {
-	return &Editor{buf: NewBuffer(text), hl: newHighlighter(path), shaped: map[string]*shapedLine{}}
+	return &Editor{buf: NewBuffer(text), hl: newHighlighter(path), shaped: map[string]*shapedLine{}, execLine: -1, lensHover: [2]int{-1, -1}}
 }
 
 // Text returns the text, with the line breaks it came with.
@@ -200,7 +217,7 @@ func (ed *Editor) Focus() { ed.wantFocus = true }
 func View(c *ui.Context, ed *Editor) *ui.Element {
 	e := ui.Box(c).Focusable().FocusRing(false).Clip().Label("Editor")
 	ed.build(c, e)
-	if ed.link.active {
+	if ed.link.active || ed.lensHover[0] >= 0 {
 		e.Cursor(ui.CursorPointer)
 	} else {
 		e.Cursor(ui.CursorText)
@@ -458,6 +475,9 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			if ed.sel.Empty() && i == ed.sel.Caret.Line {
 				p.Fill(ui.Rect{X: text.X, Y: y, W: text.W, H: ed.lineH}, st.CurrentLine, 0)
 			}
+			if i == ed.execLine {
+				p.Fill(ui.Rect{X: text.X, Y: y, W: text.W, H: ed.lineH}, st.ExecLine, 0)
+			}
 			sl := ed.shape(line)
 			ed.maxW = max(ed.maxW, sl.width)
 			ed.paintMatches(p, i, sl, textX, y)
@@ -485,6 +505,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			}
 			ed.paintGlyphs(p, sl, ed.hl.spans(i), textX, y+ed.baseline, la, lz)
 			ed.paintDiagnostics(p, i, sl, textX, y)
+			ed.paintLens(p, i, textX, y+ed.baseline)
 		}
 		if caretOn && ed.preedit == "" {
 			c := ed.sel.Caret
@@ -497,10 +518,17 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 		if i == ed.sel.Caret.Line {
 			color = st.Text
 		}
+		// The numbers of lines with problems take their colors.
+		if sev := ed.lineSeverity(i); sev != 0 && sev <= SeverityWarning {
+			color = ed.severityColor(sev)
+		}
 		sl := ed.shape(strconv.Itoa(i + 1))
 		p.Glyphs(sl.glyphs, r.X+gw-gutterPad-sl.width, lineY(i)+ed.baseline, color)
-		if sev := ed.lineSeverity(i); sev != 0 {
-			p.Fill(ui.Rect{X: r.X + 5, Y: lineY(i) + ed.lineH/2 - 3, W: 6, H: 6}, ed.severityColor(sev), 3)
+		if ed.breakpoints[i] {
+			ed.paintBreakpoint(p, r.X, lineY(i))
+		}
+		if i == ed.execLine {
+			ed.paintExecArrow(p, r.X, lineY(i))
 		}
 	}
 	// The vertical scroll bar's thumb.
@@ -782,6 +810,11 @@ func (ed *Editor) keyDown(m ui.Modifiers, k ui.Key) bool {
 			a, _ := ed.sel.Range()
 			ed.insert(strings.Repeat(" ", tabSize-a.Col%tabSize), editTyping)
 		}
+	case ui.KeyF9:
+		if base != 0 || ed.OnToggleBreakpoint == nil {
+			return false
+		}
+		ed.OnToggleBreakpoint(c.Line)
 	case ui.KeyF12:
 		if base != 0 || ed.OnDefinition == nil {
 			return false
@@ -1165,6 +1198,7 @@ func (ed *Editor) replace(a, z Pos, s string) Pos {
 	end := ed.buf.Replace(a, z, s)
 	ed.shiftDiagnostics(a, z, end)
 	ed.hl.shift(a, z, end)
+	ed.shiftBreakpoints(a, z, end)
 	return end
 }
 
@@ -1189,6 +1223,16 @@ func (ed *Editor) pointer(ev ui.InputEvent) bool {
 		ed.link = linkState{}
 		ed.wantFocus = true
 		ed.preedit = ""
+		if ev.X < breakpointZone && ed.OnToggleBreakpoint != nil {
+			if i := int((ev.Y - padTop + ed.scrollY) / ed.lineH); i >= 0 && i < ed.buf.Lines() {
+				ed.OnToggleBreakpoint(i)
+			}
+			return true
+		}
+		if line, item := ed.lensItem(ev.X, ev.Y); item >= 0 && ed.OnLens != nil {
+			ed.OnLens(line, item)
+			return true
+		}
 		p := ed.posAt(ev.X, ev.Y)
 		if ev.Mods == ui.Cmd && ed.OnDefinition != nil && ev.X >= ed.gutterWidth() {
 			ed.sel, ed.hasGoal = Selection{p, p}, false
@@ -1219,10 +1263,12 @@ func (ed *Editor) pointer(ev ui.InputEvent) bool {
 		if !ed.drag.active {
 			// MyGo draws a frame after the input taken: the link and the
 			// hover show at once, not at the next blink of the caret.
-			hover, link := ed.hover, ed.link
+			hover, link, lens := ed.hover, ed.link, ed.lensHover
 			ed.pointerOver(ev.X, ev.Y)
 			ed.pointLink(ev.Mods, ev.X, ev.Y)
-			return ed.hover != hover || ed.link != link
+			l, k := ed.lensItem(ev.X, ev.Y)
+			ed.lensHover = [2]int{l, k}
+			return ed.hover != hover || ed.link != link || ed.lensHover != lens
 		}
 		p := ed.posAt(ev.X, ev.Y)
 		oa, oz := ed.drag.origin.Range()
