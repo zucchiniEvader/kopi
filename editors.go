@@ -7,9 +7,11 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/egoist/godiff/internal/editor"
+	"github.com/egoist/godiff/internal/lsp"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
@@ -17,13 +19,45 @@ import (
 // maxEditSize is the largest file an editor opens.
 const maxEditSize = 10 << 20
 
-// editorTab is a file open in a tab of the main area: in an editor, or
-// why it is not. Its path is relative to the repository's root, with
-// slashes.
+// editorTab is a document open in a tab of the main area: in an editor,
+// or why it is not. Its path is the file's in the repository, with
+// slashes, else its absolute path, or the URI of a document of the
+// language server, as a class of a library, which abs lacks.
 type editorTab struct {
 	path string
+	abs  string
+	uri  string
 	ed   *editor.Editor
 	err  string
+}
+
+// repoPath returns the path in the repository of an absolute path, with
+// slashes, and whether it is in it.
+func (w *window) repoPath(abs string) (string, bool) {
+	if abs == "" {
+		return "", false
+	}
+	paths := []string{abs}
+	if real, err := filepath.EvalSymlinks(abs); err == nil && real != abs {
+		paths = append(paths, real)
+	}
+	for _, root := range []string{w.repo.Root, w.realRoot()} {
+		for _, p := range paths {
+			if rel, err := filepath.Rel(root, p); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return filepath.ToSlash(rel), true
+			}
+		}
+	}
+	return "", false
+}
+
+// realRoot is the repository's root with symbolic links resolved, as
+// servers give paths.
+func (w *window) realRoot() string {
+	if real, err := filepath.EvalSymlinks(w.repo.Root); err == nil {
+		return real
+	}
+	return w.repo.Root
 }
 
 // activeTab returns the editor the main area shows, nil when it shows the
@@ -56,10 +90,25 @@ func (w *window) showReview() {
 // openFile opens a file of the repository in an editor, the tab it has if
 // it is open, with the caret on line, counted from 1, unless it is below 1.
 func (w *window) openFile(p string, line int) {
+	e := w.openAbs(filepath.Join(w.repo.Root, filepath.FromSlash(p)))
+	if e.ed != nil && line > 0 {
+		e.ed.GoTo(line - 1)
+	}
+}
+
+// openAbs opens the file at an absolute path in an editor, the tab it has
+// if it is open, and shows it.
+func (w *window) openAbs(abs string) *editorTab {
+	p, inRepo := w.repoPath(abs)
+	if inRepo {
+		abs = filepath.Join(w.repo.Root, filepath.FromSlash(p))
+	} else {
+		p = abs
+	}
 	e := w.editorOf(p)
 	if e == nil {
-		e = &editorTab{path: p}
-		switch data, err := readEditable(filepath.Join(w.repo.Root, filepath.FromSlash(p))); {
+		e = &editorTab{path: p, abs: abs, uri: lsp.FileURI(abs)}
+		switch data, err := readEditable(abs); {
 		case err != nil:
 			e.err = err.Error()
 		case bytes.IndexByte(data[:min(len(data), 8000)], 0) >= 0 || !utf8.Valid(data):
@@ -68,16 +117,44 @@ func (w *window) openFile(p string, line int) {
 			e.ed = editor.New(p, string(data))
 		}
 		w.editors = append(w.editors, e)
+		w.javaAttach(e)
 	}
+	w.show(e)
+	if inRepo {
+		w.explorer.reveal(p)
+	}
+	return e
+}
+
+// openText opens a read-only document the language server gives, by its
+// URI, named name.
+func (w *window) openText(uri, name, text string) *editorTab {
+	e := w.editorOf(uri)
+	if e == nil {
+		e = &editorTab{path: uri, uri: uri, ed: editor.New(strings.TrimSuffix(name, ".class")+".java", text)}
+		e.ed.ReadOnly = true
+		w.editors = append(w.editors, e)
+		w.javaAttach(e)
+	}
+	w.show(e)
+	return e
+}
+
+// show shows a tab, and gives its editor the keys.
+func (w *window) show(e *editorTab) {
 	w.activeEditor = slices.Index(w.editors, e)
 	w.commitOpen = false
-	w.explorer.reveal(p)
 	if e.ed != nil {
-		if line > 0 {
-			e.ed.GoTo(line - 1)
-		}
 		e.ed.Focus()
 	}
+}
+
+// title is the name of a tab's document.
+func (e *editorTab) title() string {
+	if e.abs == "" {
+		return className(e.path)
+	}
+	return path.Base(filepath.ToSlash(e.path))
 }
 
 func readEditable(p string) ([]byte, error) {
@@ -99,12 +176,15 @@ func (w *window) saveEditor() {
 		return
 	}
 	if err := w.writeEditor(e); err != nil {
-		go mygo.Dialog.Error("Could not save "+path.Base(e.path), err.Error())
+		go mygo.Dialog.Error("Could not save "+e.title(), err.Error())
 	}
 }
 
 func (w *window) writeEditor(e *editorTab) error {
-	p := filepath.Join(w.repo.Root, filepath.FromSlash(e.path))
+	if e.abs == "" || e.ed.ReadOnly {
+		return nil
+	}
+	p := e.abs
 	mode := os.FileMode(0o644)
 	if fi, err := os.Stat(p); err == nil {
 		mode = fi.Mode().Perm()
@@ -113,6 +193,7 @@ func (w *window) writeEditor(e *editorTab) error {
 		return err
 	}
 	e.ed.MarkSaved()
+	w.javaSaved(e)
 	if w.source.kind == sourceWorkingTree {
 		w.load()
 	}
@@ -134,7 +215,7 @@ func (w *window) closeEditor(i int) {
 		r, err := mygo.Dialog.Message(mygo.MessageOptions{
 			Parent:  w.win,
 			Type:    mygo.MessageWarning,
-			Message: fmt.Sprintf("Do you want to save the changes you made to %s?", path.Base(e.path)),
+			Message: fmt.Sprintf("Do you want to save the changes you made to %s?", e.title()),
 			Detail:  "Your changes will be lost if you don't save them.",
 			Buttons: []string{"Save", "Don't Save", "Cancel"},
 		})
@@ -144,7 +225,7 @@ func (w *window) closeEditor(i int) {
 		w.win.Update(func() {
 			if r.Button == 0 {
 				if err := w.writeEditor(e); err != nil {
-					go mygo.Dialog.Error("Could not save "+path.Base(e.path), err.Error())
+					go mygo.Dialog.Error("Could not save "+e.title(), err.Error())
 					return
 				}
 			}
@@ -156,6 +237,7 @@ func (w *window) closeEditor(i int) {
 }
 
 func (w *window) removeEditor(i int) {
+	w.javaClosed(w.editors[i])
 	w.editors = slices.Delete(w.editors, i, i+1)
 	switch {
 	case len(w.editors) == 0:
@@ -173,7 +255,7 @@ func (w *window) dirtyEditors() []string {
 	var names []string
 	for _, e := range w.editors {
 		if e.ed != nil && e.ed.Dirty() {
-			names = append(names, path.Base(e.path))
+			names = append(names, e.title())
 		}
 	}
 	return names
@@ -200,6 +282,12 @@ func (w *window) editorStyle(t *ui.Theme, pal *palette) editor.Style {
 		Caret:       t.Accent,
 		Scrollbar:   t.Scrollbar,
 		Syntax:      pal.syntax,
+		Error:       pal.delBar,
+		Warning:     ui.Hex("#e0a100"),
+		Info:        t.Accent,
+
+		HoverBackground: pal.headerBg,
+		HoverBorder:     pal.cardBorder,
 	}
 	return s
 }
@@ -241,10 +329,10 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 				}
 				b.Children(func() {
 					ui.Icon(c, iconFile).FontSize(14)
-					ui.Text(c, path.Base(e.path)).FontSize(13).SingleLine()
+					ui.Text(c, e.title()).FontSize(13).SingleLine()
 					// A dot for unsaved changes, which turns into the close
 					// button under the pointer.
-					x := ui.ButtonBase(c).Size(20, 20).Center().Radius(5).Label("Close " + path.Base(e.path)).Tooltip("Close (⌘W)")
+					x := ui.ButtonBase(c).Size(20, 20).Center().Radius(5).Label("Close " + e.title()).Tooltip("Close (⌘W)")
 					mark := iconClose
 					if x.Hovered() {
 						x.Background(ui.RGBA(127, 127, 127, 0.16))
@@ -272,7 +360,7 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 	t := c.Theme()
 	ui.Column(c).Key("editor:" + e.path).Grow(1).MinHeight(0).Background(pal.codeBg).Children(func() {
 		if e.ed == nil {
-			emptyPanel(c, pal, "Unable to open "+path.Base(e.path), e.err, nil)
+			emptyPanel(c, pal, "Unable to open "+e.title(), e.err, nil)
 			return
 		}
 		e.ed.SetStyle(w.editorStyle(t, pal))
@@ -280,7 +368,24 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 		ui.Row(c).Height(26).Padding(0, 12).Gap(16).AlignItems(ui.Center).Shrink(0).
 			BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Background(pal.headerBg).Children(func() {
 			small := func(s string) *ui.Element { return ui.Text(c, s).FontSize(11).TextColor(t.TextMuted).SingleLine() }
-			small(e.path).Grow(1).Shrink(1).MinWidth(0)
+			name := e.path
+			if e.abs == "" {
+				name = e.title() + " (read-only)"
+			}
+			small(name).Grow(1).Shrink(1).MinWidth(0)
+			if isJava(e.path) {
+				if errs, warns := counts(e); errs+warns > 0 {
+					ui.Row(c).Gap(8).Children(func() {
+						if errs > 0 {
+							small(fmt.Sprintf("✕ %d", errs)).TextColor(pal.delText).Tooltip(plural(errs, "error"))
+						}
+						if warns > 0 {
+							small(fmt.Sprintf("⚠ %d", warns)).TextColor(ui.Hex("#c48a00")).Tooltip(plural(warns, "warning"))
+						}
+					})
+				}
+				w.javaChip(c)
+			}
 			caret := e.ed.Selection().Caret
 			col := utf8.RuneCountInString(e.ed.Buffer().Line(caret.Line)[:caret.Col]) + 1
 			small(fmt.Sprintf("Ln %d, Col %d", caret.Line+1, col))
@@ -295,5 +400,29 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 			}
 			small(eol)
 		})
+	})
+}
+
+// javaChip says what the Java language server does, with what failed as
+// its tip.
+func (w *window) javaChip(c *ui.Context) {
+	t := c.Theme()
+	status := w.javaStatus()
+	if status == "" {
+		return
+	}
+	row := ui.Row(c).Gap(5).AlignItems(ui.Center).Shrink(1).MinWidth(0).MaxWidth(360)
+	if w.java.detail != "" {
+		row.Tooltip(w.java.detail)
+	}
+	row.Children(func() {
+		if w.java.busy() {
+			ui.Spinner(c).Size(10, 10).Label("Working")
+		}
+		color := t.TextMuted
+		if w.java.state == javaFailed {
+			color = t.Danger
+		}
+		ui.Text(c, status).FontSize(11).TextColor(color).SingleLine().Shrink(1).MinWidth(0)
 	})
 }

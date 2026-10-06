@@ -37,6 +37,10 @@ type Style struct {
 	Caret       ui.Color
 	Scrollbar   ui.Color
 	Syntax      [highlight.NumClasses]ui.Color
+	// The colors of diagnostics by their severities, and of the box the
+	// pointer's hover shows.
+	Error, Warning, Info         ui.Color
+	HoverBackground, HoverBorder ui.Color
 }
 
 // defaultStyle is the style of the theme, without colors for tokens.
@@ -57,6 +61,8 @@ func defaultStyle(t *ui.Theme) Style {
 	for i := range s.Syntax {
 		s.Syntax[i] = t.Text
 	}
+	s.Error, s.Warning, s.Info = t.Danger, t.Warning, t.Accent
+	s.HoverBackground, s.HoverBorder = t.Surface, t.Border
 	return s
 }
 
@@ -97,6 +103,21 @@ type Editor struct {
 	center     bool
 	blinkStart time.Time
 	drag       dragState
+
+	// OnEdit, when set, hears of every change of the text before it is
+	// made: the range replaced, and the text replacing it.
+	OnEdit func(a, z Pos, text string)
+	// OnHover, when set, hears that the pointer rested on a place of the
+	// text, which ShowHover can tell about.
+	OnHover func(p Pos)
+	// OnDefinition, when set, is asked for the definition of what is at a
+	// place: Cmd-click (Ctrl-click on Linux and Windows) and F12 ask.
+	OnDefinition func(p Pos)
+	// ReadOnly keeps the text as it is.
+	ReadOnly bool
+
+	diags []Diagnostic
+	hover hoverState
 }
 
 // dragState is a selection the pointer makes: by runes, words (2) or lines
@@ -178,6 +199,7 @@ func View(c *ui.Context, ed *Editor) *ui.Element {
 
 func (ed *Editor) build(c *ui.Context, e *ui.Element) {
 	ed.c, ed.theme = c, c.Theme()
+	ed.buildHover(c, e)
 	if !ed.styled {
 		ed.style = defaultStyle(ed.theme)
 	}
@@ -440,6 +462,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 				continue
 			}
 			ed.paintGlyphs(p, sl, ed.hl.spans(i), textX, y+ed.baseline)
+			ed.paintDiagnostics(p, i, sl, textX, y)
 		}
 		if caretOn && ed.preedit == "" {
 			c := ed.sel.Caret
@@ -454,6 +477,9 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 		}
 		sl := ed.shape(strconv.Itoa(i + 1))
 		p.Glyphs(sl.glyphs, r.X+gw-gutterPad-sl.width, lineY(i)+ed.baseline, color)
+		if sev := ed.lineSeverity(i); sev != 0 {
+			p.Fill(ui.Rect{X: r.X + 5, Y: lineY(i) + ed.lineH/2 - 3, W: 6, H: 6}, ed.severityColor(sev), 3)
+		}
 	}
 	// The vertical scroll bar's thumb.
 	_, my := ed.maxScroll()
@@ -462,6 +488,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 		ty := r.Y + (r.H-th)*ed.scrollY/my
 		p.Fill(ui.Rect{X: r.X + r.W - 8, Y: ty, W: 6, H: th}, st.Scrollbar, 3)
 	}
+	ed.paintHover(p, r, textX, lineY)
 }
 
 // paintGlyphs draws a line's glyphs in the colors of its tokens.
@@ -545,6 +572,10 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 	if ed.lineH == 0 {
 		return false
 	}
+	if ev.Kind != ui.InputPointerMove {
+		// Anything but the pointer moving puts the hover away.
+		ed.hover = hoverState{}
+	}
 	switch ev.Kind {
 	case ui.InputKeyDown:
 		if !ed.keyDown(ev.Mods, ev.Key) {
@@ -554,6 +585,9 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 		ed.preedit = ""
 		ed.typed(ev.Text)
 	case ui.InputCompose:
+		if ed.ReadOnly {
+			return true
+		}
 		if ev.Text != "" && !ed.sel.Empty() {
 			ed.insert("", editOther)
 		}
@@ -710,6 +744,11 @@ func (ed *Editor) keyDown(m ui.Modifiers, k ui.Key) bool {
 			a, _ := ed.sel.Range()
 			ed.insert(strings.Repeat(" ", tabSize-a.Col%tabSize), editTyping)
 		}
+	case ui.KeyF12:
+		if base != 0 || ed.OnDefinition == nil {
+			return false
+		}
+		ed.OnDefinition(c)
 	case ui.KeyEscape:
 		if ed.sel.Empty() {
 			return false
@@ -1041,11 +1080,11 @@ func (ed *Editor) edit(a, z Pos, s string, kind editKind) {
 	}
 	s = normalize(s)
 	removed := ed.buf.Slice(a, z)
-	if removed == "" && s == "" {
+	if removed == "" && s == "" || ed.ReadOnly {
 		return
 	}
 	before := ed.sel
-	end := ed.buf.Replace(a, z, s)
+	end := ed.replace(a, z, s)
 	ed.sel = Selection{end, end}
 	ed.hist.record(&step{at: a, removed: removed, inserted: s, before: before, after: ed.sel, kind: kind, when: time.Now()})
 	ed.hasGoal = false
@@ -1054,12 +1093,12 @@ func (ed *Editor) edit(a, z Pos, s string, kind editKind) {
 
 func (ed *Editor) undo() {
 	h := &ed.hist
-	if len(h.undo) == 0 {
+	if len(h.undo) == 0 || ed.ReadOnly {
 		return
 	}
 	s := h.undo[len(h.undo)-1]
 	h.undo = h.undo[:len(h.undo)-1]
-	ed.buf.Replace(s.at, after(s.at, s.inserted), s.removed)
+	ed.replace(s.at, after(s.at, s.inserted), s.removed)
 	h.redo = append(h.redo, s)
 	ed.sel = s.before
 	ed.hasGoal = false
@@ -1068,16 +1107,26 @@ func (ed *Editor) undo() {
 
 func (ed *Editor) redo() {
 	h := &ed.hist
-	if len(h.redo) == 0 {
+	if len(h.redo) == 0 || ed.ReadOnly {
 		return
 	}
 	s := h.redo[len(h.redo)-1]
 	h.redo = h.redo[:len(h.redo)-1]
-	ed.buf.Replace(s.at, after(s.at, s.removed), s.inserted)
+	ed.replace(s.at, after(s.at, s.removed), s.inserted)
 	h.undo = append(h.undo, s)
 	ed.sel = s.after
 	ed.hasGoal = false
 	ed.reveal()
+}
+
+// replace replaces the text from a to z with s, telling OnEdit first.
+func (ed *Editor) replace(a, z Pos, s string) Pos {
+	if ed.OnEdit != nil {
+		ed.OnEdit(a, z, s)
+	}
+	end := ed.buf.Replace(a, z, s)
+	ed.shiftDiagnostics(a, z, end)
+	return end
 }
 
 // pointer places the caret and selects with the pointer: words with a
@@ -1091,6 +1140,11 @@ func (ed *Editor) pointer(ev ui.InputEvent) bool {
 		ed.wantFocus = true
 		ed.preedit = ""
 		p := ed.posAt(ev.X, ev.Y)
+		if ev.Mods == ui.Cmd && ed.OnDefinition != nil && ev.X >= ed.gutterWidth() {
+			ed.sel, ed.hasGoal = Selection{p, p}, false
+			ed.OnDefinition(p)
+			return true
+		}
 		unit := min(max(ev.Clicks, 1), 3)
 		if ev.X < ed.gutterWidth() {
 			unit = 3
@@ -1113,6 +1167,7 @@ func (ed *Editor) pointer(ev ui.InputEvent) bool {
 		ed.drag = dragState{active: true, unit: unit, origin: ed.sel}
 	case ui.InputPointerMove:
 		if !ed.drag.active {
+			ed.pointerOver(ev.X, ev.Y)
 			return false
 		}
 		p := ed.posAt(ev.X, ev.Y)

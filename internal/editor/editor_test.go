@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -240,5 +241,83 @@ func TestGoTo(t *testing.T) {
 	}
 	if y := float32(150)*ed.lineH - ed.scrollY; y < 0 || y > 300 {
 		t.Errorf("line 150 is %v from the top of the view", y)
+	}
+}
+
+func TestEditHook(t *testing.T) {
+	ed, tt := open(t, "ab\ncd")
+	type change struct {
+		a, z Pos
+		text string
+		was  string
+	}
+	var got []change
+	ed.OnEdit = func(a, z Pos, text string) {
+		got = append(got, change{a, z, text, ed.Buffer().Slice(a, z)})
+	}
+	ed.SetSelection(Selection{Pos{0, 1}, Pos{1, 1}})
+	tt.Type("X")
+	tt.Key(ui.Cmd, ui.KeyZ)
+	want := []change{{Pos{0, 1}, Pos{1, 1}, "X", "b\nc"}, {Pos{0, 1}, Pos{0, 2}, "b\nc", "X"}}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("changes %+v", got)
+	}
+	ed.ReadOnly = true
+	tt.Type("Y")
+	tt.Key(ui.Cmd, ui.KeyZ)
+	if ed.Text() != "ab\ncd" || len(got) != 2 {
+		t.Errorf("a read-only editor changed: %q", ed.Text())
+	}
+}
+
+func TestDiagnosticsAndHover(t *testing.T) {
+	ed, tt := open(t, "int x = foo();\nreturn;")
+	tt.Frame()
+	ed.SetDiagnostics([]Diagnostic{
+		{From: Pos{0, 8}, To: Pos{0, 11}, Severity: SeverityError, Message: "foo cannot be resolved"},
+		{From: Pos{1, 0}, To: Pos{1, 6}, Severity: SeverityWarning, Message: "Dead code"},
+	})
+	if ed.lineSeverity(0) != SeverityError || ed.lineSeverity(1) != SeverityWarning {
+		t.Errorf("severities %d %d", ed.lineSeverity(0), ed.lineSeverity(1))
+	}
+	var asked []Pos
+	ed.OnHover = func(p Pos) { asked = append(asked, p) }
+	x := ed.gutterWidth() + padLeft + ed.xOf(Pos{0, 9}) + 1
+	y := padTop + ed.lineH/2
+	tt.Move(x, y)
+	tt.Frame()
+	if len(asked) != 0 {
+		t.Fatal("the hover came at once")
+	}
+	ed.hover.since = time.Now().Add(-time.Second)
+	tt.Frame()
+	if len(asked) != 1 || asked[0] != (Pos{0, 9}) {
+		t.Fatalf("hover asked %v", asked)
+	}
+	ed.ShowHover(Pos{0, 9}, "int Main.foo()")
+	if got := ed.HoverText(); got != "foo cannot be resolved\n\nint Main.foo()" {
+		t.Errorf("hover %q", got)
+	}
+	// Typing puts it away, and moves the problems after the edit.
+	ed.SetSelection(Selection{Pos{0, 0}, Pos{0, 0}})
+	tt.Type("long ")
+	if ed.HoverText() != "" {
+		t.Error("the hover stays as the user types")
+	}
+	if d := ed.Diagnostics(); d[len(d)-1].From != (Pos{0, 13}) {
+		t.Errorf("the problem did not move: %+v", d)
+	}
+}
+
+func TestDefinition(t *testing.T) {
+	ed, tt := open(t, "foo();")
+	tt.Frame()
+	var asked []Pos
+	ed.OnDefinition = func(p Pos) { asked = append(asked, p) }
+	tt.ClickAtWith(ui.Cmd, ed.gutterWidth()+padLeft+ed.xOf(Pos{0, 1})+1, padTop+ed.lineH/2)
+	ed.SetSelection(Selection{Pos{0, 2}, Pos{0, 2}})
+	tt.Key(0, ui.KeyF12)
+	if len(asked) != 2 || asked[0] != (Pos{0, 1}) || asked[1] != (Pos{0, 2}) {
+		t.Errorf("asked %v", asked)
 	}
 }

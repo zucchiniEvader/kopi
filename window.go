@@ -102,6 +102,13 @@ type window struct {
 	// closing is set once the window may close with unsaved changes.
 	closing bool
 
+	// The Java language server, and what starts it, nil in tests, which
+	// give their own. posted, in tests, holds what the server's
+	// goroutines post to the main thread.
+	java       javaServer
+	javaLaunch javaLauncher
+	posted     chan func()
+
 	// The diff surface.
 	rows       []row
 	rowsDirty  bool
@@ -208,6 +215,7 @@ func openWindow(dir string, src source) error {
 	windowsMu.Unlock()
 
 	w := newWindow(repo, src)
+	w.javaLaunch = launchJava
 	w.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:          windowTitle(repo.Root, src),
 		Width:          1280,
@@ -237,6 +245,7 @@ func openWindow(dir string, src source) error {
 	offSettings := cfg.OnChange(func(s Settings) { w.win.Update(func() { w.applySettings(s) }) })
 	w.win.OnClosed(func() {
 		close(stop)
+		w.javaStop()
 		offSettings()
 		windowsMu.Lock()
 		for i, o := range windows {
@@ -312,6 +321,17 @@ func (w *window) applySettings(s Settings) {
 	w.settings = s
 	if old.ShowWhitespace != s.ShowWhitespace {
 		w.load()
+	}
+	if old.JavaHome != s.JavaHome || old.JdtlsPath != s.JdtlsPath {
+		// Start the server again with the Java or the jdtls chosen.
+		if w.java.state != javaIdle {
+			w.javaStop()
+			for _, e := range w.editors {
+				if e.abs != "" && isJava(e.path) && e.ed != nil {
+					w.javaAttach(e)
+				}
+			}
+		}
 	}
 	if old.DiffStyle != s.DiffStyle || old.WordWrap != s.WordWrap || old.CodeFontSize != s.CodeFontSize {
 		w.rowsDirty = true

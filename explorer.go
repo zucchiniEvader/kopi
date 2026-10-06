@@ -158,13 +158,25 @@ func (w *window) explorerView(c *ui.Context) {
 					ic.Rotate(ic.Animate("rot", target, 150*time.Millisecond))
 				})
 				ui.Icon(c, iconFolder).FontSize(14).TextColor(muted)
-				ui.Text(c, path.Base(p)).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+				name := ui.Text(c, path.Base(p)).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+				if w.java.errors[p] > 0 && !(selected && focused) {
+					name.TextColor(pal.delText)
+				}
 				return
 			}
 			ui.Icon(c, iconFile).FontSize(14).TextColor(muted)
 			name := ui.Text(c, path.Base(p)).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
-			if strings.HasPrefix(path.Base(p), ".") && !(selected && focused) {
+			errs := w.java.errors[p]
+			switch {
+			case selected && focused:
+			case errs > 0:
+				name.TextColor(pal.delText)
+			case strings.HasPrefix(path.Base(p), "."):
 				name.TextColor(t.TextMuted)
+			}
+			if errs > 0 {
+				ui.Text(c, compact(errs)).Font(w.codeFont()).FontSize(10).FontWeight(700).TextColor(textColor).
+					Padding(0, 5).Radius(7).Background(pal.delBar.Alpha(0.85)).Shrink(0).Tooltip(plural(errs, "error"))
 			}
 			if ed := w.editorOf(p); ed != nil && ed.ed != nil && ed.ed.Dirty() {
 				ui.Icon(c, iconDot).FontSize(10).TextColor(muted).Shrink(0).Tooltip("Unsaved changes")

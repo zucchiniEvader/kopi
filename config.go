@@ -16,11 +16,16 @@ import (
 // Settings are the user's preferences, in ~/.godiff/godiff.jsonc as
 // codiff keeps its own in ~/.codiff/codiff.jsonc.
 type Settings struct {
-	CodeFontFamily       string `json:"codeFontFamily"`
-	CodeFontSize         int    `json:"codeFontSize"`
-	CopyCommentsOnClose  bool   `json:"copyCommentsOnClose"`
-	DiffStyle            string `json:"diffStyle"` // split or unified
-	EditorCommand        string `json:"editorCommand"`
+	CodeFontFamily      string `json:"codeFontFamily"`
+	CodeFontSize        int    `json:"codeFontSize"`
+	CopyCommentsOnClose bool   `json:"copyCommentsOnClose"`
+	DiffStyle           string `json:"diffStyle"` // split or unified
+	EditorCommand       string `json:"editorCommand"`
+	// JavaHome is the JDK that runs the Java language server, found on
+	// the machine when empty; JdtlsPath its installation, downloaded when
+	// empty and the machine has none.
+	JavaHome             string `json:"javaHome"`
+	JdtlsPath            string `json:"jdtlsPath"`
 	ReviewCommentsPrefix string `json:"reviewCommentsPrefix"`
 	SidebarPosition      string `json:"sidebarPosition"` // left or right
 	ShowWhitespace       bool   `json:"showWhitespace"`
@@ -42,6 +47,8 @@ func defaultSettings() Settings {
 func (s *Settings) normalize() {
 	d := defaultSettings()
 	s.CodeFontFamily = strings.TrimSpace(s.CodeFontFamily)
+	s.JavaHome = strings.TrimSpace(s.JavaHome)
+	s.JdtlsPath = strings.TrimSpace(s.JdtlsPath)
 	if s.CodeFontSize == 0 {
 		s.CodeFontSize = d.CodeFontSize
 	}
