@@ -321,3 +321,43 @@ func TestDefinition(t *testing.T) {
 		t.Errorf("asked %v", asked)
 	}
 }
+
+func TestLinkAndMenu(t *testing.T) {
+	ed, tt := open(t, "int x = foo(bar);")
+	tt.Frame()
+	var asked []Pos
+	ed.OnDefinition = func(p Pos) { asked = append(asked, p) }
+	x := func(col int) float32 { return ed.gutterWidth() + padLeft + ed.xOf(Pos{0, col}) + 1 }
+	y := padTop + ed.lineH/2
+	// Cmd over a word makes it a link, with the pointing hand. (The
+	// tester moves the pointer without modifiers.)
+	tt.Move(x(9), y)
+	ed.input(ui.InputEvent{Kind: ui.InputPointerMove, Button: -1, Mods: ui.Cmd, X: x(9), Y: y})
+	tt.Frame()
+	if l := ed.link; !l.active || l.from != (Pos{0, 8}) || l.to != (Pos{0, 11}) {
+		t.Errorf("link %+v", l)
+	}
+	if tt.Cursor() != ui.CursorPointer {
+		t.Errorf("cursor %v", tt.Cursor())
+	}
+	// Not over punctuation, nor without Cmd.
+	ed.input(ui.InputEvent{Kind: ui.InputPointerMove, Button: -1, Mods: ui.Cmd, X: x(11), Y: y})
+	if ed.link.active {
+		t.Error("a link over (")
+	}
+	tt.Move(x(13), y)
+	if ed.link.active || tt.Cursor() != ui.CursorText {
+		t.Errorf("link %+v without Cmd, cursor %v", ed.link, tt.Cursor())
+	}
+	// The context menu goes to the definition of the word clicked.
+	tt.RightClickAt(x(13), y)
+	if menu := tt.Menu(); len(menu) == 0 || menu[0] != "Go to Definition" {
+		t.Fatalf("menu %q", menu)
+	}
+	if err := tt.ChooseMenuItem("Go to Definition"); err != nil {
+		t.Fatal(err)
+	}
+	if len(asked) != 1 || asked[0] != (Pos{0, 13}) {
+		t.Errorf("asked %v", asked)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -310,4 +311,30 @@ func (ed *Editor) GoToPos(p Pos) {
 	}
 	ed.center = true
 	ed.centerCaret()
+}
+
+// linkState is the word under the pointer that Cmd turns into a link to
+// its definition.
+type linkState struct {
+	active   bool
+	from, to Pos
+}
+
+// pointLink shows the word under the pointer as a link while Cmd (Ctrl on
+// Linux and Windows) is held, as a click on it goes to its definition.
+// Pressing or releasing Cmd alone tells nothing: the pointer moving does.
+func (ed *Editor) pointLink(mods ui.Modifiers, x, y float32) {
+	ed.link = linkState{}
+	if mods != ui.Cmd || ed.OnDefinition == nil {
+		return
+	}
+	p, ok := ed.textAt(x, y)
+	if !ok {
+		return
+	}
+	a, z := ed.buf.WordAt(p)
+	if r, _ := utf8.DecodeRuneInString(ed.buf.Line(a.Line)[a.Col:]); a == z || class(r) != 1 {
+		return
+	}
+	ed.link = linkState{active: true, from: a, to: z}
 }

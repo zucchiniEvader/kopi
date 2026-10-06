@@ -77,21 +77,49 @@ func (e *explorer) kids(root, dir string) []string {
 	return kids
 }
 
+// explorerRow is a row of the explorer: a file, or a directory with the
+// chain of directories holding only it, as Java's packages do, compacted
+// into one, as java/com/example; key is its path, the deepest's, and
+// label its name, the chain's.
+type explorerRow struct {
+	key, label string
+	depth      int
+}
+
 // rows lists the rows the tree shows: the entries of the root, and of the
 // directories open.
-func (e *explorer) rows(root string) []treeRow {
-	var rows []treeRow
+func (e *explorer) rows(root string) []explorerRow {
+	var rows []explorerRow
 	var walk func(dir string, depth int)
 	walk = func(dir string, depth int) {
 		for _, p := range e.kids(root, dir) {
-			rows = append(rows, treeRow{key: p, depth: depth})
-			if e.dirs[p] && e.open[p] {
-				walk(p, depth+1)
+			key := p
+			if e.dirs[p] {
+				key = e.chain(root, p)
+			}
+			rows = append(rows, explorerRow{key: key, label: strings.TrimPrefix(key, dir+"/"), depth: depth})
+			if dir == "" {
+				rows[len(rows)-1].label = key
+			}
+			if e.dirs[key] && e.open[key] {
+				walk(key, depth+1)
 			}
 		}
 	}
 	walk("", 0)
 	return rows
+}
+
+// chain returns the deepest directory of the chain from dir down through
+// directories that hold one directory and nothing else.
+func (e *explorer) chain(root, dir string) string {
+	for {
+		kids := e.kids(root, dir)
+		if len(kids) != 1 || !e.dirs[kids[0]] {
+			return dir
+		}
+		dir = kids[0]
+	}
 }
 
 // reveal opens the directories holding p, and chooses its row.
@@ -127,7 +155,7 @@ func (w *window) explorerView(c *ui.Context) {
 		w.openFile(p, -1)
 	}
 	e.list.Key = func(i int) any { return rows[i].key }
-	e.list.Label = func(i int) string { return path.Base(rows[i].key) }
+	e.list.Label = func(i int) string { return rows[i].label }
 	list := ui.List(c, &e.list, len(rows), func(i int) {
 		p := rows[i].key
 		dir := e.dirs[p]
@@ -158,7 +186,7 @@ func (w *window) explorerView(c *ui.Context) {
 					ic.Rotate(ic.Animate("rot", target, 150*time.Millisecond))
 				})
 				ui.Icon(c, iconFolder).FontSize(14).TextColor(muted)
-				name := ui.Text(c, path.Base(p)).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+				name := ui.Text(c, rows[i].label).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 				if w.java.errors[p] > 0 && !(selected && focused) {
 					name.TextColor(pal.delText)
 				}
@@ -195,7 +223,7 @@ func (w *window) explorerView(c *ui.Context) {
 	e.el = list
 
 	// The keys move the choice, open and close directories, and open files.
-	at := slices.IndexFunc(rows, func(r treeRow) bool { return r.key == e.sel })
+	at := slices.IndexFunc(rows, func(r explorerRow) bool { return r.key == e.sel })
 	move := func(i int) {
 		if i >= 0 && i < len(rows) {
 			e.sel = rows[i].key

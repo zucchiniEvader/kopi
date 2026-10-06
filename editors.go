@@ -285,6 +285,7 @@ func (w *window) editorStyle(t *ui.Theme, pal *palette) editor.Style {
 		Error:       pal.delBar,
 		Warning:     ui.Hex("#e0a100"),
 		Info:        t.Accent,
+		Link:        t.Accent,
 
 		HoverBackground: pal.headerBg,
 		HoverBorder:     pal.cardBorder,

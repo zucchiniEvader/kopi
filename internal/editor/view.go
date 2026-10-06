@@ -41,6 +41,8 @@ type Style struct {
 	// pointer's hover shows.
 	Error, Warning, Info         ui.Color
 	HoverBackground, HoverBorder ui.Color
+	// Link colors the word Cmd turns into a link to its definition.
+	Link ui.Color
 }
 
 // defaultStyle is the style of the theme, without colors for tokens.
@@ -63,6 +65,7 @@ func defaultStyle(t *ui.Theme) Style {
 	}
 	s.Error, s.Warning, s.Info = t.Danger, t.Warning, t.Accent
 	s.HoverBackground, s.HoverBorder = t.Surface, t.Border
+	s.Link = t.Accent
 	return s
 }
 
@@ -118,6 +121,7 @@ type Editor struct {
 
 	diags []Diagnostic
 	hover hoverState
+	link  linkState
 }
 
 // dragState is a selection the pointer makes: by runes, words (2) or lines
@@ -188,8 +192,13 @@ func (ed *Editor) Focus() { ed.wantFocus = true }
 // View shows the editor, which takes the keyboard once it has the focus,
 // which a click gives it. Size it like any element, as with Grow.
 func View(c *ui.Context, ed *Editor) *ui.Element {
-	e := ui.Box(c).Focusable().FocusRing(false).Cursor(ui.CursorText).Clip().Label("Editor")
+	e := ui.Box(c).Focusable().FocusRing(false).Clip().Label("Editor")
 	ed.build(c, e)
+	if ed.link.active {
+		e.Cursor(ui.CursorPointer)
+	} else {
+		e.Cursor(ui.CursorText)
+	}
 	e.HandleInput(ed.input)
 	e.TextCaret(ed.caretRect())
 	e.Draw(ed.paint)
@@ -461,7 +470,13 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 				ed.paintComposing(p, line, textX, y, caretOn)
 				continue
 			}
-			ed.paintGlyphs(p, sl, ed.hl.spans(i), textX, y+ed.baseline)
+			la, lz := -1, -1
+			if l := ed.link; l.active && l.from.Line == i {
+				la, lz = l.from.Col, l.to.Col
+				x0, x1 := textX+sl.xs[la], textX+sl.xs[lz]
+				p.Line(x0, y+ed.baseline+2, x1, y+ed.baseline+2, 1, st.Link)
+			}
+			ed.paintGlyphs(p, sl, ed.hl.spans(i), textX, y+ed.baseline, la, lz)
 			ed.paintDiagnostics(p, i, sl, textX, y)
 		}
 		if caretOn && ed.preedit == "" {
@@ -492,7 +507,8 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 }
 
 // paintGlyphs draws a line's glyphs in the colors of its tokens.
-func (ed *Editor) paintGlyphs(p *ui.Painter, sl *shapedLine, spans []highlight.Seg, x, baseline float32) {
+// The bytes from linkA to linkZ show as a link.
+func (ed *Editor) paintGlyphs(p *ui.Painter, sl *shapedLine, spans []highlight.Seg, x, baseline float32, linkA, linkZ int) {
 	plain := ed.style.Text
 	k := 0
 	colorOf := func(b int) ui.Color {
@@ -508,6 +524,9 @@ func (ed *Editor) paintGlyphs(p *ui.Painter, sl *shapedLine, spans []highlight.S
 	var color ui.Color
 	for i := range sl.glyphs {
 		c := colorOf(sl.bytes[i])
+		if b := sl.bytes[i]; b >= linkA && b < linkZ {
+			c = ed.style.Link
+		}
 		if i > 0 && c != color {
 			p.Glyphs(sl.glyphs[start:i], x, baseline, color)
 			start = i
@@ -528,7 +547,7 @@ func (ed *Editor) paintComposing(p *ui.Painter, line string, x, y float32, caret
 		col = min(col, ed.sel.Anchor.Col)
 	}
 	sl := ed.shape(line[:col] + ed.preedit + line[col:])
-	ed.paintGlyphs(p, sl, nil, x, y+ed.baseline)
+	ed.paintGlyphs(p, sl, nil, x, y+ed.baseline, -1, -1)
 	x0, x1 := x+sl.xs[col], x+sl.xs[col+len(ed.preedit)]
 	p.Line(x0, y+ed.baseline+3, x1, y+ed.baseline+3, 1, st.Text)
 	if caretOn {
@@ -549,6 +568,15 @@ func (ed *Editor) paintComposing(p *ui.Painter, line string, x, y float32, caret
 
 // menu is the editor's context menu.
 func (ed *Editor) menu(m *ui.Menu) {
+	if ed.OnDefinition != nil {
+		if m.Item("Go to Definition").Shortcut(0, ui.KeyF12).Chosen() {
+			ed.OnDefinition(ed.sel.Caret)
+		}
+		if ed.OnHover != nil && m.Item("Show Hover").Chosen() {
+			ed.Hover(ed.sel.Caret)
+		}
+		m.Separator()
+	}
 	if m.Item("Cut").Shortcut(ui.Cmd, ui.KeyX).Chosen() {
 		ed.cut()
 	}
@@ -578,6 +606,9 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 	}
 	switch ev.Kind {
 	case ui.InputKeyDown:
+		if ev.Mods != ui.Cmd {
+			ed.link = linkState{}
+		}
 		if !ed.keyDown(ev.Mods, ev.Key) {
 			return false
 		}
@@ -1134,9 +1165,20 @@ func (ed *Editor) replace(a, z Pos, s string) Pos {
 func (ed *Editor) pointer(ev ui.InputEvent) bool {
 	switch ev.Kind {
 	case ui.InputPointerDown:
+		if ev.Button == 1 {
+			// The context menu acts where it opens, unless on the
+			// selection.
+			p := ed.posAt(ev.X, ev.Y)
+			if a, z := ed.sel.Range(); p.Less(a) || z.Less(p) {
+				ed.sel, ed.hasGoal = Selection{p, p}, false
+			}
+			ed.wantFocus = true
+			return false
+		}
 		if ev.Button != 0 {
 			return false
 		}
+		ed.link = linkState{}
 		ed.wantFocus = true
 		ed.preedit = ""
 		p := ed.posAt(ev.X, ev.Y)
@@ -1168,6 +1210,7 @@ func (ed *Editor) pointer(ev ui.InputEvent) bool {
 	case ui.InputPointerMove:
 		if !ed.drag.active {
 			ed.pointerOver(ev.X, ev.Y)
+			ed.pointLink(ev.Mods, ev.X, ev.Y)
 			return false
 		}
 		p := ed.posAt(ev.X, ev.Y)

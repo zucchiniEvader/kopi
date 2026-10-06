@@ -130,3 +130,46 @@ func TestBinaryFileEditor(t *testing.T) {
 		t.Errorf("texts %q", tt.Texts())
 	}
 }
+
+func TestExplorerCompactsPackages(t *testing.T) {
+	dir := testRepo(t)
+	writeFile(t, dir, "app/src/main/java/com/example/demo/App.java", "class App {}\n")
+	writeFile(t, dir, "app/src/main/resources/application.yml", "a: 1\n")
+	w, tt := newTestWindow(t, dir)
+	w.tab = tabExplorer
+	tt.Frame()
+	labels := func() []string {
+		var out []string
+		for _, r := range w.explorer.rows(dir) {
+			out = append(out, r.label)
+		}
+		return out
+	}
+	// app holds only src, src only main: one row, then java and resources.
+	if err := tt.Click("app/src/main"); err != nil {
+		t.Fatalf("%v; rows %q", err, labels())
+	}
+	if err := tt.Click("java/com/example/demo"); err != nil {
+		t.Fatalf("%v; rows %q", err, labels())
+	}
+	if err := tt.Click("App.java"); err != nil {
+		t.Fatalf("%v; rows %q", err, labels())
+	}
+	if e := w.activeTab(); e == nil || e.path != "app/src/main/java/com/example/demo/App.java" {
+		t.Fatalf("tab %+v", e)
+	}
+	if !tt.HasText("resources") {
+		t.Errorf("rows %q", labels())
+	}
+	// Opening a file deep inside shows its row.
+	w.explorer.open = map[string]bool{}
+	w.openFile("app/src/main/java/com/example/demo/App.java", 0)
+	tt.Frame()
+	found := false
+	for _, r := range w.explorer.rows(dir) {
+		found = found || r.key == "app/src/main/java/com/example/demo/App.java"
+	}
+	if !found {
+		t.Errorf("the file's row does not show: %q", labels())
+	}
+}
