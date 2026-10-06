@@ -312,9 +312,8 @@ func (w *window) mainsView(c *ui.Context, pal *palette) {
 		return
 	}
 	for _, e := range m.list {
-		row := ui.Row(c).Key("main:"+e.path).MinHeight(26).Padding(1, 2, 1, 6).Gap(6).Radius(5).AlignItems(ui.Center).MinWidth(0).Tooltip(e.path)
-		hovered := row.Hovered()
-		if hovered {
+		row := ui.Row(c).Key("main:"+e.path).MinHeight(26).Padding(3, 2, 3, 6).Gap(4).Radius(5).AlignItems(ui.Center).MinWidth(0).Tooltip(e.class)
+		if row.Hovered() {
 			row.Background(ui.RGBA(127, 127, 127, 0.08))
 		}
 		if row.DoubleClicked() {
@@ -325,14 +324,16 @@ func (w *window) mainsView(c *ui.Context, pal *palette) {
 			if i := strings.LastIndexByte(e.class, '.'); i >= 0 {
 				short, pkg = e.class[i+1:], e.class[:i]
 			}
-			ui.Text(c, short).FontSize(13).SingleLine().Shrink(0)
-			ui.Text(c, pkg).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0).Grow(1)
-			run := iconButton(c, iconPlay, "Run "+short).Size(22, 22)
-			debug := iconButton(c, iconBugPlay, "Debug "+short).Size(22, 22)
-			if !hovered {
-				run.Opacity(0.5)
-				debug.Opacity(0.5)
-			}
+			// The class over its package; the names give way to the
+			// buttons, which always show.
+			ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Children(func() {
+				ui.Text(c, short).FontSize(13).SingleLine()
+				if pkg != "" {
+					ui.Text(c, pkg).FontSize(11).TextColor(t.TextMuted).SingleLine()
+				}
+			})
+			run := iconButton(c, iconPlay, "Run "+short).Size(22, 22).Shrink(0)
+			debug := iconButton(c, iconBugPlay, "Debug "+short).Size(22, 22).Shrink(0)
 			if run.Clicked() {
 				w.launchConfig(w.configFor(e.class), false)
 			}
