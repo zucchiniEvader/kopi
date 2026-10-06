@@ -1,11 +1,11 @@
 # Kopi
 
-A native, minimal editor of Java projects, drawn by
+A native, minimal code editor, drawn by
 [MyGo](https://mygo.egoist.dev/)'s native UI on the GPU: no webview, no
 JavaScript, with the system's fonts, accent color, dark mode, menus and
-vibrancy. It edits with Java's language server, runs and debugs programs
-with VS Code's launch configurations, and reviews and commits the work
-tree's Git changes.
+vibrancy. It edits Java with its language server, runs and debugs Java
+programs with VS Code's launch configurations, and reviews and commits the
+work tree's Git changes.
 
 Kopi grew out of [Godiff](https://github.com/egoist/godiff), EGOIST's diff
 viewer, itself a reimplementation of

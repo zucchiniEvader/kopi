@@ -1,6 +1,6 @@
-// Kopi is a native, minimal editor of Java projects, with Java's language
-// server, running and debugging, and the review of their Git changes and
-// committing them, drawn by MyGo. It grew out of Godiff, EGOIST's diff
+// Kopi is a native, minimal code editor drawn by MyGo: it edits Java with
+// its language server, runs and debugs Java programs, and reviews and
+// commits the work tree's Git changes. It grew out of Godiff, EGOIST's diff
 // viewer after codiff.
 //
 //	kopi                 the uncommitted changes of the repository here

@@ -127,5 +127,5 @@ func (w *window) nothingOpen(c *ui.Context, pal *palette) {
 			})
 		}
 	}
-	startPanel(c, pal, "An editor of Java projects", actions, w.repo.Root, extra)
+	startPanel(c, pal, "A native code editor", actions, w.repo.Root, extra)
 }
