@@ -29,3 +29,24 @@ func TestCopyIfMissing(t *testing.T) {
 		t.Error("Godiff's went")
 	}
 }
+
+func TestMoveMissing(t *testing.T) {
+	dir := t.TempDir()
+	old, now := filepath.Join(dir, "godiff"), filepath.Join(dir, "kopi")
+	for _, p := range []string{"jdtls/1.61.0/x", "java-debug/a.jar", "icon-themes/old"} {
+		os.MkdirAll(filepath.Join(old, filepath.Dir(p)), 0o755)
+		os.WriteFile(filepath.Join(old, p), []byte("old"), 0o644)
+	}
+	os.MkdirAll(filepath.Join(now, "icon-themes"), 0o755)
+	os.WriteFile(filepath.Join(now, "icon-themes", "new"), []byte("new"), 0o644)
+	moveMissing(old, now)
+	for _, p := range []string{"jdtls/1.61.0/x", "java-debug/a.jar", "icon-themes/new"} {
+		if _, err := os.Stat(filepath.Join(now, p)); err != nil {
+			t.Errorf("no %s", p)
+		}
+	}
+	// Kopi's own stay as they are.
+	if _, err := os.Stat(filepath.Join(now, "icon-themes", "old")); err == nil {
+		t.Error("an entry Kopi had was merged into")
+	}
+}

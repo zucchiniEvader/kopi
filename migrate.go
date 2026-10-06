@@ -22,12 +22,26 @@ func migrateFromGodiff() {
 		copyIfMissing(filepath.Join(filepath.Dir(dir), "Godiff", "state.json"), filepath.Join(dir, "state.json"))
 	}
 	if caches, err := os.UserCacheDir(); err == nil {
-		old, now := filepath.Join(caches, "godiff"), cacheDir()
-		if _, err := os.Stat(now); os.IsNotExist(err) {
-			if _, err := os.Stat(old); err == nil {
-				os.Rename(old, now)
-			}
+		moveMissing(filepath.Join(caches, "godiff"), cacheDir())
+	}
+}
+
+// moveMissing moves the entries of the folder from into the folder to,
+// but those it has.
+func moveMissing(from, to string) {
+	entries, err := os.ReadDir(from)
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(to, 0o755); err != nil {
+		return
+	}
+	for _, e := range entries {
+		dst := filepath.Join(to, e.Name())
+		if _, err := os.Lstat(dst); err == nil {
+			continue
 		}
+		os.Rename(filepath.Join(from, e.Name()), dst)
 	}
 }
 
