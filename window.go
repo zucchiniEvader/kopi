@@ -71,7 +71,8 @@ type window struct {
 	// The sidebar.
 	sidebarShown bool
 	sidebarWidth float32
-	tab          int // 0 files, 1 history
+	tab          int // tabExplorer, tabChanges or tabHistory
+	explorer     explorer
 	filter       string
 	filterFocus  bool
 	treeList     ui.ListState
@@ -93,6 +94,13 @@ type window struct {
 	// reloaded are the files that changed in the last refresh.
 	reloaded  map[string]bool
 	dragWidth float32
+
+	// The files open in editors, and the one shown, -1 while the review
+	// shows.
+	editors      []*editorTab
+	activeEditor int
+	// closing is set once the window may close with unsaved changes.
+	closing bool
 
 	// The diff surface.
 	rows       []row
@@ -216,7 +224,12 @@ func openWindow(dir string, src source) error {
 	windows = append(windows, w)
 	windowsMu.Unlock()
 	stop := make(chan struct{})
-	w.win.OnClose(func(*mygo.CloseEvent) {
+	w.win.OnClose(func(ev *mygo.CloseEvent) {
+		if names := w.dirtyEditors(); len(names) > 0 && !w.closing {
+			ev.PreventDefault()
+			w.askToClose(names)
+			return
+		}
 		if w.settings.CopyCommentsOnClose && len(w.comments) > 0 {
 			mygo.Clipboard.WriteText(w.commentsMarkdown())
 		}
@@ -264,7 +277,10 @@ func newWindow(repo *git.Repo, src source) *window {
 		fileMatches:  map[int]bool{},
 		selFile:      -1,
 		selHunk:      -1,
+		tab:          tabChanges,
+		activeEditor: -1,
 	}
+	w.explorer.reset()
 	w.dragWidth = w.sidebarWidth
 	w.list.Key = func(i int) any { return w.key(&w.rows[i]) }
 	w.list.Header = func(i int) bool { return w.rows[i].kind == rowHeader }
@@ -534,7 +550,7 @@ func (w *window) load() {
 			if !w.loadedOnce && len(files) == 0 && src.kind != sourceCommit {
 				// Nothing to review: the history shows instead, and takes
 				// the keys in place of the review.
-				w.tab = 1
+				w.tab = tabHistory
 				w.focusHistory = w.sidebarShown
 				w.focusedOnce = true
 			}
@@ -927,15 +943,28 @@ func (w *window) checkChanges() {
 	}
 }
 
-// refresh loads the source again, and the history.
+// refresh loads the source again, the history, and the files of the
+// explorer.
 func (w *window) refresh() {
+	w.explorer.reset()
 	w.load()
 	w.loadHistory()
 }
 
-// openInEditor opens a file of the repository in the user's editor, at a
-// line.
+// openInEditor opens a file of the repository in an editor of the window,
+// at a line, or in the user's editor when it is gone from the work tree,
+// or the review is of a commit.
 func (w *window) openInEditor(path string, line int) {
+	if _, err := os.Stat(filepath.Join(w.repo.Root, filepath.FromSlash(path))); err == nil && w.source.kind != sourceCommit {
+		w.openFile(path, line)
+		return
+	}
+	w.openExternal(path, line)
+}
+
+// openExternal opens a file of the repository in the user's editor, at a
+// line.
+func (w *window) openExternal(path string, line int) {
 	abs := filepath.Join(w.repo.Root, filepath.FromSlash(path))
 	if _, err := os.Stat(abs); err != nil {
 		abs = w.repo.Root
@@ -1027,4 +1056,39 @@ func watchMainThread() {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
+}
+
+// askToClose asks whether to save the files with unsaved changes before
+// the window closes, and closes it unless canceled.
+func (w *window) askToClose(names []string) {
+	msg := fmt.Sprintf("Do you want to save the changes you made to %s?", names[0])
+	if len(names) > 1 {
+		msg = fmt.Sprintf("Do you want to save the changes you made to %d files?", len(names))
+	}
+	go func() {
+		r, err := mygo.Dialog.Message(mygo.MessageOptions{
+			Parent:  w.win,
+			Type:    mygo.MessageWarning,
+			Message: msg,
+			Detail:  "Your changes will be lost if you don't save them.",
+			Buttons: []string{"Save All", "Don't Save", "Cancel"},
+		})
+		if err != nil || r.Button == 2 {
+			return
+		}
+		w.win.Update(func() {
+			if r.Button == 0 {
+				for _, e := range w.editors {
+					if e.ed != nil && e.ed.Dirty() {
+						if err := w.writeEditor(e); err != nil {
+							go mygo.Dialog.Error("Could not save "+e.path, err.Error())
+							return
+						}
+					}
+				}
+			}
+			w.closing = true
+			w.win.Close()
+		})
+	}()
 }

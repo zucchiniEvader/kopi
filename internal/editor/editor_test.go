@@ -1,0 +1,244 @@
+package editor
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+)
+
+func TestBufferReplace(t *testing.T) {
+	b := NewBuffer("one\ntwo\nthree")
+	end := b.Replace(Pos{0, 1}, Pos{2, 2}, "X\nY")
+	if got := b.Text(); got != "oX\nYree" || end != (Pos{1, 1}) {
+		t.Errorf("text %q, end %v", got, end)
+	}
+	b = NewBuffer("a\r\nb")
+	if !b.CRLF || b.Lines() != 2 || b.Text() != "a\r\nb" {
+		t.Errorf("CRLF %v, lines %d, text %q", b.CRLF, b.Lines(), b.Text())
+	}
+}
+
+func TestBufferWords(t *testing.T) {
+	b := NewBuffer("int fooBar = x.y;")
+	if p := b.NextWord(Pos{0, 3}); p != (Pos{0, 10}) {
+		t.Errorf("next word from 3 is %v", p)
+	}
+	if p := b.PrevWord(Pos{0, 10}); p != (Pos{0, 4}) {
+		t.Errorf("previous word from 10 is %v", p)
+	}
+	if a, z := b.WordAt(Pos{0, 6}); a != (Pos{0, 4}) || z != (Pos{0, 10}) {
+		t.Errorf("word at 6 is %v-%v", a, z)
+	}
+}
+
+// open shows an editor of text in a tester, focused.
+func open(t *testing.T, text string) (*Editor, *ui.Tester) {
+	t.Helper()
+	ed := New("Main.java", text)
+	ed.Focus()
+	tt := ui.NewTester(func(c *ui.Context) { View(c, ed).Fill() }, 600, 400)
+	if !tt.Focused("Editor") {
+		t.Fatal("the editor has no focus")
+	}
+	return ed, tt
+}
+
+func TestTypingAndIndent(t *testing.T) {
+	ed, tt := open(t, "")
+	tt.Type("class A {")
+	tt.Key(0, ui.KeyEnter)
+	tt.Type("int x;")
+	tt.Key(0, ui.KeyEnter)
+	tt.Type("}")
+	want := "class A {\n    int x;\n}"
+	if got := ed.Text(); got != want {
+		t.Fatalf("text %q, want %q", got, want)
+	}
+	// Enter between braces puts the closing one on a line of its own.
+	ed, tt = open(t, "void f() {}")
+	ed.SetSelection(Selection{Pos{0, 10}, Pos{0, 10}})
+	tt.Key(0, ui.KeyEnter)
+	if got, c := ed.Text(), ed.Selection().Caret; got != "void f() {\n    \n}" || c != (Pos{1, 4}) {
+		t.Errorf("text %q, caret %v", got, c)
+	}
+	tt.Key(0, ui.KeyBackspace)
+	if got := ed.Text(); got != "void f() {\n\n}" {
+		t.Errorf("backspace in the indent: %q", got)
+	}
+}
+
+func TestUndoRedo(t *testing.T) {
+	ed, tt := open(t, "")
+	tt.Type("a")
+	tt.Type("b")
+	tt.Type("c")
+	tt.Key(0, ui.KeyEnter)
+	tt.Type("d")
+	if !ed.Dirty() {
+		t.Error("not dirty after typing")
+	}
+	tt.Key(ui.Cmd, ui.KeyZ)
+	tt.Key(ui.Cmd, ui.KeyZ)
+	if got := ed.Text(); got != "abc" {
+		t.Errorf("after two undos %q", got)
+	}
+	tt.Key(ui.Cmd, ui.KeyZ)
+	if got := ed.Text(); got != "" || ed.Dirty() {
+		t.Errorf("after three undos %q, dirty %v", got, ed.Dirty())
+	}
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyZ)
+	if got := ed.Text(); got != "abc" {
+		t.Errorf("after redo %q", got)
+	}
+	ed.MarkSaved()
+	tt.Type("e")
+	tt.Key(ui.Cmd, ui.KeyZ)
+	if got := ed.Text(); got != "abc" || ed.Dirty() {
+		t.Errorf("typing after saving undoes on its own: %q, dirty %v", got, ed.Dirty())
+	}
+}
+
+func TestSelectCopyPaste(t *testing.T) {
+	ed, tt := open(t, "hello world")
+	tt.Key(ui.Shift, ui.KeyRight)
+	tt.Key(ui.Shift, ui.KeyRight)
+	tt.Key(ui.Cmd, ui.KeyC)
+	if tt.Clipboard() != "he" {
+		t.Errorf("clipboard %q", tt.Clipboard())
+	}
+	tt.Key(0, ui.KeyRight) // to the selection's end
+	tt.Key(ui.Cmd, ui.KeyV)
+	if got := ed.Text(); got != "hehello world" {
+		t.Errorf("after paste %q", got)
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Key(ui.Cmd, ui.KeyX)
+	if got := ed.Text(); got != "" || tt.Clipboard() != "hehello world" {
+		t.Errorf("after cut all %q, clipboard %q", got, tt.Clipboard())
+	}
+}
+
+func TestIndentAndComment(t *testing.T) {
+	ed, tt := open(t, "a\nb\nc")
+	ed.SetSelection(Selection{Pos{0, 0}, Pos{1, 1}})
+	tt.Key(0, ui.KeyTab)
+	if got := ed.Text(); got != "    a\n    b\nc" {
+		t.Errorf("after Tab %q", got)
+	}
+	if s := ed.Selection(); s.Caret != (Pos{1, 5}) {
+		t.Errorf("selection %v after Tab", s)
+	}
+	tt.Key(ui.Shift, ui.KeyTab)
+	if got := ed.Text(); got != "a\nb\nc" {
+		t.Errorf("after Shift+Tab %q", got)
+	}
+	tt.Key(ui.Cmd, ui.KeySlash)
+	if got := ed.Text(); got != "// a\n// b\nc" {
+		t.Errorf("after commenting %q", got)
+	}
+	tt.Key(ui.Cmd, ui.KeySlash)
+	if got := ed.Text(); got != "a\nb\nc" {
+		t.Errorf("after uncommenting %q", got)
+	}
+	tt.Key(ui.Cmd, ui.KeyZ)
+	if got := ed.Text(); got != "// a\n// b\nc" {
+		t.Errorf("after undo %q", got)
+	}
+}
+
+func TestPointer(t *testing.T) {
+	ed, tt := open(t, "first line\nsecond line")
+	tt.Frame()
+	// The caret goes where the pointer clicks.
+	x := ed.gutterWidth() + padLeft + ed.xOf(Pos{1, 3}) + 1
+	y := padTop + ed.lineH*1.5
+	tt.ClickAt(x, y)
+	if c := ed.Selection().Caret; c != (Pos{1, 3}) {
+		t.Errorf("caret %v after a click", c)
+	}
+	// Dragging selects.
+	tt.Press(x, y)
+	tt.Move(ed.gutterWidth()+padLeft+ed.xOf(Pos{0, 5})+1, padTop+ed.lineH/2)
+	tt.Release(ed.gutterWidth()+padLeft+ed.xOf(Pos{0, 5})+1, padTop+ed.lineH/2)
+	if s := ed.Selection(); s.Anchor != (Pos{1, 3}) || s.Caret != (Pos{0, 5}) {
+		t.Errorf("selection %v after a drag", s)
+	}
+}
+
+func TestInputMethod(t *testing.T) {
+	ed, tt := open(t, "String s = \"\";")
+	ed.SetSelection(Selection{Pos{0, 12}, Pos{0, 12}})
+	tt.Compose("ni", 2)
+	if got := ed.Text(); got != "String s = \"\";" {
+		t.Errorf("the composition went in the text: %q", got)
+	}
+	if r, ok := tt.TextCaret(); !ok || r.X <= ed.gutterWidth() {
+		t.Errorf("text caret %v, %v", r, ok)
+	}
+	tt.Type("你")
+	if got := ed.Text(); got != "String s = \"你\";" {
+		t.Errorf("after committing %q", got)
+	}
+	if c := ed.Selection().Caret; c != (Pos{0, 15}) {
+		t.Errorf("caret %v after committing", c)
+	}
+}
+
+func TestHighlight(t *testing.T) {
+	ed, tt := open(t, "public class A {}")
+	tt.Frame()
+	if ed.Language() != "Java" {
+		t.Errorf("language %q", ed.Language())
+	}
+	if len(ed.hl.spans(0)) == 0 {
+		// Java's keywords are classes of their own.
+		t.Error("no colors for Java")
+	}
+}
+
+// Lines scrolled past the top draw nothing above the view, as their
+// numbers in the gutter did.
+func TestScrollClips(t *testing.T) {
+	ed := New("Main.java", strings.Repeat("line\n", 200))
+	const top = 40
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Column(c).Fill().Children(func() {
+			ui.Box(c).Height(top)
+			View(c, ed).Grow(1)
+		})
+	}, 400, 300)
+	above := func() []uint8 {
+		img := tt.Image()
+		var px []uint8
+		for y := 0; y < top; y++ {
+			for x := 0; x < 100; x++ {
+				o := img.PixOffset(x, y)
+				px = append(px, img.Pix[o:o+4]...)
+			}
+		}
+		return px
+	}
+	before := above()
+	tt.Scroll(200, 150, 0, ed.lineH*10.5)
+	if ed.scrollY == 0 {
+		t.Fatal("the view did not scroll")
+	}
+	if !bytes.Equal(before, above()) {
+		t.Error("the view drew above itself once scrolled")
+	}
+}
+
+func TestGoTo(t *testing.T) {
+	ed := New("Main.java", strings.Repeat("    line\n", 300))
+	tt := ui.NewTester(func(c *ui.Context) { View(c, ed).Fill() }, 600, 300)
+	ed.GoTo(150)
+	tt.Frame()
+	if c := ed.Selection().Caret; c != (Pos{150, 4}) {
+		t.Errorf("caret %v", c)
+	}
+	if y := float32(150)*ed.lineH - ed.scrollY; y < 0 || y > 300 {
+		t.Errorf("line 150 is %v from the top of the view", y)
+	}
+}

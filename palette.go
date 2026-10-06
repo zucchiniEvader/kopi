@@ -39,8 +39,11 @@ func (w *window) commands() []command {
 		{title: "Open Commit", hint: "Review a commit", run: func() { w.openDialog(dialogCommit) }},
 		{title: "Open Branch", hint: "Compare with a branch", run: func() { w.openDialog(dialogBranch) }},
 		{title: "Open Folder", keys: "⌘O", run: openFolder},
-		{title: "Show File Tree", run: func() { w.tab, w.sidebarShown = 0, true }},
-		{title: "Show History", run: func() { w.tab, w.sidebarShown = 1, true }},
+		{title: "Show Explorer", keys: "⌘1", run: func() { w.tab, w.sidebarShown = tabExplorer, true }},
+		{title: "Show Changed Files", keys: "⌘2", run: func() { w.tab, w.sidebarShown = tabChanges, true }},
+		{title: "Show History", keys: "⌘3", run: func() { w.tab, w.sidebarShown = tabHistory, true }},
+		{title: "Save", keys: "⌘S", run: w.saveEditor},
+		{title: "Close Tab", keys: "⌘W", run: w.closeTab},
 		{title: "Show Uncommitted Changes", run: func() { w.setSource(w.launchWorkTree()) }},
 		{title: "Commit…", run: func() {
 			if w.source.kind == sourceWorkingTree && !w.commitOpen {
@@ -61,6 +64,7 @@ func (w *window) commands() []command {
 			}
 		}},
 		{title: "Open File in Editor", hint: selected, keys: "⌘⇧O", run: w.openCurrent},
+		{title: "Open File in External Editor", hint: selected, run: w.openCurrentExternal},
 		{title: "Toggle Sidebar", keys: "⌘⇧B", run: w.toggleSidebar},
 		{title: "Collapse All Files", run: func() { w.setAllCollapsed(true) }},
 		{title: "Expand All Files", run: func() { w.setAllCollapsed(false) }},
@@ -112,14 +116,32 @@ func openConfig() {
 
 func (w *window) focusFilter() {
 	w.sidebarShown = true
-	w.tab = 0
+	w.tab = tabChanges
 	w.filterFocus = true
 }
 
 func (w *window) openCurrent() {
+	if e := w.activeTab(); e != nil {
+		return
+	}
 	if w.current >= 0 && w.current < len(w.files) {
 		f := w.files[w.current]
 		w.openInEditor(f.Path, firstLine(f))
+	}
+}
+
+func (w *window) openCurrentExternal() {
+	if e := w.activeTab(); e != nil {
+		line := 0
+		if e.ed != nil {
+			line = e.ed.Selection().Caret.Line + 1
+		}
+		w.openExternal(e.path, line)
+		return
+	}
+	if w.current >= 0 && w.current < len(w.files) {
+		f := w.files[w.current]
+		w.openExternal(f.Path, firstLine(f))
 	}
 }
 

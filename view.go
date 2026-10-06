@@ -111,7 +111,7 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 			ui.Spinner(c).Label("Loading").Size(14, 14)
 		}
 		ui.Spacer(c)
-		if !w.commitOpen {
+		if !w.commitOpen && w.activeTab() == nil {
 			// Find, the comments, and the layout.
 			if iconButton(c, iconSearch, "Find in diffs (⌘F)").Clicked() {
 				w.finding = !w.finding
@@ -182,6 +182,15 @@ func (w *window) layoutControl(c *ui.Context, pal *palette) {
 // mainArea shows the review, the commit view, or why there is nothing.
 func (w *window) mainArea(c *ui.Context, pal *palette) {
 	t := c.Theme()
+	if len(w.editors) > 0 {
+		w.editorTabs(c, pal)
+	}
+	if e := w.activeTab(); e != nil {
+		// The review's keys are not the editor's.
+		w.diffListEl = nil
+		w.editorArea(c, pal, e)
+		return
+	}
 	if w.commitOpen && w.source.kind == sourceWorkingTree {
 		w.commitView(c)
 		return
@@ -252,7 +261,7 @@ func (w *window) mainArea(c *ui.Context, pal *palette) {
 		emptyPanel(c, pal, title, detail, func() {
 			if w.source.kind == sourceWorkingTree && len(w.history) > 0 {
 				if ui.Button(c, "Show History").Clicked() {
-					w.tab, w.sidebarShown = 1, true
+					w.tab, w.sidebarShown = tabHistory, true
 				}
 			}
 		})
@@ -335,7 +344,7 @@ func (w *window) shortcuts(c *ui.Context) {
 	// had the focus in the last frame.
 	typing := w.typing
 	w.typing = false
-	if w.commitOpen || w.paletteOpen || w.dialogOpen || w.help || typing || w.diffListEl == nil {
+	if w.commitOpen || w.paletteOpen || w.dialogOpen || w.help || typing || w.diffListEl == nil || w.activeTab() != nil {
 		return
 	}
 	if c.Shortcut(0, ui.KeyJ) || c.Shortcut(ui.Ctrl, ui.KeyDown) {

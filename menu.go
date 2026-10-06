@@ -61,9 +61,13 @@ func buildMenu() *mygo.Menu {
 				}
 			})},
 			mygo.Separator(),
-			{Label: "Open File in Editor", Accelerator: "CmdOrCtrl+Shift+O", Click: inWindow(func(w *window) { w.openCurrent() })},
+			{Label: "Save", Accelerator: "CmdOrCtrl+S", Click: inWindow(func(w *window) { w.saveEditor() })},
 			mygo.Separator(),
-			{Role: mygo.RoleClose},
+			{Label: "Open File in Editor", Accelerator: "CmdOrCtrl+Shift+O", Click: inWindow(func(w *window) { w.openCurrent() })},
+			{Label: "Open File in External Editor", Click: inWindow(func(w *window) { w.openCurrentExternal() })},
+			mygo.Separator(),
+			{Label: "Close Tab", Accelerator: "CmdOrCtrl+W", Click: inWindow(func(w *window) { w.closeTab() })},
+			{Role: mygo.RoleClose, Accelerator: "CmdOrCtrl+Shift+W"},
 		}},
 		{Label: "Edit", Submenu: []*mygo.MenuItem{
 			{Role: mygo.RoleUndo},
@@ -82,8 +86,9 @@ func buildMenu() *mygo.Menu {
 		{Label: "View", Submenu: []*mygo.MenuItem{
 			{Label: "Command Bar…", Accelerator: "CmdOrCtrl+K", Click: inWindow(func(w *window) { w.paletteOpen = !w.paletteOpen })},
 			{Label: "Toggle Sidebar", Accelerator: "CmdOrCtrl+Shift+B", Click: inWindow(func(w *window) { w.toggleSidebar() })},
-			{Label: "Files", Accelerator: "CmdOrCtrl+1", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = 0, true })},
-			{Label: "History", Accelerator: "CmdOrCtrl+2", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = 1, true })},
+			{Label: "Explorer", Accelerator: "CmdOrCtrl+1", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = tabExplorer, true })},
+			{Label: "Changes", Accelerator: "CmdOrCtrl+2", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = tabChanges, true })},
+			{Label: "History", Accelerator: "CmdOrCtrl+3", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = tabHistory, true })},
 			mygo.Separator(),
 			{Label: "Diff", Submenu: []*mygo.MenuItem{
 				{ID: "split", Label: "Split", Type: mygo.MenuItemRadio, Checked: s.DiffStyle == "split", Click: func(*mygo.MenuItem, *mygo.Window) {

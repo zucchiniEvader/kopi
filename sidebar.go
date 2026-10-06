@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -240,19 +241,30 @@ func (w *window) sidebar(c *ui.Context) {
 			}
 		})
 		ui.Column(c).Padding(2, 10, 8).Children(func() {
-			if w.tab == 0 {
+			switch w.tab {
+			case tabExplorer:
+				ui.Row(c).Height(28).Padding(0, 4).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, filepath.Base(w.repo.Root)).FontSize(12).Bold().SingleLine().Grow(1).Shrink(1).MinWidth(0)
+					if iconButton(c, iconRefresh, "Refresh (⌘R)").Size(24, 24).Clicked() {
+						w.refresh()
+					}
+				})
+			case tabChanges:
 				if searchInput(c, &w.filter, "Filter files", &w.filterFocus, &w.typing) {
 					w.matchesFor = "\x00"
 					w.buildTree()
 					w.rowsDirty = true
 				}
-			} else {
+			default:
 				searchInput(c, &w.historyFilter, "Filter history", &w.filterFocus, &w.typing)
 			}
 		})
-		if w.tab == 0 {
+		switch w.tab {
+		case tabExplorer:
+			w.explorerView(c)
+		case tabChanges:
 			w.fileTree(c)
-		} else {
+		default:
 			w.historyView(c)
 		}
 		w.sidebarFooter(c, pal)
@@ -281,12 +293,12 @@ func (w *window) tabControl(c *ui.Context) bool {
 	t := c.Theme()
 	pal := paletteFor(t)
 	tab := w.tab
-	seg := ui.SegmentedBase(c, &tab, 2)
+	seg := ui.SegmentedBase(c, &tab, 3)
 	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.12)).Label("Sidebar").Children(func() {
 		for i, it := range []struct {
 			icon *ui.SVG
 			name string
-		}{{iconTree, "Files (⌘1)"}, {iconHistory, "History (⌘2)"}} {
+		}{{iconFiles, "Explorer (⌘1)"}, {iconTree, "Changes (⌘2)"}, {iconHistory, "History (⌘3)"}} {
 			s := seg.Segment(i).Size(30, 24).Radius(6).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
 			if i == tab {
 				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
@@ -411,6 +423,7 @@ func (w *window) fileTree(c *ui.Context) {
 		w.treeSel = key
 		if n := w.treeItems[key]; n != nil && !n.dir {
 			w.commitOpen = false
+			w.showReview()
 			w.revealFile(n.file)
 		}
 	}
@@ -732,12 +745,12 @@ func (w *window) sidebarFooter(c *ui.Context, pal *palette) {
 			counted = true
 		}
 	}
-	canCommit := w.tab == 0 && w.source.kind == sourceWorkingTree && len(w.files) > 0
-	if !(counted && w.tab == 0) && !canCommit {
+	canCommit := w.tab == tabChanges && w.source.kind == sourceWorkingTree && len(w.files) > 0
+	if !(counted && w.tab == tabChanges) && !canCommit {
 		return
 	}
 	ui.Row(c).MinHeight(40).Padding(6, 10).Gap(8).BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Children(func() {
-		if counted && w.tab == 0 {
+		if counted && w.tab == tabChanges {
 			ui.Row(c).Gap(6).Tooltip("Total change: " + lines(adds, "added") + ", " + lines(dels, "removed")).Children(func() {
 				ui.Text(c, "Total:").FontSize(11).FontWeight(600).TextColor(t.TextMuted)
 				ui.Text(c, "+"+thousands(adds)).Font(w.codeFont()).FontSize(11).FontWeight(600).TextColor(pal.addText)
@@ -755,6 +768,7 @@ func (w *window) sidebarFooter(c *ui.Context, pal *palette) {
 				ui.Text(c, label).SingleLine()
 			})
 			if b.Clicked() {
+				w.showReview()
 				w.toggleCommit()
 			}
 		}
