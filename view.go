@@ -92,8 +92,14 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 	if !sidebarRight {
 		right += bar.Right
 	}
-	ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(8).Shrink(0).DragWindow().
-		BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Background(pal.headerBg.Alpha(0.6)).Children(func() {
+	row := ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(8).Shrink(0).DragWindow()
+	if len(w.editors) > 0 || w.reviewOpen {
+		row.BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Background(pal.headerBg.Alpha(0.6))
+	} else {
+		// Without tabs, the bar is the welcome's, which it only drags.
+		row.Background(pal.appBg)
+	}
+	row.Children(func() {
 		if !w.sidebarShown {
 			w.sidebarToggle(c)
 		}
