@@ -1,0 +1,68 @@
+name: Release
+
+# Push a tag of the version in mygo.json, as v0.2.0, to build the apps of
+# every platform into a draft release, which you publish.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # the draft release, and the uploads to it
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the version
+        run: |
+          version="v$(jq -r .version mygo.json)"
+          if [ "$GITHUB_REF_NAME" != "$version" ]; then
+            echo "The tag $GITHUB_REF_NAME is not the version of mygo.json, $version" >&2
+            exit 1
+          fi
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --draft --verify-tag --title "Kopi ${GITHUB_REF_NAME#v}" --generate-notes
+          fi
+
+  build:
+    needs: draft-release
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Disk images need macOS; MyGo needs no cgo, so Ubuntu builds the
+          # others.
+          - { name: macOS, os: macos-latest, platform: "darwin/universal" }
+          - { name: Windows, os: ubuntu-latest, platform: "windows/amd64,windows/arm64" }
+          - { name: Linux, os: ubuntu-latest, platform: "linux/amd64,linux/arm64" }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install NSIS, for the Windows installers
+        if: matrix.name == 'Windows'
+        run: sudo apt-get update && sudo apt-get install -y nsis
+      - name: Build
+        run: go tool mygo build -platform "${{ matrix.platform }}"
+      - name: Upload to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(build/*/*.dmg build/*/*Setup*.exe build/*/*.deb build/*/*.tar.gz)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "Nothing was built" >&2
+            exit 1
+          fi
+          ls -la "${files[@]}"
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber

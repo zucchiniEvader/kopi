@@ -34,6 +34,25 @@ are Godiff's.
   review comments as Markdown, commits, history, and comparisons with a
   branch.
 
+## Install
+
+Download the app of your system from the
+[releases](https://github.com/zucchiniEvader/kopi/releases): the disk image
+on macOS (Apple silicon and Intel), the `Setup` installer on Windows, the
+`.deb` package or the `.tar.gz` archive, with its `install.sh`, on Linux.
+
+The apps are not signed yet. On macOS, move Kopi to Applications, then let
+it open once:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Kopi.app
+```
+
+On Windows, SmartScreen asks first: **More info → Run anyway**.
+
+Java's language server needs Java 21 or later on the machine (see
+`javaHome` below); Kopi downloads the server itself.
+
 ## Usage
 
 ```sh
@@ -109,6 +128,14 @@ go tool mygo dev          # the app, rebuilt as you edit
 go test ./...             # including the views, run without a window
 go tool mygo build        # Kopi.app and a disk image in build/
 go run ./tools/genicon    # render resources/icon.svg to the app icon
+```
+
+Pushing a tag of the version in `mygo.json`, as `v0.2.0`, builds the apps of
+every platform into a draft release (`.github/workflows/release.yml`), which
+you publish:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 `KOPI_SNAPSHOTS=<dir> go test .` saves PNGs of the views the tests drive, and

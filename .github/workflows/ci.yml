@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # The tests that run Java programs compile them with this JDK.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Vet, for every platform
+        run: |
+          go vet ./...
+          GOOS=linux go vet ./...
+          GOOS=windows go vet ./...
+      - name: Format
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: Test
+        run: go test ./...
