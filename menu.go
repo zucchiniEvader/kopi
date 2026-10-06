@@ -132,6 +132,15 @@ func buildMenu() *mygo.Menu {
 			mygo.Separator(),
 			{Role: mygo.RoleToggleFullScreen},
 		}},
+		{Label: "Run", Submenu: []*mygo.MenuItem{
+			{Label: "Run", Accelerator: "F5", Click: inWindow(func(w *window) { w.runStart() })},
+			{Label: "Run Without Debugging", Accelerator: "Ctrl+F5", Click: inWindow(func(w *window) { w.runStart() })},
+			{Label: "Stop", Accelerator: "Shift+F5", Click: inWindow(func(w *window) { w.runStop() })},
+			{Label: "Restart", Accelerator: "CmdOrCtrl+Shift+F5", Click: inWindow(func(w *window) { w.runStart() })},
+			mygo.Separator(),
+			{Label: "Toggle Run Panel", Accelerator: "CmdOrCtrl+J", Click: inWindow(func(w *window) { w.run.open = !w.run.open })},
+			{Label: "Open launch.json", Click: inWindow(func(w *window) { w.openLaunchConfig() })},
+		}},
 		{Role: mygo.RoleWindowMenu},
 		{Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{
 			{Label: "Keyboard Shortcuts", Click: inWindow(func(w *window) { w.help = true })},

@@ -136,6 +136,10 @@ func (w *window) javaStart() {
 			w.post(func() {
 				if j.gen == gen {
 					j.state, j.status, j.detail, j.conn = javaFailed, "Unavailable", err.Error(), nil
+					if w.run.waiting {
+						w.run.waiting = false
+						w.say(lineFail, "The Java language server is unavailable: %v", err)
+					}
 				}
 			})
 		}
@@ -174,6 +178,10 @@ func (w *window) javaStart() {
 				if e.ed != nil && e.abs != "" && isJava(e.path) {
 					w.javaOpen(e)
 				}
+			}
+			if w.run.waiting {
+				w.run.waiting = false
+				w.runStart()
 			}
 		})
 		<-conn.Done()

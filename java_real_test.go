@@ -174,3 +174,66 @@ func TestRealJDTLSLombok(t *testing.T) {
 	tt.Frame()
 	snapshot(t, tt, "lombok")
 }
+
+// TestRealRun runs a Maven project's class with the class path the real
+// jdtls resolves: GODIFF_JDTLS=1.
+func TestRealRun(t *testing.T) {
+	if os.Getenv("GODIFF_JDTLS") == "" {
+		t.Skip("GODIFF_JDTLS=1 runs the real Java language server")
+	}
+	dir := testRepo(t)
+	writeFile(t, dir, "pom.xml", `<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>demo</artifactId>
+  <version>1.0</version>
+  <properties><maven.compiler.release>21</maven.compiler.release></properties>
+</project>
+`)
+	writeFile(t, dir, "src/main/java/com/example/Greeter.java", "package com.example;\n\npublic class Greeter {\n    static String greet(String n) { return \"hello \" + n; }\n}\n")
+	writeFile(t, dir, "src/main/java/com/example/App.java", "package com.example;\n\npublic class App {\n    public static void main(String[] args) {\n        System.out.println(Greeter.greet(args.length > 0 ? args[0] : \"nobody\"));\n    }\n}\n")
+	writeFile(t, dir, ".vscode/launch.json", `{"configurations": [{"type": "java", "name": "App", "request": "launch", "mainClass": "com.example.App", "args": "Ada"}]}`)
+	w, tt := newTestWindow(t, dir)
+	w.settings.JavaHome = os.Getenv("GODIFF_JAVA_HOME")
+	w.posted = make(chan func(), 4096)
+	w.javaLaunch = launchJava
+	defer w.javaStop()
+	wait := func(what string, d time.Duration, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(d)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("waiting for %s:\n%s", what, w.runText())
+			}
+			select {
+			case fn := <-w.posted:
+				fn()
+			case <-time.After(20 * time.Millisecond):
+			}
+			tt.Frame()
+		}
+	}
+	start := time.Now()
+	w.runStart()
+	wait("the run", 5*time.Minute, func() bool { return w.run.proc == nil && strings.Contains(w.runText(), "exited") })
+	t.Logf("after %v:\n%s", time.Since(start), w.runText())
+	if !strings.Contains(w.runText(), "hello Ada") || !strings.Contains(w.runText(), "exited with code 0") {
+		t.Error("the program did not run")
+	}
+	// An edit, saved by the run, runs at once.
+	w.openFile("src/main/java/com/example/Greeter.java", 0)
+	e := w.activeTab()
+	tt.Frame() // the editor takes the keys
+	e.ed.SetSelection(editor.Selection{Anchor: editor.Pos{Line: 3, Col: 44}, Caret: editor.Pos{Line: 3, Col: 49}})
+	tt.Type("hi")
+	if !strings.Contains(e.ed.Text(), `"hi "`) {
+		t.Fatalf("the edit: %q", e.ed.Text())
+	}
+	start = time.Now()
+	w.runStart()
+	wait("the second run", 2*time.Minute, func() bool { return w.run.proc == nil && strings.Contains(w.runText(), "exited") })
+	t.Logf("after %v:\n%s", time.Since(start), w.runText())
+	if !strings.Contains(w.runText(), "hi Ada") {
+		t.Error("the edit did not run")
+	}
+}

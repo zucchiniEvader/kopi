@@ -43,6 +43,9 @@ func (w *window) view(c *ui.Context) {
 		ui.Column(c).Grow(1).MinWidth(0).Background(pal.appBg).Children(func() {
 			w.toolbar(c, pal)
 			w.mainArea(c, pal)
+			if w.run.open {
+				w.runPanel(c, pal)
+			}
 		})
 		if w.sidebarShown && right {
 			w.sidebarResizer(c, pal)
@@ -113,6 +116,20 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 			ui.Spinner(c).Label("Loading").Size(14, 14)
 		}
 		ui.Spacer(c)
+		if !w.reviewVisible() {
+			// Running Java programs.
+			if w.currentJavaFile() != nil || w.run.proc != nil {
+				if w.run.proc != nil && iconButton(c, iconStop, "Stop (⇧F5)").Clicked() {
+					w.runStop()
+				}
+				if iconButton(c, iconPlay, "Run (⌃F5)").Clicked() {
+					w.runStart()
+				}
+			}
+			if iconButton(c, iconTerminal, "Toggle Run Panel (⌘J)").Clicked() {
+				w.run.open = !w.run.open
+			}
+		}
 		if !w.commitOpen && w.reviewVisible() {
 			// Find, the comments, and the layout.
 			if iconButton(c, iconSearch, "Find in diffs").Clicked() {

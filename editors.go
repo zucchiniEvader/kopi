@@ -340,6 +340,9 @@ func (w *window) editorStyle(t *ui.Theme, pal *palette) editor.Style {
 		Warning:     ui.Hex("#e0a100"),
 		Info:        t.Accent,
 		Link:        t.Accent,
+		// The find bar's matches, lit as the review's are.
+		Match:        pal.match,
+		CurrentMatch: pal.matchNow,
 
 		HoverBackground: pal.headerBg,
 		HoverBorder:     pal.cardBorder,

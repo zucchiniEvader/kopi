@@ -113,6 +113,8 @@ type window struct {
 	// The search of the editor, and the bar going to a file.
 	edFind editorFind
 	quick  quickOpen
+	// The run panel, and the program it runs.
+	run runState
 
 	// The diff surface.
 	rows       []row
@@ -250,6 +252,7 @@ func openWindow(dir string, src source) error {
 	offSettings := cfg.OnChange(func(s Settings) { w.win.Update(func() { w.applySettings(s) }) })
 	w.win.OnClosed(func() {
 		close(stop)
+		w.runKill()
 		w.javaStop()
 		offSettings()
 		windowsMu.Lock()

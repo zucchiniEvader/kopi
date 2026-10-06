@@ -23,6 +23,8 @@ type fakeJDTLS struct {
 	mu   sync.Mutex
 	got  []string // methods, and the text of edits
 	main string   // the URI of Main.java
+	// classpath is what java.project.getClasspaths answers.
+	classpath []string
 }
 
 func (f *fakeJDTLS) record(s string) {
@@ -49,7 +51,10 @@ func (f *fakeJDTLS) Notify(method string, params json.RawMessage) {
 		json.Unmarshal(params, &p)
 		f.record(method + " " + filepath.Base(p.TextDocument.URI))
 		// g() is undefined until written.
-		f.conn.Notify("textDocument/publishDiagnostics", lsp.PublishDiagnosticsParams{URI: p.TextDocument.URI, Diagnostics: []lsp.Diagnostic{
+		f.mu.Lock()
+		conn := f.conn
+		f.mu.Unlock()
+		conn.Notify("textDocument/publishDiagnostics", lsp.PublishDiagnosticsParams{URI: p.TextDocument.URI, Diagnostics: []lsp.Diagnostic{
 			{Range: lsp.Range{Start: lsp.Position{Line: 1, Character: 15}, End: lsp.Position{Line: 1, Character: 16}}, Severity: lsp.SeverityError, Message: "The method g() is undefined"},
 		}})
 	case "textDocument/didChange":
@@ -92,6 +97,10 @@ func (f *fakeJDTLS) Request(method string, params json.RawMessage) (any, error) 
 			return []map[string]any{{"uri": "jdt://contents/java.base/java.lang/String.class?=x", "range": lsp.Range{Start: lsp.Position{Line: 3}}}}, nil
 		}
 		return []map[string]any{{"targetUri": f.main, "targetRange": lsp.Range{}, "targetSelectionRange": lsp.Range{Start: lsp.Position{Line: 1, Character: 9}}}}, nil
+	case "java/buildWorkspace":
+		return 1, nil
+	case "workspace/executeCommand":
+		return map[string]any{"classpaths": f.classpath, "modulepaths": []string{}}, nil
 	case "java/classFileContents":
 		return "package java.lang;\n\n// The JDK's.\npublic final class String {}\n", nil
 	}
@@ -108,12 +117,18 @@ func javaWindow(t *testing.T) (*window, *ui.Tester, *fakeJDTLS) {
 	fake := &fakeJDTLS{main: lsp.FileURI(filepath.Join(dir, "src", "Main.java"))}
 	w.javaLaunch = func(w *window, gen int, s Settings) (io.ReadWriteCloser, error) {
 		client, server := net.Pipe()
-		fake.conn = lsp.NewConn(server, fake)
+		conn := lsp.NewConn(server, fake)
+		fake.mu.Lock()
+		fake.conn = conn
+		fake.mu.Unlock()
 		return client, nil
 	}
 	t.Cleanup(func() {
-		if fake.conn != nil {
-			fake.conn.Close()
+		fake.mu.Lock()
+		conn := fake.conn
+		fake.mu.Unlock()
+		if conn != nil {
+			conn.Close()
 		}
 	})
 	return w, tt, fake
