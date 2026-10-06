@@ -1210,9 +1210,12 @@ func (ed *Editor) pointer(ev ui.InputEvent) bool {
 		ed.drag = dragState{active: true, unit: unit, origin: ed.sel}
 	case ui.InputPointerMove:
 		if !ed.drag.active {
+			// MyGo draws a frame after the input taken: the link and the
+			// hover show at once, not at the next blink of the caret.
+			hover, link := ed.hover, ed.link
 			ed.pointerOver(ev.X, ev.Y)
 			ed.pointLink(ev.Mods, ev.X, ev.Y)
-			return false
+			return ed.hover != hover || ed.link != link
 		}
 		p := ed.posAt(ev.X, ev.Y)
 		oa, oz := ed.drag.origin.Range()

@@ -31,6 +31,28 @@ type editorTab struct {
 	err  string
 	// semGen counts the edits, to ask for semantic tokens once they stop.
 	semGen int
+	// library tells a document from outside the repository: a class of
+	// the JDK or of a dependency, or a file elsewhere.
+	library bool
+}
+
+// origin says where a library's document comes from: the module or jar
+// and the package of a class, as java.base · java.lang, or the folder of
+// a file.
+func (e *editorTab) origin() string {
+	if e.abs != "" {
+		return abbreviateHome(filepath.Dir(e.abs))
+	}
+	s, _, _ := strings.Cut(strings.TrimPrefix(e.path, "jdt://contents/"), "?")
+	parts := strings.Split(s, "/")
+	if len(parts) < 2 {
+		return e.path
+	}
+	jar := strings.TrimSuffix(parts[0], ".jar")
+	if len(parts) == 2 {
+		return jar
+	}
+	return jar + " · " + strings.Join(parts[1:len(parts)-1], ".")
 }
 
 // repoPath returns the path in the repository of an absolute path, with
@@ -109,7 +131,7 @@ func (w *window) openAbs(abs string) *editorTab {
 	}
 	e := w.editorOf(p)
 	if e == nil {
-		e = &editorTab{path: p, abs: abs, uri: lsp.FileURI(abs)}
+		e = &editorTab{path: p, abs: abs, uri: lsp.FileURI(abs), library: !inRepo}
 		switch data, err := readEditable(abs); {
 		case err != nil:
 			e.err = err.Error()
@@ -133,7 +155,7 @@ func (w *window) openAbs(abs string) *editorTab {
 func (w *window) openText(uri, name, text string) *editorTab {
 	e := w.editorOf(uri)
 	if e == nil {
-		e = &editorTab{path: uri, uri: uri, ed: editor.New(strings.TrimSuffix(name, ".class")+".java", text)}
+		e = &editorTab{path: uri, uri: uri, ed: editor.New(strings.TrimSuffix(name, ".class")+".java", text), library: true}
 		e.ed.ReadOnly = true
 		w.editors = append(w.editors, e)
 		w.javaAttach(e)
@@ -302,9 +324,15 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 	closing := -1
 	ui.ScrollHorizontal(c).Shrink(0).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Background(pal.headerBg.Alpha(0.6)).Children(func() {
 		ui.Row(c).Height(34).Children(func() {
-			tab := func(active bool) *ui.Element {
+			tab := func(active, library bool) *ui.Element {
 				b := ui.ButtonBase(c).FillHeight().Padding(0, 6, 0, 12).Gap(6).BorderWidth(0, 1, 0, 0).BorderColor(pal.cardBorder).TextColor(t.TextMuted)
 				switch {
+				case active && library:
+					// A library's document is no source of the
+					// repository: lighter, its mark muted.
+					b.Background(libraryBg(pal)).DrawOver(func(p *ui.Painter, r ui.Rect) {
+						p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: 2}, t.TextMuted.Alpha(0.6), 0)
+					})
 				case active:
 					b.Background(pal.codeBg).TextColor(t.Text).DrawOver(func(p *ui.Painter, r ui.Rect) {
 						p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: 2}, t.Accent, 0)
@@ -314,7 +342,7 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 				}
 				return b
 			}
-			review := tab(w.activeTab() == nil).Padding(0, 12).Label("Review")
+			review := tab(w.activeTab() == nil, false).Padding(0, 12).Label("Review")
 			if review.Clicked() {
 				w.showReview()
 			}
@@ -323,7 +351,13 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 				ui.Text(c, "Review").FontSize(13).SingleLine()
 			})
 			for i, e := range w.editors {
-				b := tab(i == w.activeEditor).Key(e.path).Label(e.path).Tooltip(e.path)
+				b := tab(i == w.activeEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
+				if e.library {
+					b.Tooltip(e.origin() + " (read-only)")
+					if e.abs != "" {
+						b.Tooltip(e.origin())
+					}
+				}
 				if b.Clicked() {
 					w.activeEditor = i
 					if e.ed != nil {
@@ -331,8 +365,13 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 					}
 				}
 				b.Children(func() {
-					ui.Icon(c, iconFile).FontSize(14)
-					ui.Text(c, e.title()).FontSize(13).SingleLine()
+					if e.library {
+						ui.Icon(c, iconPackage).FontSize(14)
+						ui.Text(c, e.title()).FontSize(13).Italic().SingleLine()
+					} else {
+						ui.Icon(c, iconFile).FontSize(14)
+						ui.Text(c, e.title()).FontSize(13).SingleLine()
+					}
 					// A dot for unsaved changes, which turns into the close
 					// button under the pointer.
 					x := ui.ButtonBase(c).Size(20, 20).Center().Radius(5).Label("Close " + e.title()).Tooltip("Close (⌘W)")
@@ -361,19 +400,27 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 // file below.
 func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 	t := c.Theme()
-	ui.Column(c).Key("editor:" + e.path).Grow(1).MinHeight(0).Background(pal.codeBg).Children(func() {
+	bg := pal.codeBg
+	if e.library {
+		bg = libraryBg(pal)
+	}
+	ui.Column(c).Key("editor:" + e.path).Grow(1).MinHeight(0).Background(bg).Children(func() {
 		if e.ed == nil {
 			emptyPanel(c, pal, "Unable to open "+e.title(), e.err, nil)
 			return
 		}
-		e.ed.SetStyle(w.editorStyle(t, pal))
+		style := w.editorStyle(t, pal)
+		if e.library {
+			style.Background = libraryBg(pal)
+		}
+		e.ed.SetStyle(style)
 		editor.View(c, e.ed).Grow(1).FillWidth()
 		ui.Row(c).Height(26).Padding(0, 12).Gap(16).AlignItems(ui.Center).Shrink(0).
 			BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Background(pal.headerBg).Children(func() {
 			small := func(s string) *ui.Element { return ui.Text(c, s).FontSize(11).TextColor(t.TextMuted).SingleLine() }
 			name := e.path
 			if e.abs == "" {
-				name = e.title() + " (read-only)"
+				name = e.origin() + " · " + e.title() + " (read-only)"
 			}
 			small(name).Grow(1).Shrink(1).MinWidth(0)
 			if isJava(e.path) {
@@ -429,3 +476,7 @@ func (w *window) javaChip(c *ui.Context) {
 		ui.Text(c, status).FontSize(11).TextColor(color).SingleLine().Shrink(1).MinWidth(0)
 	})
 }
+
+// libraryBg is the background of the documents of libraries, lighter than
+// the code of the repository.
+func libraryBg(pal *palette) ui.Color { return pal.gapBg }

@@ -192,7 +192,10 @@ func TestJavaLanguageServer(t *testing.T) {
 	if jdk.title() != "String.class" || jdk.abs != "" || !jdk.ed.ReadOnly || jdk.ed.Selection().Caret.Line != 3 {
 		t.Errorf("class tab %q, abs %q, caret %v", jdk.title(), jdk.abs, jdk.ed.Selection().Caret)
 	}
-	if jdk.ed.Language() != "Java" || !tt.HasText("String.class (read-only)") {
+	if !jdk.library || jdk.origin() != "java.base · java.lang" {
+		t.Errorf("library %v, origin %q", jdk.library, jdk.origin())
+	}
+	if jdk.ed.Language() != "Java" || !tt.HasText("java.base · java.lang · String.class (read-only)") {
 		t.Errorf("language %q, texts %q", jdk.ed.Language(), tt.Texts())
 	}
 

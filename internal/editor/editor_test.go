@@ -407,3 +407,28 @@ func TestOverlay(t *testing.T) {
 		t.Errorf("overlay\n%v\nwant\n%v", got, want)
 	}
 }
+
+// Moving the pointer from word to word draws a frame, which starts the
+// hover and shows the link, without waiting for the caret's blink.
+func TestPointerMoveDraws(t *testing.T) {
+	ed := New("Main.java", "int x = foo(bar);")
+	frames := 0
+	tt := ui.NewTester(func(c *ui.Context) {
+		frames++
+		View(c, ed).Fill()
+	}, 600, 400)
+	tt.Frame()
+	x := func(col int) float32 { return ed.gutterWidth() + padLeft + ed.xOf(Pos{0, col}) + 1 }
+	y := padTop + ed.lineH/2
+	tt.Move(x(9), y)
+	before := frames
+	tt.Move(x(13), y) // foo to bar
+	if frames == before {
+		t.Error("no frame as the pointer moved to another word")
+	}
+	since := ed.hover.since
+	tt.Move(x(14), y) // within bar
+	if ed.hover.since != since {
+		t.Error("moving within a word started the hover again")
+	}
+}
