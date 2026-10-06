@@ -43,6 +43,8 @@ type Style struct {
 	HoverBackground, HoverBorder ui.Color
 	// Link colors the word Cmd turns into a link to its definition.
 	Link ui.Color
+	// Match and CurrentMatch are the backgrounds of a search's matches.
+	Match, CurrentMatch ui.Color
 }
 
 // defaultStyle is the style of the theme, without colors for tokens.
@@ -66,6 +68,7 @@ func defaultStyle(t *ui.Theme) Style {
 	s.Error, s.Warning, s.Info = t.Danger, t.Warning, t.Accent
 	s.HoverBackground, s.HoverBorder = t.Surface, t.Border
 	s.Link = t.Accent
+	s.Match, s.CurrentMatch = ui.RGBA(255, 216, 92, 0.5), ui.RGBA(255, 176, 46, 0.9)
 	return s
 }
 
@@ -122,6 +125,9 @@ type Editor struct {
 	diags []Diagnostic
 	hover hoverState
 	link  linkState
+	// The matches of a search, in order, and the current one.
+	matches []Range
+	current int
 }
 
 // dragState is a selection the pointer makes: by runes, words (2) or lines
@@ -454,6 +460,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			}
 			sl := ed.shape(line)
 			ed.maxW = max(ed.maxW, sl.width)
+			ed.paintMatches(p, i, sl, textX, y)
 			if !ed.sel.Empty() && i >= a.Line && i <= z.Line {
 				x0, x1 := float32(0), sl.width
 				if i == a.Line {

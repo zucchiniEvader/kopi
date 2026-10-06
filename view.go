@@ -50,6 +50,7 @@ func (w *window) view(c *ui.Context) {
 		}
 	})
 	w.palette(c)
+	w.quickBar(c)
 	w.sourceDialog(c)
 	w.shortcutsHelp(c)
 	if w.discarding != nil {
@@ -114,7 +115,7 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 		ui.Spacer(c)
 		if !w.commitOpen && w.reviewVisible() {
 			// Find, the comments, and the layout.
-			if iconButton(c, iconSearch, "Find in diffs (⌘F)").Clicked() {
+			if iconButton(c, iconSearch, "Find in diffs").Clicked() {
 				w.finding = !w.finding
 			}
 			n := w.pendingComments()
@@ -349,7 +350,7 @@ func (w *window) shortcuts(c *ui.Context) {
 	// had the focus in the last frame.
 	typing := w.typing
 	w.typing = false
-	if w.commitOpen || w.paletteOpen || w.dialogOpen || w.help || typing || w.diffListEl == nil || !w.reviewVisible() {
+	if w.commitOpen || w.paletteOpen || w.quick.open || w.dialogOpen || w.help || typing || w.diffListEl == nil || !w.reviewVisible() {
 		return
 	}
 	if c.Shortcut(0, ui.KeyJ) || c.Shortcut(ui.Ctrl, ui.KeyDown) {

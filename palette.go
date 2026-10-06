@@ -34,8 +34,11 @@ func (w *window) commands() []command {
 		whitespace = "Hide Whitespace Changes"
 	}
 	return []command{
-		{title: "Focus File Filter", keys: "⌘P", run: w.focusFilter},
-		{title: "Find in Diffs", keys: "⌘F", run: func() { w.showReview(); w.finding = true }},
+		{title: "Go to File", keys: "⌘P", run: w.openQuick},
+		{title: "Find", keys: "⌘F", run: func() { w.find(false) }},
+		{title: "Replace", keys: "⌥⌘F", run: func() { w.find(true) }},
+		{title: "Focus File Filter", run: w.focusFilter},
+		{title: "Find in Diffs", run: func() { w.showReview(); w.finding = true }},
 		{title: "Show Review", hint: "The changes", keys: "⌘⇧R", run: w.showReview},
 		{title: "Open Commit", hint: "Review a commit", run: func() { w.openDialog(dialogCommit) }},
 		{title: "Open Branch", hint: "Compare with a branch", run: func() { w.openDialog(dialogBranch) }},
@@ -363,9 +366,9 @@ func (w *window) shortcutsHelp(c *ui.Context) {
 		title string
 		keys  [][2]string
 	}{
-		{"Navigation", [][2]string{{"Command bar", "⌘K"}, {"Filter files", "⌘P"}, {"Next hunk", "J"}, {"Previous hunk", "K"},
+		{"Navigation", [][2]string{{"Command bar", "⌘K"}, {"Go to file", "⌘P"}, {"Next hunk", "J"}, {"Previous hunk", "K"},
 			{"Toggle sidebar", "⌘⇧B"}, {"Toggle word wrap", "⌥Z"}, {"Open file in editor", "⌘⇧O"}, {"Refresh changes", "⌘R"}}},
-		{"Search", [][2]string{{"Find in diffs", "⌘F"}, {"Next match", "↩"}, {"Previous match", "⇧↩"}, {"Close search", "Esc"}}},
+		{"Search", [][2]string{{"Find", "⌘F"}, {"Replace", "⌥⌘F"}, {"Next match", "↩"}, {"Previous match", "⇧↩"}, {"Close search", "Esc"}}},
 		{"Comments", [][2]string{{"Comment on a line", "Click"}, {"Comment on the hunk", "↩"}, {"Add comment", "⌘↩"}, {"Discard comment", "Esc"}}},
 		{"Code", [][2]string{{"Bigger text", "⌘+"}, {"Smaller text", "⌘-"}, {"Actual size", "⌘0"}}},
 	}

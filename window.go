@@ -110,6 +110,10 @@ type window struct {
 	javaLaunch javaLauncher
 	posted     chan func()
 
+	// The search of the editor, and the bar going to a file.
+	edFind editorFind
+	quick  quickOpen
+
 	// The diff surface.
 	rows       []row
 	rowsDirty  bool
@@ -257,7 +261,14 @@ func openWindow(dir string, src source) error {
 		}
 		windowsMu.Unlock()
 	})
-	w.win.OnFocus(func() { go w.checkChanges() })
+	w.win.OnFocus(func() {
+		go w.checkChanges()
+		// Files may have changed in other apps.
+		w.win.Update(func() {
+			w.checkDisk()
+			w.explorer.reset()
+		})
+	})
 	go state.setLastRepository(repo.Root)
 	w.load()
 	w.loadHistory()
@@ -940,6 +951,9 @@ func (w *window) watch(stop chan struct{}) {
 		case <-time.After(delay):
 		}
 		w.checkChanges()
+		if w.win.IsFocused() {
+			w.win.Update(w.checkDisk)
+		}
 	}
 }
 

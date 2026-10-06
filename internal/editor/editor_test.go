@@ -432,3 +432,48 @@ func TestPointerMoveDraws(t *testing.T) {
 		t.Error("moving within a word started the hover again")
 	}
 }
+
+func TestFindReplace(t *testing.T) {
+	ed, tt := open(t, "foo Foo food\nbar foo")
+	m, err := ed.Find("foo", FindOptions{})
+	if err != nil || len(m) != 4 {
+		t.Fatalf("matches %v, %v", m, err)
+	}
+	if m, _ := ed.Find("foo", FindOptions{MatchCase: true, WholeWord: true}); len(m) != 2 || m[1].From != (Pos{1, 4}) {
+		t.Errorf("case and words: %v", m)
+	}
+	if _, err := ed.Find("(", FindOptions{Regexp: true}); err == nil {
+		t.Error("a bad expression found")
+	}
+	ed.SetMatches(m, 1)
+	tt.Frame()
+	ed.Select(m[1])
+	if ed.SelectedText() != "Foo" {
+		t.Errorf("selected %q", ed.SelectedText())
+	}
+	// All at once, with groups, as one undo.
+	re, _ := Pattern(`f(o+)`, FindOptions{Regexp: true})
+	all, _ := ed.Find(`f(o+)`, FindOptions{Regexp: true})
+	ed.Replace(all, "b${1}x", re)
+	if got := ed.Text(); got != "boox boox booxd\nbar boox" {
+		t.Errorf("after replacing %q", got)
+	}
+	tt.Key(ui.Cmd, ui.KeyZ)
+	if got := ed.Text(); got != "foo Foo food\nbar foo" {
+		t.Errorf("after undo %q", got)
+	}
+}
+
+func TestReload(t *testing.T) {
+	ed, tt := open(t, "one\ntwo\nthree")
+	ed.SetSelection(Selection{Pos{2, 1}, Pos{2, 3}})
+	ed.MarkSaved()
+	ed.Reload("one\nTWO\nthree\nfour")
+	if ed.Text() != "one\nTWO\nthree\nfour" || ed.Selection() != (Selection{Pos{2, 1}, Pos{2, 3}}) {
+		t.Errorf("text %q, selection %v", ed.Text(), ed.Selection())
+	}
+	tt.Key(ui.Cmd, ui.KeyZ)
+	if ed.Text() != "one\ntwo\nthree" {
+		t.Errorf("undo %q", ed.Text())
+	}
+}

@@ -34,6 +34,13 @@ type editorTab struct {
 	// library tells a document from outside the repository: a class of
 	// the JDK or of a dependency, or a file elsewhere.
 	library bool
+	// stamp is the file's on the disk as read or written last; disk says
+	// how it changed since, onDisk its text then, and keptDeleted that the
+	// user keeps it open as it went.
+	stamp       stamp
+	disk        int
+	onDisk      string
+	keptDeleted bool
 }
 
 // origin says where a library's document comes from: the module or jar
@@ -145,6 +152,7 @@ func (w *window) openAbs(abs string) *editorTab {
 	e := w.editorOf(p)
 	if e == nil {
 		e = &editorTab{path: p, abs: abs, uri: lsp.FileURI(abs), library: !inRepo}
+		e.stamp, _ = stampOf(abs)
 		switch data, err := readEditable(abs); {
 		case err != nil:
 			e.err = err.Error()
@@ -230,6 +238,8 @@ func (w *window) writeEditor(e *editorTab) error {
 		return err
 	}
 	e.ed.MarkSaved()
+	e.stamp, _ = stampOf(p)
+	e.disk, e.onDisk, e.keptDeleted = diskSame, "", false
 	w.javaSaved(e)
 	if w.source.kind == sourceWorkingTree {
 		w.load()
@@ -430,6 +440,8 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 			style.Background = libraryBg(pal)
 		}
 		e.ed.SetStyle(style)
+		w.diskBanner(c, pal, e)
+		w.findBar(c, pal, e)
 		editor.View(c, e.ed).Grow(1).FillWidth()
 		ui.Row(c).Height(26).Padding(0, 12).Gap(16).AlignItems(ui.Center).Shrink(0).
 			BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Background(pal.headerBg).Children(func() {
