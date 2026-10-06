@@ -74,7 +74,7 @@ runs in.
 
 ## Configuration
 
-Settings live in `~/.kopi/kopi.jsonc` (**Kopi → Open Config File…**), and
+Settings live in `~/.kopi/kopi.jsonc` (**Kopi → Settings…**, <kbd>⌘,</kbd>), and
 apply to open windows as the file changes; the first run takes Godiff's,
 from `~/.godiff/godiff.jsonc`:
 

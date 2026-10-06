@@ -538,3 +538,40 @@ func closeButton(c *ui.Context, label string, shown, dirty bool) *ui.Element {
 	x.Children(func() { ui.Icon(c, mark).FontSize(13) })
 	return x
 }
+
+// newFile asks where to create a file, in the folder of the file shown or
+// the repository's, creates it empty, and opens it.
+func (w *window) newFile() {
+	dir := w.repo.Root
+	if e := w.activeTab(); e != nil && e.abs != "" {
+		dir = filepath.Dir(e.abs)
+	}
+	go func() {
+		p, err := mygo.Dialog.Save(mygo.SaveDialogOptions{Parent: w.win, Title: "New File", DefaultPath: dir, ButtonLabel: "Create", CreateDirectories: true})
+		if err != nil || p == "" {
+			return
+		}
+		if _, err := os.Stat(p); os.IsNotExist(err) {
+			if err := os.WriteFile(p, nil, 0o644); err != nil {
+				mygo.Dialog.Error("Could not create "+filepath.Base(p), err.Error())
+				return
+			}
+		}
+		w.post(func() {
+			w.explorer.reset()
+			w.openAbs(p)
+		})
+	}()
+}
+
+// saveAll writes every file with unsaved changes.
+func (w *window) saveAll() {
+	for _, e := range w.editors {
+		if e.ed != nil && e.abs != "" && e.ed.Dirty() {
+			if err := w.writeEditor(e); err != nil {
+				go mygo.Dialog.Error("Could not save "+e.title(), err.Error())
+				return
+			}
+		}
+	}
+}

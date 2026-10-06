@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -387,37 +386,14 @@ func (v *welcome) view(c *ui.Context) {
 	c.Root().Background(pal.appBg)
 	bar := c.TitleBar()
 	ui.Box(c).Height(max(bar.Height, 40)).DragWindow().FillWidth()
-	title := "Open a Git repository"
-	detail := "Run kopi from a Git repository in Terminal, or choose File → Open Folder… to open one."
+	subtitle := "Open a Git repository to start"
 	if v.err != nil && !errors.Is(v.err, git.ErrNotRepository) {
-		title, detail = "Unable to read repository", errorText(v.err)
+		subtitle = "Unable to read repository: " + errorText(v.err)
 	} else if v.err != nil {
-		title = "No Git repository found"
-		detail = "Kopi was opened outside a Git repository. Run kopi from inside a repository, or choose File → Open Folder… to open one."
+		subtitle = "Kopi opened outside a Git repository: open one to start"
 	}
-	emptyPanel(c, pal, title, detail, func() {
-		if ui.PrimaryButton(c, "Open Folder…").Clicked() {
-			openFolder()
-		}
-	})
-}
-
-// nothingOpen is the main area without a tab open: how to open a file,
-// or the review of the changes.
-func (w *window) nothingOpen(c *ui.Context, pal *palette) {
-	detail := "Choose a file in the explorer."
-	if !w.sidebarShown {
-		detail = "Show the sidebar (⌘⇧B) to choose a file."
-	}
-	emptyPanel(c, pal, "No file open", detail, func() {
-		if n := len(w.files); n > 0 && w.source.kind == sourceWorkingTree {
-			label := fmt.Sprintf("Review %d Changes", n)
-			if n == 1 {
-				label = "Review 1 Change"
-			}
-			if ui.Button(c, label).Clicked() {
-				w.showReview()
-			}
-		}
-	})
+	startPanel(c, pal, subtitle, []startAction{
+		{"Open Folder…", "⌘O", openFolder},
+		{"Or run kopi in a repository, in Terminal", "", nil},
+	}, "", nil)
 }

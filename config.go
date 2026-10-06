@@ -283,7 +283,13 @@ type storeData struct {
 	// LastRepository is the repository opened last, which the app opens
 	// when started without one, from the Dock.
 	LastRepository string `json:"lastRepository"`
+	// Recent are the repositories opened, the latest first, which File >
+	// Open Recent and the welcome lists.
+	Recent []string `json:"recent"`
 }
+
+// maxRecent bounds the repositories remembered.
+const maxRecent = 12
 
 var state = &store{}
 
@@ -359,8 +365,39 @@ func (s *store) lastRepository() string {
 func (s *store) setLastRepository(root string) {
 	s.mu.Lock()
 	s.data.LastRepository = root
+	recent := []string{root}
+	for _, r := range s.data.Recent {
+		if r != root && len(recent) < maxRecent {
+			recent = append(recent, r)
+		}
+	}
+	s.data.Recent = recent
 	s.mu.Unlock()
 	s.save()
+	refreshMenu()
+}
+
+// recent returns the repositories opened, the latest first, but those
+// gone from the disk.
+func (s *store) recent() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []string
+	for _, r := range s.data.Recent {
+		if fi, err := os.Stat(r); err == nil && fi.IsDir() {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// clearRecent forgets the repositories opened.
+func (s *store) clearRecent() {
+	s.mu.Lock()
+	s.data.Recent = nil
+	s.mu.Unlock()
+	s.save()
+	refreshMenu()
 }
 
 func (s *store) save() {

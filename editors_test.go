@@ -200,7 +200,7 @@ func TestLaunch(t *testing.T) {
 	if w.tab != tabExplorer || !tt.Focused("Files") {
 		t.Errorf("tab %d, explorer focused %v", w.tab, tt.Focused("Files"))
 	}
-	if _, tab := tt.Find("Close Review"); w.reviewOpen || tab || !tt.HasText("No file open") {
+	if _, tab := tt.Find("Close Review"); w.reviewOpen || tab || !tt.HasText("Go to File") {
 		t.Errorf("review open %v: %q", w.reviewOpen, tt.Texts())
 	}
 	// The keys choose files at once.
@@ -218,7 +218,7 @@ func TestLaunch(t *testing.T) {
 	if err := tt.Click("Close Review"); err != nil {
 		t.Fatal(err)
 	}
-	if w.reviewOpen || !tt.HasText("No file open") {
+	if w.reviewOpen || !tt.HasText("Go to File") {
 		t.Errorf("the review stays: %q", tt.Texts())
 	}
 	// Closing it with a file open shows the file.
@@ -239,5 +239,47 @@ func TestLaunch(t *testing.T) {
 	}
 	if !w.reviewVisible() {
 		t.Error("choosing a change does not show the review")
+	}
+}
+
+func TestRecent(t *testing.T) {
+	saved := state.data.Recent
+	defer func() { state.data.Recent = saved }()
+	state.data.Recent = nil
+	a, b, gone := t.TempDir(), t.TempDir(), filepath.Join(t.TempDir(), "gone")
+	for _, r := range []string{gone, a, b, a} {
+		state.setLastRepository(r)
+	}
+	// The latest first, once each, but those gone.
+	if got := state.recent(); len(got) != 2 || got[0] != a || got[1] != b {
+		t.Errorf("recent %q", got)
+	}
+	for range maxRecent + 3 {
+		state.setLastRepository(t.TempDir())
+	}
+	if len(state.data.Recent) != maxRecent {
+		t.Errorf("%d remembered", len(state.data.Recent))
+	}
+	// The welcome lists the others.
+	state.data.Recent = []string{a, b}
+	w, tt := launchTestWindow(t, testRepo(t))
+	state.data.Recent = append([]string{w.repo.Root}, state.data.Recent...)
+	tt.Frame()
+	if !tt.HasText("Recent") || !tt.HasText(filepath.Base(a)) || !tt.HasText(filepath.Base(b)) {
+		t.Errorf("texts %q", tt.Texts())
+	}
+	if _, ok := tt.Find("Open " + filepath.Base(w.repo.Root)); ok {
+		t.Error("the repository open is listed")
+	}
+	// The start's actions act.
+	if err := tt.Click("Go to File"); err != nil {
+		t.Fatal(err)
+	}
+	if !w.quick.open {
+		t.Error("Go to File did not open")
+	}
+	state.clearRecent()
+	if len(state.recent()) != 0 {
+		t.Error("not cleared")
 	}
 }
