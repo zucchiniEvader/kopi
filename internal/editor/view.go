@@ -1157,6 +1157,7 @@ func (ed *Editor) replace(a, z Pos, s string) Pos {
 	}
 	end := ed.buf.Replace(a, z, s)
 	ed.shiftDiagnostics(a, z, end)
+	ed.hl.shift(a, z, end)
 	return end
 }
 

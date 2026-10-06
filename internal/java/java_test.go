@@ -175,3 +175,35 @@ func TestDownload(t *testing.T) {
 		t.Error("a bad download stays")
 	}
 }
+
+func TestLombok(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "service", "api"), 0o755)
+	os.WriteFile(filepath.Join(root, "pom.xml"), []byte("<project><modules><module>service</module></modules></project>"), 0o644)
+	if UsesLombok(root) {
+		t.Error("no Lombok in the parent")
+	}
+	os.WriteFile(filepath.Join(root, "service", "api", "pom.xml"), []byte("<artifactId>lombok</artifactId>"), 0o644)
+	if !UsesLombok(root) {
+		t.Error("a module's Lombok")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, v := range []string{"1.18.9", "1.18.46", "1.18.40"} {
+		dir := filepath.Join(home, ".m2/repository/org/projectlombok/lombok", v)
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, "lombok-"+v+".jar"), nil, 0o644)
+		os.WriteFile(filepath.Join(dir, "lombok-"+v+"-sources.jar"), nil, 0o644)
+	}
+	if got := FindLombok(); filepath.Base(got) != "lombok-1.18.46.jar" {
+		t.Errorf("lombok %q", got)
+	}
+	cmd, err := Command(JDK{Home: "/jdk"}, fakeServerHome(t, t.TempDir()), "/c", "/d", "-javaagent:/l.jar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, jar := slices.Index(cmd.Args, "-javaagent:/l.jar"), slices.Index(cmd.Args, "-jar")
+	if agent < 0 || agent > jar {
+		t.Errorf("args %q", cmd.Args)
+	}
+}

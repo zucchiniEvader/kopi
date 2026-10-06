@@ -1,7 +1,10 @@
 package editor
 
 import (
+	"slices"
+
 	"bytes"
+	"github.com/egoist/godiff/internal/highlight"
 	"strings"
 	"testing"
 	"time"
@@ -359,5 +362,48 @@ func TestLinkAndMenu(t *testing.T) {
 	}
 	if len(asked) != 1 || asked[0] != (Pos{0, 13}) {
 		t.Errorf("asked %v", asked)
+	}
+}
+
+func TestSemanticTokens(t *testing.T) {
+	ed, tt := open(t, "List<String> names;\nint n;")
+	tt.Frame()
+	// The lexer sees names: List is no class to it.
+	if c := ed.ClassAt(Pos{0, 1}); c != highlight.Plain {
+		t.Fatalf("List is %v before", c)
+	}
+	v := ed.Buffer().Version()
+	ed.SetSemanticTokens(v, [][]highlight.Seg{{{Start: 0, End: 4, Class: highlight.ClassName}, {Start: 5, End: 11, Class: highlight.ClassName}}, nil})
+	if ed.ClassAt(Pos{0, 1}) != highlight.ClassName || ed.ClassAt(Pos{0, 6}) != highlight.ClassName {
+		t.Error("the server's classes do not color")
+	}
+	// int keeps the lexer's class.
+	if ed.ClassAt(Pos{1, 0}) == highlight.Plain {
+		t.Error("the lexer's class is gone")
+	}
+	// An edit drops the edited lines' classes, and moves the others'.
+	ed.SetSelection(Selection{Pos{1, 0}, Pos{1, 0}})
+	tt.Key(0, ui.KeyEnter)
+	if ed.ClassAt(Pos{0, 1}) != highlight.ClassName {
+		t.Error("the classes of the line before went")
+	}
+	ed.SetSelection(Selection{Pos{0, 0}, Pos{0, 0}})
+	tt.Type("x")
+	if ed.ClassAt(Pos{0, 2}) == highlight.ClassName {
+		t.Error("the edited line keeps stale classes")
+	}
+	ed.SetSemanticTokens(v, [][]highlight.Seg{{{Start: 0, End: 2, Class: highlight.Keyword}}})
+	if ed.ClassAt(Pos{0, 0}) == highlight.Keyword {
+		t.Error("stale tokens applied")
+	}
+}
+
+func TestOverlay(t *testing.T) {
+	lex := []highlight.Seg{{Start: 0, End: 10, Class: highlight.Comment}, {Start: 12, End: 14, Class: highlight.String}}
+	sem := []highlight.Seg{{Start: 2, End: 4, Class: highlight.ClassName}, {Start: 13, End: 15, Class: highlight.Function}}
+	got := overlay(lex, sem)
+	want := []highlight.Seg{{Start: 0, End: 2, Class: highlight.Comment}, {Start: 2, End: 4, Class: highlight.ClassName}, {Start: 4, End: 10, Class: highlight.Comment}, {Start: 12, End: 13, Class: highlight.String}, {Start: 13, End: 15, Class: highlight.Function}}
+	if !slices.Equal(got, want) {
+		t.Errorf("overlay\n%v\nwant\n%v", got, want)
 	}
 }

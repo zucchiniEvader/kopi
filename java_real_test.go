@@ -2,11 +2,14 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/egoist/godiff/internal/editor"
+	"github.com/egoist/godiff/internal/highlight"
+	"github.com/egoist/godiff/internal/java"
 )
 
 // TestRealJDTLS runs the real jdtls, downloaded when the machine has none,
@@ -94,4 +97,80 @@ func TestRealJDTLS(t *testing.T) {
 	if !strings.HasPrefix(jdk.title(), "String.") || jdk.abs != "" || !strings.Contains(jdk.ed.Text(), "class String") {
 		t.Errorf("tab %q", jdk.title())
 	}
+}
+
+// TestRealJDTLSLombok runs jdtls on a Maven project with Lombok, which
+// Maven must have downloaded: GODIFF_JDTLS=1.
+func TestRealJDTLSLombok(t *testing.T) {
+	if os.Getenv("GODIFF_JDTLS") == "" {
+		t.Skip("GODIFF_JDTLS=1 runs the real Java language server")
+	}
+	if java.FindLombok() == "" {
+		t.Skip("no Lombok in ~/.m2 or Gradle's cache")
+	}
+	dir := testRepo(t)
+	writeFile(t, dir, "pom.xml", `<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>demo</artifactId>
+  <version>1.0</version>
+  <properties><maven.compiler.release>21</maven.compiler.release></properties>
+  <dependencies>
+    <dependency><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><version>`+strings.TrimSuffix(strings.TrimPrefix(filepath.Base(java.FindLombok()), "lombok-"), ".jar")+`</version><scope>provided</scope></dependency>
+  </dependencies>
+</project>
+`)
+	writeFile(t, dir, "src/main/java/com/example/Person.java", "package com.example;\n\nimport lombok.Data;\n\n@Data\npublic class Person {\n    private String name;\n}\n")
+	main := "package com.example;\n\nimport java.util.List;\n\npublic class App {\n    public static void main(String[] args) {\n        Person p = new Person();\n        p.setName(\"Ada\");\n        List<String> names = List.of(p.getName());\n    }\n}\n"
+	writeFile(t, dir, "src/main/java/com/example/App.java", main)
+	w, tt := newTestWindow(t, dir)
+	w.settings.JavaHome = os.Getenv("GODIFF_JAVA_HOME")
+	w.posted = make(chan func(), 4096)
+	w.javaLaunch = launchJava
+	defer w.javaStop()
+	wait := func(what string, d time.Duration, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(d)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("waiting for %s: %s %s", what, w.javaStatus(), w.java.detail)
+			}
+			select {
+			case fn := <-w.posted:
+				fn()
+			case <-time.After(20 * time.Millisecond):
+			}
+			tt.Frame()
+		}
+	}
+	w.openFile("src/main/java/com/example/App.java", 0)
+	e := w.activeTab()
+	wait("the project", 5*time.Minute, func() bool { return w.java.state == javaReady && len(w.java.order) == 0 })
+	// List, a class of the JDK, has the class's color once the server
+	// says what it is.
+	wait("semantic tokens", time.Minute, func() bool { return e.ed.ClassAt(editor.Pos{Line: 8, Col: 9}) == highlight.ClassName })
+	if c := e.ed.ClassAt(editor.Pos{Line: 7, Col: 11}); c != highlight.Function {
+		t.Errorf("setName is %v", c)
+	}
+	// Lombok's methods are no errors, and lead to the class.
+	time.Sleep(2 * time.Second)
+	wait("diagnostics", 5*time.Second, func() bool { return true })
+	for _, d := range e.ed.Diagnostics() {
+		if d.Severity == editor.SeverityError {
+			t.Errorf("error: %s", d.Message)
+		}
+	}
+	col := strings.Index(strings.Split(main, "\n")[8], "getName") + 2
+	e.ed.OnDefinition(editor.Pos{Line: 8, Col: col})
+	wait("getName's definition", time.Minute, func() bool { return w.activeTab() != e })
+	got := w.activeTab()
+	t.Logf("getName -> %s %v %q", got.title(), got.ed.Selection().Caret, strings.TrimSpace(got.ed.Buffer().Line(got.ed.Selection().Caret.Line)))
+	if got.title() != "Person.java" {
+		t.Errorf("went to %s", got.title())
+	}
+	w.show(e)
+	tt.SetSize(1000, 420)
+	tt.SetScale(2)
+	tt.Frame()
+	snapshot(t, tt, "lombok")
 }

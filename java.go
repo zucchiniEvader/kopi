@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/egoist/godiff/internal/editor"
+	"github.com/egoist/godiff/internal/highlight"
 	"github.com/egoist/godiff/internal/java"
 	"github.com/egoist/godiff/internal/lsp"
 	"github.com/egoist/godiff/internal/proc"
@@ -48,6 +49,8 @@ type javaServer struct {
 	errors   map[string]int
 	progress map[string]*work // the work going on, by token
 	order    []string         // the tokens, oldest first
+	// legend names the server's semantic token types and modifiers.
+	legend semanticLegend
 }
 
 // work is a task the server reports the progress of.
@@ -144,7 +147,14 @@ func (w *window) javaStart() {
 		conn := lsp.NewConn(rwc, &javaHandler{w: w, gen: gen})
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		if err := conn.Call(ctx, "initialize", initializeParams(root), nil); err != nil {
+		var init struct {
+			Capabilities struct {
+				SemanticTokensProvider *struct {
+					Legend semanticLegend `json:"legend"`
+				} `json:"semanticTokensProvider"`
+			} `json:"capabilities"`
+		}
+		if err := conn.Call(ctx, "initialize", initializeParams(root), &init); err != nil {
 			conn.Close()
 			fail(fmt.Errorf("the Java language server did not start: %w", err))
 			return
@@ -157,6 +167,9 @@ func (w *window) javaStart() {
 			}
 			j.conn, j.state, j.status = conn, javaReady, ""
 			j.stop = func() { shutdown(conn) }
+			if p := init.Capabilities.SemanticTokensProvider; p != nil {
+				j.legend = p.Legend
+			}
 			for _, e := range w.editors {
 				if e.ed != nil && e.abs != "" && isJava(e.path) {
 					w.javaOpen(e)
@@ -208,6 +221,7 @@ func initializeParams(root string) map[string]any {
 		"capabilities": map[string]any{
 			"workspace": map[string]any{
 				"configuration":    true,
+				"semanticTokens":   map[string]any{"refreshSupport": true},
 				"workspaceFolders": true,
 				"workspaceEdit":    map[string]any{"documentChanges": false},
 			},
@@ -216,6 +230,12 @@ func initializeParams(root string) map[string]any {
 				"hover":              map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
 				"definition":         map[string]any{"linkSupport": true},
 				"publishDiagnostics": map[string]any{"relatedInformation": false},
+				"semanticTokens": map[string]any{
+					"requests":       map[string]any{"full": true},
+					"tokenTypes":     semanticTypes,
+					"tokenModifiers": []string{"static", "readonly", "declaration", "deprecated", "abstract"},
+					"formats":        []string{"relative"},
+				},
 			},
 			"window": map[string]any{"workDoneProgress": true},
 			"general": map[string]any{
@@ -229,8 +249,12 @@ func initializeParams(root string) map[string]any {
 			},
 			"settings": map[string]any{
 				"java": map[string]any{
-					"autobuild":           map[string]any{"enabled": true},
-					"maxConcurrentBuilds": 1,
+					"autobuild": map[string]any{"enabled": true},
+					// Classes of libraries without their source show
+					// decompiled.
+					"contentProvider":      map[string]any{"preferred": "fernflower"},
+					"semanticHighlighting": map[string]any{"enabled": true},
+					"maxConcurrentBuilds":  1,
 					"import": map[string]any{
 						"maven":  map[string]any{"enabled": true},
 						"gradle": map[string]any{"enabled": true},
@@ -288,6 +312,10 @@ func (h *javaHandler) Notify(method string, params json.RawMessage) {
 						break
 					}
 				}
+				if len(j.order) == 0 {
+					// The project loaded: the names have their meaning.
+					w.javaSemanticAll()
+				}
 				return
 			}
 			k := j.progress[token]
@@ -309,7 +337,8 @@ func (h *javaHandler) Notify(method string, params json.RawMessage) {
 			Type    int    `json:"type"`
 			Message string `json:"message"`
 		}
-		if json.Unmarshal(params, &p) == nil && p.Type == 1 {
+		// The server's own log, which its log file has too.
+		if json.Unmarshal(params, &p) == nil && p.Type == 1 && debugFrames {
 			log.Printf("jdtls: %s", p.Message)
 		}
 	}
@@ -324,6 +353,14 @@ func (h *javaHandler) Request(method string, params json.RawMessage) (any, error
 		json.Unmarshal(params, &p)
 		return make([]any, len(p.Items)), nil
 	case "client/registerCapability", "client/unregisterCapability", "window/workDoneProgress/create", "window/showMessageRequest":
+		return nil, nil
+	case "workspace/semanticTokens/refresh":
+		w, gen := h.w, h.gen
+		w.post(func() {
+			if w.java.gen == gen {
+				w.javaSemanticAll()
+			}
+		})
 		return nil, nil
 	case "workspace/applyEdit":
 		return map[string]any{"applied": false}, nil
@@ -344,6 +381,7 @@ func (w *window) javaOpen(e *editorTab) {
 	j.conn.Notify("textDocument/didOpen", lsp.DidOpenTextDocumentParams{TextDocument: lsp.TextDocumentItem{
 		URI: e.uri, LanguageID: "java", Version: 1, Text: strings.Join(bufferLines(e.ed.Buffer()), "\n"),
 	}})
+	w.javaSemantic(e)
 }
 
 // javaChange tells the server of an edit, before the buffer changes.
@@ -364,7 +402,21 @@ func (w *window) javaChange(e *editorTab, a, z editor.Pos, text string) {
 		TextDocument:   lsp.VersionedTextDocumentIdentifier{URI: e.uri, Version: version},
 		ContentChanges: []lsp.TextDocumentContentChangeEvent{{Range: &r, Text: text}},
 	})
+	// The meaning of the names, once the typing pauses.
+	e.semGen++
+	g := e.semGen
+	time.AfterFunc(semanticDelay, func() {
+		w.post(func() {
+			if e.semGen == g {
+				w.javaSemantic(e)
+			}
+		})
+	})
 }
+
+// semanticDelay is how long the typing pauses before the editor asks for
+// the meaning of the names again.
+var semanticDelay = 300 * time.Millisecond
 
 // javaSaved and javaClosed tell the server of a document saved or
 // closed.
@@ -483,10 +535,16 @@ func (w *window) javaHover(e *editorTab, p editor.Pos) {
 	}()
 }
 
-// javaDefinition goes to the definition of what is at p.
+// javaDefinition goes to the definition of what is at p, or says why it
+// does not.
 func (w *window) javaDefinition(e *editorTab, p editor.Pos) {
 	j := &w.java
-	if j.state != javaReady {
+	switch j.state {
+	case javaStarting, javaIdle:
+		e.ed.Notice(p, "Java is starting: definitions come once it runs.")
+		return
+	case javaFailed:
+		e.ed.Notice(p, "The Java language server is unavailable. "+j.detail)
 		return
 	}
 	var raw json.RawMessage
@@ -498,12 +556,16 @@ func (w *window) javaDefinition(e *editorTab, p editor.Pos) {
 			return
 		}
 		loc, ok := firstLocation(raw)
-		if !ok {
-			return
-		}
 		w.post(func() {
-			if w.java.gen == gen {
+			switch {
+			case w.java.gen != gen:
+			case ok:
 				w.openLocation(loc)
+			case len(w.java.order) > 0:
+				e.ed.Notice(p, "No definition found yet: Java is still loading the project.")
+			default:
+				a, z := e.ed.Buffer().WordAt(p)
+				e.ed.Notice(p, fmt.Sprintf("No definition found for %s.", e.ed.Buffer().Slice(a, z)))
 			}
 		})
 	}()
@@ -554,13 +616,19 @@ func (w *window) openLocation(loc lsp.Location) {
 	}
 	var text string
 	done := j.conn.Go(context.Background(), "java/classFileContents", lsp.TextDocumentIdentifier{URI: loc.URI}, &text)
+	from := w.activeTab()
 	go func() {
-		if err := <-done; err != nil || text == "" {
-			return
-		}
+		err := <-done
 		w.post(func() {
+			if err != nil || text == "" {
+				if from != nil && from.ed != nil {
+					from.ed.Notice(from.ed.Selection().Caret, "No source for "+className(loc.URI)+".")
+				}
+				return
+			}
 			e := w.openText(loc.URI, className(loc.URI), text)
 			e.ed.GoToPos(editorPos(e.ed.Buffer(), loc.Range.Start))
+			w.javaSemantic(e)
 		})
 	}()
 }
@@ -654,7 +722,13 @@ func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, error) {
 	key := filepath.Base(root) + "-" + hex.EncodeToString(sum[:4])
 	data := filepath.Join(cache, "jdtls-workspaces", key)
 	config := filepath.Join(cache, "jdtls-config", filepath.Base(home))
-	cmd, err := java.Command(jdk, home, config, data)
+	var jvmArgs []string
+	if java.UsesLombok(root) {
+		if jar := java.FindLombok(); jar != "" {
+			jvmArgs = append(jvmArgs, "-javaagent:"+jar)
+		}
+	}
+	cmd, err := java.Command(jdk, home, config, data, jvmArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -714,4 +788,112 @@ func (p *process) Close() error {
 		}()
 	})
 	return nil
+}
+
+// semanticLegend names the token types and modifiers of semantic tokens,
+// by their index.
+type semanticLegend struct {
+	TokenTypes     []string `json:"tokenTypes"`
+	TokenModifiers []string `json:"tokenModifiers"`
+}
+
+// semanticTypes are the token types the editor colors.
+var semanticTypes = []string{"class", "interface", "enum", "record", "type", "typeParameter", "annotation", "decorator", "annotationMember",
+	"method", "property", "recordComponent", "enumMember", "variable", "parameter", "namespace", "keyword", "modifier"}
+
+// semanticClass returns the class that colors a token of a type with
+// modifiers, false for one keeping the lexer's color.
+func semanticClass(typ string, mods map[string]bool) (highlight.Class, bool) {
+	switch typ {
+	case "class", "interface", "enum", "record", "type", "typeParameter":
+		return highlight.ClassName, true
+	case "annotation", "decorator": // jdtls's name for annotations
+		return highlight.Attribute, true
+	case "method":
+		return highlight.Function, true
+	case "enumMember":
+		return highlight.LangConst, true
+	case "property", "recordComponent", "annotationMember":
+		if mods["static"] && mods["readonly"] {
+			return highlight.LangConst, true // constants
+		}
+		return highlight.Property, true
+	}
+	return 0, false
+}
+
+// decodeTokens reads semantic tokens, five numbers each, relative to the
+// one before, into the runs of bytes of each line of b.
+func decodeTokens(data []uint32, legend semanticLegend, b *editor.Buffer) [][]highlight.Seg {
+	out := make([][]highlight.Seg, b.Lines())
+	line, ch := 0, 0
+	for i := 0; i+5 <= len(data); i += 5 {
+		dl, ds, n, typ, bits := int(data[i]), int(data[i+1]), int(data[i+2]), int(data[i+3]), data[i+4]
+		if dl > 0 {
+			line, ch = line+dl, ds
+		} else {
+			ch += ds
+		}
+		if line >= len(out) {
+			break
+		}
+		if typ >= len(legend.TokenTypes) {
+			continue
+		}
+		mods := map[string]bool{}
+		for k, m := range legend.TokenModifiers {
+			if bits&(1<<k) != 0 {
+				mods[m] = true
+			}
+		}
+		class, ok := semanticClass(legend.TokenTypes[typ], mods)
+		if !ok {
+			continue
+		}
+		l := b.Line(line)
+		a, z := lsp.ByteCol(l, ch), lsp.ByteCol(l, ch+n)
+		if z > a {
+			out[line] = append(out[line], highlight.Seg{Start: int32(a), End: int32(z), Class: class})
+		}
+	}
+	return out
+}
+
+// javaSemantic asks the server for the meaning of the names of a
+// document, which color it.
+func (w *window) javaSemantic(e *editorTab) {
+	j := &w.java
+	if j.state != javaReady || e.ed == nil || len(j.legend.TokenTypes) == 0 {
+		return
+	}
+	if _, ok := j.docs[e.uri]; !ok && e.abs != "" {
+		return
+	}
+	version := e.ed.Buffer().Version()
+	var res struct {
+		Data []uint32 `json:"data"`
+	}
+	params := map[string]any{"textDocument": lsp.TextDocumentIdentifier{URI: e.uri}}
+	done := j.conn.Go(context.Background(), "textDocument/semanticTokens/full", params, &res)
+	gen := j.gen
+	go func() {
+		if err := <-done; err != nil {
+			return
+		}
+		w.post(func() {
+			if w.java.gen == gen && e.ed.Buffer().Version() == version {
+				e.ed.SetSemanticTokens(version, decodeTokens(res.Data, w.java.legend, e.ed.Buffer()))
+			}
+		})
+	}()
+}
+
+// javaSemanticAll asks for the meaning of the names of every Java
+// document open.
+func (w *window) javaSemanticAll() {
+	for _, e := range w.editors {
+		if isJava(e.path) {
+			w.javaSemantic(e)
+		}
+	}
 }

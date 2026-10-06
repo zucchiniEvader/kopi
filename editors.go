@@ -29,6 +29,8 @@ type editorTab struct {
 	uri  string
 	ed   *editor.Editor
 	err  string
+	// semGen counts the edits, to ask for semantic tokens once they stop.
+	semGen int
 }
 
 // repoPath returns the path in the repository of an absolute path, with

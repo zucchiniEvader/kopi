@@ -262,8 +262,9 @@ func extract(r io.Reader, dir string) error {
 
 // Command returns the command running the jdtls installation at home with
 // jdk: its configuration shared and read-only, with what it writes in
-// configDir, and the data of the workspace in dataDir.
-func Command(jdk JDK, home, configDir, dataDir string) (*exec.Cmd, error) {
+// configDir, and the data of the workspace in dataDir; jvmArgs go to the
+// Java running it, as the agent of Lombok.
+func Command(jdk JDK, home, configDir, dataDir string, jvmArgs ...string) (*exec.Cmd, error) {
 	jar, err := launcher(home)
 	if err != nil {
 		return nil, fmt.Errorf("%s is no jdtls installation", home)
@@ -291,10 +292,9 @@ func Command(jdk JDK, home, configDir, dataDir string) (*exec.Cmd, error) {
 		"--add-modules=ALL-SYSTEM",
 		"--add-opens", "java.base/java.util=ALL-UNNAMED",
 		"--add-opens", "java.base/java.lang=ALL-UNNAMED",
-		"-jar", jar,
-		"-configuration", configDir,
-		"-data", dataDir,
 	}
+	args = append(args, jvmArgs...)
+	args = append(args, "-jar", jar, "-configuration", configDir, "-data", dataDir)
 	cmd := exec.Command(jdk.Java(), args...)
 	cmd.Env = append(os.Environ(), "JAVA_HOME="+jdk.Home)
 	return cmd, nil

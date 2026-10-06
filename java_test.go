@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egoist/godiff/internal/editor"
+	"github.com/egoist/godiff/internal/highlight"
 	"github.com/egoist/godiff/internal/lsp"
 	"github.com/egoist/mygo/ui"
 )
@@ -70,10 +71,22 @@ func (f *fakeJDTLS) Request(method string, params json.RawMessage) (any, error) 
 	json.Unmarshal(params, &p)
 	switch method {
 	case "initialize":
-		return map[string]any{"capabilities": map[string]any{"hoverProvider": true}}, nil
+		return map[string]any{"capabilities": map[string]any{"hoverProvider": true, "semanticTokensProvider": map[string]any{
+			"legend": map[string]any{"tokenTypes": []string{"class", "method", "property"}, "tokenModifiers": []string{"static", "readonly"}},
+			"full":   true,
+		}}}, nil
+	case "textDocument/semanticTokens/full":
+		if p.TextDocument.URI == "" {
+			return nil, &lsp.Error{Code: -32603, Message: "no textDocument"}
+		}
+		// Main, a class, on line 0; String on line 2, then s, a field.
+		return map[string]any{"data": []uint32{0, 6, 4, 0, 0, 2, 4, 6, 0, 0, 0, 7, 1, 2, 0}}, nil
 	case "textDocument/hover":
 		return map[string]any{"contents": map[string]string{"kind": "markdown", "value": "```java\nvoid Main.f()\n```\nDoes **f**."}}, nil
 	case "textDocument/definition":
+		if p.Position.Line == 3 {
+			return []any{}, nil
+		}
 		if p.Position.Line == 2 {
 			// String, in the JDK.
 			return []map[string]any{{"uri": "jdt://contents/java.base/java.lang/String.class?=x", "range": lsp.Range{Start: lsp.Position{Line: 3}}}}, nil
@@ -141,6 +154,15 @@ func TestJavaLanguageServer(t *testing.T) {
 		t.Errorf("the status bar shows no error: %q", tt.Texts())
 	}
 
+	// Names have the colors of their meaning.
+	pump(t, w, tt, "semantic tokens", func() bool { return e.ed.ClassAt(editor.Pos{Line: 2, Col: 5}) == highlight.ClassName })
+	if c := e.ed.ClassAt(editor.Pos{Line: 0, Col: 7}); c != highlight.ClassName {
+		t.Errorf("Main is %v", c)
+	}
+	if c := e.ed.ClassAt(editor.Pos{Line: 2, Col: 11}); c != highlight.Property {
+		t.Errorf("s is %v", c)
+	}
+
 	// Edits go as ranges in UTF-16, versioned.
 	e.ed.SetSelection(editor.Selection{Anchor: editor.Pos{Line: 1, Col: 4}, Caret: editor.Pos{Line: 1, Col: 4}})
 	tt.Type("世")
@@ -173,6 +195,11 @@ func TestJavaLanguageServer(t *testing.T) {
 	if jdk.ed.Language() != "Java" || !tt.HasText("String.class (read-only)") {
 		t.Errorf("language %q, texts %q", jdk.ed.Language(), tt.Texts())
 	}
+
+	// Nothing to go to says so.
+	w.show(e)
+	e.ed.OnDefinition(editor.Pos{Line: 3, Col: 0})
+	pump(t, w, tt, "the notice", func() bool { return strings.HasPrefix(e.ed.HoverText(), "No definition found") })
 
 	// Saving and closing.
 	w.show(e)

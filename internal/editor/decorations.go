@@ -2,6 +2,8 @@ package editor
 
 import (
 	"slices"
+
+	"github.com/egoist/godiff/internal/highlight"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -337,4 +339,38 @@ func (ed *Editor) pointLink(mods ui.Modifiers, x, y float32) {
 		return
 	}
 	ed.link = linkState{active: true, from: a, to: z}
+}
+
+// PointOf returns where p is in the view: the left of its rune, and the
+// middle of its line, as a popup at the caret or a test needs.
+func (ed *Editor) PointOf(p Pos) (x, y float32) {
+	p = ed.buf.Clamp(p)
+	return ed.gutterWidth() + padLeft - ed.scrollX + ed.xOf(p), padTop + float32(p.Line)*ed.lineH - ed.scrollY + ed.lineH/2
+}
+
+// SetSemanticTokens colors the text by the meaning of its names, as a
+// language server finds it, over the lexer's colors: the runs of bytes of
+// each line, for the text as it was at version (Buffer.Version), which
+// edits since make stale.
+func (ed *Editor) SetSemanticTokens(version int, lines [][]highlight.Seg) {
+	if version == ed.buf.Version() {
+		ed.hl.sem = lines
+	}
+}
+
+// ClassAt returns the class that colors the byte at p.
+func (ed *Editor) ClassAt(p Pos) highlight.Class {
+	ed.hl.update(ed.buf)
+	for _, s := range ed.hl.spans(p.Line) {
+		if int(s.Start) <= p.Col && p.Col < int(s.End) {
+			return s.Class
+		}
+	}
+	return highlight.Plain
+}
+
+// Notice shows a short message at p, in the hover's box, until the next
+// key, click or move of the pointer.
+func (ed *Editor) Notice(p Pos, text string) {
+	ed.hover = hoverState{active: true, pos: ed.buf.Clamp(p), fired: true, keys: true, text: text}
 }
