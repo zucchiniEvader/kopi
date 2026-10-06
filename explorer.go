@@ -32,8 +32,9 @@ type explorer struct {
 	sel      string
 	list     ui.ListState
 	el       *ui.Element
-	// focus gives the tree the keys in the next frame.
-	focus bool
+	// focus gives the tree the keys in the next frame; scroll shows the
+	// row chosen.
+	focus, scroll bool
 }
 
 // reset forgets what was read, to read it again, keeping the directories
@@ -233,6 +234,10 @@ func (w *window) explorerView(c *ui.Context) {
 
 	// The keys move the choice, open and close directories, and open files.
 	at := slices.IndexFunc(rows, func(r explorerRow) bool { return r.key == e.sel })
+	if e.scroll && at >= 0 {
+		e.list.ScrollIntoView(at)
+		e.scroll = false
+	}
 	move := func(i int) {
 		if i >= 0 && i < len(rows) {
 			e.sel = rows[i].key

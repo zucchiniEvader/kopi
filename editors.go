@@ -365,6 +365,7 @@ func (w *window) editorStyle(t *ui.Theme, pal *palette) editor.Style {
 func (w *window) editorTabs(c *ui.Context, pal *palette) {
 	t := c.Theme()
 	closing := -1
+	var menuAction func()
 	ui.ScrollHorizontal(c).Shrink(1).MinWidth(0).FillHeight().Label("Tabs").Children(func() {
 		ui.Row(c).Height(titleBarHeight).Children(func() {
 			tab := func(active, library bool) *ui.Element {
@@ -387,6 +388,11 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 			}
 			if w.reviewOpen {
 				review := tab(w.activeTab() == nil, false).Label("Review")
+				review.ContextMenu(func(m *ui.Menu) {
+					if a := w.tabMenu(c, m, -1); a != nil {
+						menuAction = a
+					}
+				})
 				if review.Clicked() {
 					w.showReview()
 				}
@@ -400,6 +406,11 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 			}
 			for i, e := range w.editors {
 				b := tab(i == w.activeEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
+				b.ContextMenu(func(m *ui.Menu) {
+					if a := w.tabMenu(c, m, i); a != nil {
+						menuAction = a
+					}
+				})
 				if e.library {
 					b.Tooltip(e.origin() + " (read-only)")
 					if e.abs != "" {
@@ -432,6 +443,8 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 		w.closeReview()
 	case closing >= 0:
 		w.closeEditor(closing)
+	case menuAction != nil:
+		menuAction()
 	}
 }
 
@@ -576,4 +589,137 @@ func (w *window) saveAll() {
 			}
 		}
 	}
+}
+
+// tabMenu is the context menu of tab i, -1 for the review's: closing it,
+// the others, those to its right, the saved or all; and for a file, its
+// path, and where it is.
+func (w *window) tabMenu(c *ui.Context, m *ui.Menu, i int) (action func()) {
+	var e *editorTab
+	if i >= 0 && i < len(w.editors) {
+		e = w.editors[i]
+	}
+	var others, right, saved []*editorTab
+	for j, o := range w.editors {
+		if o != e {
+			others = append(others, o)
+		}
+		if i >= 0 && j > i {
+			right = append(right, o)
+		}
+		if o.ed == nil || !o.ed.Dirty() {
+			saved = append(saved, o)
+		}
+	}
+	keep := func() {
+		if e != nil {
+			w.show(e)
+		}
+	}
+	if m.Item("Close").Shortcut(ui.Cmd, ui.KeyW).Chosen() {
+		action = func() {
+			if e != nil {
+				w.closeEditor(slices.Index(w.editors, e))
+			} else {
+				w.closeReview()
+			}
+		}
+	}
+	reviewOther := e != nil && w.reviewOpen
+	if m.Item("Close Others").Disabled(len(others) == 0 && !reviewOther).Chosen() {
+		action = func() { w.closeTabs(others, reviewOther, keep) }
+	}
+	if e != nil && m.Item("Close to the Right").Disabled(len(right) == 0).Chosen() {
+		action = func() { w.closeTabs(right, false, keep) }
+	}
+	if m.Item("Close Saved").Disabled(len(saved) == 0).Chosen() {
+		action = func() { w.closeTabs(saved, false, nil) }
+	}
+	if m.Item("Close All").Chosen() {
+		action = func() { w.closeTabs(w.editors, w.reviewOpen, nil) }
+	}
+	if e == nil || e.abs == "" {
+		return action
+	}
+	rel, inRepo := w.repoPath(e.abs)
+	m.Separator()
+	if m.Item("Copy Path").Chosen() {
+		c.WriteClipboard(e.abs)
+	}
+	if inRepo && m.Item("Copy Relative Path").Chosen() {
+		c.WriteClipboard(rel)
+	}
+	m.Separator()
+	if inRepo && m.Item("Reveal in Explorer").Chosen() {
+		w.tab, w.sidebarShown = tabExplorer, true
+		w.explorer.reveal(rel)
+		w.explorer.scroll = true
+	}
+	if m.Item("Reveal in Finder").Chosen() {
+		mygo.Shell.ShowItemInFolder(e.abs)
+	}
+	if m.Item("Open in External Editor").Chosen() {
+		line := 0
+		if e.ed != nil {
+			line = e.ed.Selection().Caret.Line + 1
+		}
+		w.openExternal(e.path, line)
+	}
+	return action
+}
+
+// closeTabs closes tabs, and the review's with review, asking once
+// whether to save those with unsaved changes; then does after, unless nil.
+func (w *window) closeTabs(tabs []*editorTab, review bool, after func()) {
+	tabs = slices.Clone(tabs)
+	var dirty []string
+	for _, e := range tabs {
+		if e.ed != nil && e.ed.Dirty() {
+			dirty = append(dirty, e.title())
+		}
+	}
+	remove := func() {
+		for _, e := range tabs {
+			if j := slices.Index(w.editors, e); j >= 0 {
+				w.removeEditor(j)
+			}
+		}
+		if review {
+			w.closeReview()
+		}
+		if after != nil {
+			after()
+		}
+	}
+	if len(dirty) == 0 || w.win == nil {
+		remove()
+		return
+	}
+	msg := fmt.Sprintf("Do you want to save the changes you made to %s?", dirty[0])
+	if len(dirty) > 1 {
+		msg = fmt.Sprintf("Do you want to save the changes you made to %d files?", len(dirty))
+	}
+	go func() {
+		r, err := mygo.Dialog.Message(mygo.MessageOptions{
+			Parent: w.win, Type: mygo.MessageWarning, Message: msg,
+			Detail:  "Your changes will be lost if you don't save them.",
+			Buttons: []string{"Save All", "Don't Save", "Cancel"},
+		})
+		if err != nil || r.Button == 2 {
+			return
+		}
+		w.win.Update(func() {
+			if r.Button == 0 {
+				for _, e := range tabs {
+					if e.ed != nil && e.ed.Dirty() {
+						if err := w.writeEditor(e); err != nil {
+							go mygo.Dialog.Error("Could not save "+e.title(), err.Error())
+							return
+						}
+					}
+				}
+			}
+			remove()
+		})
+	}()
 }
