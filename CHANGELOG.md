@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.3
+
+- The tabs scroll with no scroll bar: an edge fades where more tabs are
+  past it, a mouse's wheel scrolls them, and the tab chosen comes into
+  view.
+- Clicking a file in the explorer no longer flashes its row in the accent
+  color: the choice shows gray, and in the accent color only while the keys
+  move it.
+
 ## 0.2.2
 
 - Kopi updates itself: it checks for a new version once a day, and from
