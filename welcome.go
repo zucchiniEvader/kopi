@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"path/filepath"
 
 	"github.com/egoist/mygo/ui"
@@ -17,7 +16,7 @@ type startAction struct {
 // startPanel is the welcome of the main area with no tab open: the app's
 // name, what to start with and its keys, and, with recent, the folders
 // opened before.
-func startPanel(c *ui.Context, pal *palette, subtitle string, actions []startAction, recent bool, extra func()) {
+func startPanel(c *ui.Context, pal *palette, subtitle string, actions []startAction, recent bool) {
 	t := c.Theme()
 	ui.Scroll(c).Grow(1).Children(func() {
 		ui.Column(c).Grow(1).Center().Padding(48, 24).Children(func() {
@@ -26,9 +25,6 @@ func startPanel(c *ui.Context, pal *palette, subtitle string, actions []startAct
 					ui.Text(c, "Kopi").FontSize(30).Bold().TextColor(t.Text.Alpha(0.8))
 					ui.Text(c, subtitle).FontSize(13).TextColor(t.TextMuted)
 				})
-				if extra != nil {
-					extra()
-				}
 				startSection(c, "Start", func() {
 					for _, a := range actions {
 						startRow(c, pal, a)
@@ -106,21 +102,6 @@ func (w *window) nothingOpen(c *ui.Context, pal *palette) {
 		{"Run or Debug a Main Class", "⌃F5 / F5", func() { w.tab, w.sidebarShown = tabRun, true }},
 		{"Open Folder", "⌘O", openFolder},
 	}
-	var extra func()
-	if n := len(w.files); n > 0 && w.source.kind == sourceWorkingTree {
-		extra = func() {
-			label := fmt.Sprintf("Review %d Changes", n)
-			if n == 1 {
-				label = "Review 1 Change"
-			}
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if ui.Button(c, label).Clicked() {
-					w.showReview()
-				}
-				ui.Text(c, "⇧⌘R").FontSize(11).TextColor(c.Theme().TextMuted)
-			})
-		}
-	}
 	if w.noFolder() {
 		// A window with no folder: one to open, or one of before.
 		subtitle := "Open a folder to start"
@@ -131,8 +112,8 @@ func (w *window) nothingOpen(c *ui.Context, pal *palette) {
 			{"Open Folder", "⌘O", openFolder},
 			{"New File", "⌘N", w.newFile},
 			{"Command Bar", "⌘K", func() { w.paletteOpen = true }},
-		}, true, nil)
+		}, true)
 		return
 	}
-	startPanel(c, pal, "A native code editor", actions, false, extra)
+	startPanel(c, pal, "A native code editor", actions, false)
 }

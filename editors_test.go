@@ -208,10 +208,12 @@ func TestLaunch(t *testing.T) {
 	if w.explorer.sel == "" {
 		t.Error("Down chose nothing")
 	}
-	// The review opens from the button, and closes.
-	if err := tt.Click("Review 4 Changes"); err != nil {
-		t.Fatalf("%v; %q", err, tt.Texts())
+	// No button opens the review, which ⇧⌘R opens, and which closes.
+	if tt.HasText("Review 4 Changes") {
+		t.Error("the start shows a button to review the changes")
 	}
+	w.showReview()
+	tt.Frame()
 	if _, tab := tt.Find("Close Review"); !w.reviewVisible() || !tab {
 		t.Fatal("the review does not show")
 	}
