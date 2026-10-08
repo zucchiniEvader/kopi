@@ -1,0 +1,23 @@
+name: Check the signing secrets
+
+# Says what CSC_LINK holds, without showing it: run by hand.
+on: workflow_dispatch
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          echo "CSC_LINK: ${#CSC_LINK} characters, starting $(printf %s "$CSC_LINK" | head -c 4 | tr -c 'A-Za-z0-9+/=' '?')…"
+          printf %s "$CSC_LINK" | base64 --decode > "$RUNNER_TEMP/c.p12" || echo "not base64"
+          echo "decoded: $(wc -c < "$RUNNER_TEMP/c.p12") bytes, $(file -b "$RUNNER_TEMP/c.p12")"
+          echo "certificates:"
+          openssl pkcs12 -in "$RUNNER_TEMP/c.p12" -nokeys -passin env:CSC_KEY_PASSWORD 2>&1 | grep -E "subject|error|invalid|Mac verify" || true
+          echo "private keys: $(openssl pkcs12 -in "$RUNNER_TEMP/c.p12" -nocerts -nodes -passin env:CSC_KEY_PASSWORD 2>/dev/null | grep -c 'PRIVATE KEY-----' || true)"
+          security create-keychain -p x "$RUNNER_TEMP/k.keychain-db"
+          security import "$RUNNER_TEMP/c.p12" -k "$RUNNER_TEMP/k.keychain-db" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign; echo "import: exit $?"
+          security find-identity -p codesigning "$RUNNER_TEMP/k.keychain-db"
+          rm "$RUNNER_TEMP/c.p12"
