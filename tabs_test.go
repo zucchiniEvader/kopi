@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/editor"
 )
 
 // rightClickTab opens the context menu of a file's tab.
@@ -88,5 +90,47 @@ func TestTabMenu(t *testing.T) {
 	tt.Frame()
 	if w.tab != tabExplorer || !w.explorer.open["src"] || w.explorer.sel != "src/new.go" {
 		t.Errorf("tab %d, open %v, chose %q", w.tab, w.explorer.open, w.explorer.sel)
+	}
+}
+
+// TestTabsScroll scrolls the tabs with no bar: the tab chosen comes into
+// view, and a click just below them reaches the editor.
+func TestTabsScroll(t *testing.T) {
+	dir := testRepo(t)
+	for i := range 12 {
+		writeFile(t, dir, fmt.Sprintf("src/SomeLongClassName%d.java", i), "class A {}\n\nclass B {}\n")
+	}
+	w, tt := launchTestWindow(t, dir)
+	for i := range 12 {
+		w.openFile(fmt.Sprintf("src/SomeLongClassName%d.java", i), 0)
+	}
+	tt.Frame()
+	tt.Frame()
+	if s := w.tabScroll; s.MaxX <= 0 || s.X != s.MaxX {
+		t.Errorf("the last tab opened is not in view: %+v", s)
+	}
+	w.activeEditor = 0
+	tt.Frame()
+	tt.Frame()
+	if w.tabScroll.X != 0 {
+		t.Errorf("the first tab chosen is not in view: %+v", w.tabScroll)
+	}
+	r, _ := tt.Find("Tabs")
+	// A mouse's wheel scrolls them sideways.
+	tt.Scroll(r.X+100, r.Y+10, 0, 200)
+	tt.Frame()
+	if w.tabScroll.X != 200 {
+		t.Errorf("the wheel scrolled the tabs to %v", w.tabScroll.X)
+	}
+	if r.H > titleBarHeight {
+		t.Errorf("the tabs reach %v below the toolbar, where their bar would show", r.H-titleBarHeight)
+	}
+	e := w.activeTab()
+	at := editor.Pos{Line: 2}
+	e.ed.SetSelection(editor.Selection{Anchor: at, Caret: at})
+	tt.ClickAt(r.X+200, r.Y+titleBarHeight+8)
+	tt.Frame()
+	if e.ed.Selection().Caret.Line != 0 {
+		t.Errorf("the click below the tabs missed the editor: caret %v", e.ed.Selection().Caret)
 	}
 }

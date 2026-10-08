@@ -199,6 +199,10 @@ type window struct {
 
 	// gitShown is whether the last frame showed the Git tab.
 	gitShown bool
+	// tabScroll is how far the tabs scroll; tabShown the path of the tab
+	// last brought into view.
+	tabScroll ui.ScrollState
+	tabShown  string
 }
 
 var (

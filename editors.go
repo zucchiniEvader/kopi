@@ -358,6 +358,13 @@ func (w *window) editorStyle(t *ui.Theme, pal *palette) editor.Style {
 	return s
 }
 
+// tabFade is how wide an edge of the tabs fades, and tabBarRoom the room
+// below them where their scroll bar draws, out of sight.
+const (
+	tabFade    = 28
+	tabBarRoom = 16
+)
+
 // editorTabs is the row of tabs above the main area while files are open:
 // the review, then the files.
 // The tabs show in the toolbar, its height, the one chosen on the code's
@@ -366,76 +373,113 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 	t := c.Theme()
 	closing := -1
 	var menuAction func()
-	ui.ScrollHorizontal(c).Shrink(1).MinWidth(0).FillHeight().Label("Tabs").Children(func() {
-		ui.Row(c).Height(titleBarHeight).Children(func() {
-			tab := func(active, library bool) *ui.Element {
-				b := ui.ButtonBase(c).FillHeight().Padding(0, 6, 0, 12).Gap(6).Shrink(0).BorderWidth(0, 1, 0, 0).BorderColor(pal.cardBorder).TextColor(t.TextMuted)
-				switch {
-				case active && library:
-					// A library's document is no source of the
-					// repository: lighter, its mark muted.
-					b.Background(libraryBg(pal)).DrawOver(func(p *ui.Painter, r ui.Rect) {
-						p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: 2}, t.TextMuted.Alpha(0.6), 0)
-					})
-				case active:
-					b.Background(pal.codeBg).TextColor(t.Text).DrawOver(func(p *ui.Painter, r ui.Rect) {
-						p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: 2}, t.Accent, 0)
-					})
-				case b.Hovered():
-					b.Background(ui.RGBA(127, 127, 127, 0.08))
-				}
-				return b
+	// The tabs scroll with no bar: the scroll area reaches below the
+	// toolbar, where its bar draws, which the box around it cuts off. An
+	// edge fades where more tabs are past it.
+	s := &w.tabScroll
+	bg := pal.headerBg.Alpha(0.6).Over(pal.appBg)
+	ui.Box(c).Shrink(1).MinWidth(0).Height(titleBarHeight).ClipY().Children(func() {
+		fade := func(left bool) {
+			f := ui.Box(c).Absolute().Top(0).Width(tabFade).Height(titleBarHeight).PassThrough()
+			if left {
+				f.Left(0).Gradient(bg, bg.Alpha(0), 90)
+			} else {
+				f.Right(0).Gradient(bg.Alpha(0), bg, 90)
 			}
-			if w.reviewOpen {
-				review := tab(w.activeTab() == nil, false).Label("Review")
-				review.ContextMenu(func(m *ui.Menu) {
-					if a := w.tabMenu(c, m, -1); a != nil {
-						menuAction = a
-					}
-				})
-				if review.Clicked() {
-					w.showReview()
-				}
-				review.Children(func() {
-					ui.Icon(c, iconFileDiff).FontSize(14)
-					ui.Text(c, "Review").FontSize(13).SingleLine()
-					if closeButton(c, "Close Review", w.activeTab() == nil || review.Hovered(), false).Clicked() {
-						closing = -2
-					}
-				})
+		}
+		defer func() {
+			if s.X > 0 {
+				fade(true)
 			}
-			for i, e := range w.editors {
-				b := tab(i == w.activeEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
-				b.ContextMenu(func(m *ui.Menu) {
-					if a := w.tabMenu(c, m, i); a != nil {
-						menuAction = a
+			if s.X < s.MaxX {
+				fade(false)
+			}
+		}()
+		tabs := ui.ScrollHorizontal(c).TrackScroll(s).Shrink(0).Height(titleBarHeight + tabBarRoom).AlignItems(ui.Start).Label("Tabs")
+		// A mouse's wheel, which only goes up and down, scrolls them too.
+		tabs.HandleInput(func(ev ui.InputEvent) bool {
+			if ev.Kind != ui.InputScroll || ev.DX != 0 || ev.DY == 0 || s.MaxX <= 0 {
+				return false
+			}
+			s.X = max(0, min(s.X+ev.DY, s.MaxX))
+			return true
+		})
+		tabs.Children(func() {
+			ui.Row(c).Height(titleBarHeight).Children(func() {
+				tab := func(active, library bool) *ui.Element {
+					b := ui.ButtonBase(c).FillHeight().Padding(0, 6, 0, 12).Gap(6).Shrink(0).BorderWidth(0, 1, 0, 0).BorderColor(pal.cardBorder).TextColor(t.TextMuted)
+					switch {
+					case active && library:
+						// A library's document is no source of the
+						// repository: lighter, its mark muted.
+						b.Background(libraryBg(pal)).DrawOver(func(p *ui.Painter, r ui.Rect) {
+							p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: 2}, t.TextMuted.Alpha(0.6), 0)
+						})
+					case active:
+						b.Background(pal.codeBg).TextColor(t.Text).DrawOver(func(p *ui.Painter, r ui.Rect) {
+							p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: 2}, t.Accent, 0)
+						})
+					case b.Hovered():
+						b.Background(ui.RGBA(127, 127, 127, 0.08))
 					}
-				})
-				if e.library {
-					b.Tooltip(e.origin() + " (read-only)")
-					if e.abs != "" {
-						b.Tooltip(e.origin())
-					}
+					return b
 				}
-				if b.Clicked() {
-					w.activeEditor = i
-					if e.ed != nil {
-						e.ed.Focus()
+				if w.reviewOpen {
+					review := tab(w.activeTab() == nil, false).Label("Review")
+					review.ContextMenu(func(m *ui.Menu) {
+						if a := w.tabMenu(c, m, -1); a != nil {
+							menuAction = a
+						}
+					})
+					if review.Clicked() {
+						w.showReview()
 					}
+					review.Children(func() {
+						ui.Icon(c, iconFileDiff).FontSize(14)
+						ui.Text(c, "Review").FontSize(13).SingleLine()
+						if closeButton(c, "Close Review", w.activeTab() == nil || review.Hovered(), false).Clicked() {
+							closing = -2
+						}
+					})
 				}
-				b.Children(func() {
+				for i, e := range w.editors {
+					b := tab(i == w.activeEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
+					if i == w.activeEditor && w.tabShown != e.path {
+						// A tab chosen, or opened, comes into view.
+						w.tabShown = e.path
+						b.ScrollIntoView()
+					}
+					b.ContextMenu(func(m *ui.Menu) {
+						if a := w.tabMenu(c, m, i); a != nil {
+							menuAction = a
+						}
+					})
 					if e.library {
-						ui.Icon(c, iconPackage).FontSize(14)
-						ui.Text(c, e.title()).FontSize(13).Italic().SingleLine()
-					} else {
-						w.fileIcon(c, e.title(), false, false, t.TextMuted)
-						ui.Text(c, e.title()).FontSize(13).SingleLine()
+						b.Tooltip(e.origin() + " (read-only)")
+						if e.abs != "" {
+							b.Tooltip(e.origin())
+						}
 					}
-					if closeButton(c, "Close "+e.title(), i == w.activeEditor || b.Hovered(), e.ed != nil && e.ed.Dirty()).Clicked() {
-						closing = i
+					if b.Clicked() {
+						w.activeEditor = i
+						if e.ed != nil {
+							e.ed.Focus()
+						}
 					}
-				})
-			}
+					b.Children(func() {
+						if e.library {
+							ui.Icon(c, iconPackage).FontSize(14)
+							ui.Text(c, e.title()).FontSize(13).Italic().SingleLine()
+						} else {
+							w.fileIcon(c, e.title(), false, false, t.TextMuted)
+							ui.Text(c, e.title()).FontSize(13).SingleLine()
+						}
+						if closeButton(c, "Close "+e.title(), i == w.activeEditor || b.Hovered(), e.ed != nil && e.ed.Dirty()).Clicked() {
+							closing = i
+						}
+					})
+				}
+			})
 		})
 	})
 	switch {
