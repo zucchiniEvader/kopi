@@ -358,8 +358,8 @@ func (w *window) syncSides(spec *diffSpec, right *editor.Editor) {
 	spec.scrolled[1], spec.scrolled[0] = right.Scroll()
 }
 
-// diffStatus is the bar below a diff tab: the file, the change, its
-// counts, and one column or two.
+// diffStatus is the bar below a diff tab: the file, the change, and its
+// counts.
 func (w *window) diffStatus(c *ui.Context, pal *palette, e *editorTab) {
 	t := c.Theme()
 	spec := e.diff
@@ -381,52 +381,11 @@ func (w *window) diffStatus(c *ui.Context, pal *palette, e *editorTab) {
 			if spec.unchanged {
 				small("No changes")
 			} else {
-				// Where the caret is among the runs of changes, and the
-				// buttons going to the one before and the next.
-				if n := len(spec.changes); n > 0 && e.ed != nil {
-					at := spec.changeAt(e.ed.Selection().Caret.Line)
-					label := plural(n, "change")
-					if at > 0 {
-						label = fmt.Sprintf("%d of %d", at, n)
-					}
-					small(label).Shrink(0)
-					ui.Row(c).Gap(0).Shrink(0).Children(func() {
-						if iconButton(c, iconArrowUp, "Previous Change (⇧⌥F5)").Size(22, 22).Clicked() {
-							w.goToChange(-1)
-						}
-						if iconButton(c, iconArrowDown, "Next Change (⌥F5)").Size(22, 22).Clicked() {
-							w.goToChange(1)
-						}
-					})
-				}
 				ui.RichText(c,
 					ui.Span{Text: "+" + thousands(spec.additions), Color: pal.addText},
 					ui.Span{Text: " −" + thousands(spec.deletions), Color: pal.delText},
 				).Font(w.codeFont()).FontSize(11).FontWeight(600).Shrink(0)
 			}
-		}
-		// One column, or the sides apart.
-		choice := 0
-		if spec.split {
-			choice = 1
-		}
-		seg := ui.SegmentedBase(c, &choice, 2)
-		seg.Track.Padding(2).Gap(2).Radius(6).Background(ui.RGBA(127, 127, 127, 0.1)).Label("Diff layout").Children(func() {
-			for i, name := range []string{"Inline", "Side by Side"} {
-				s := seg.Segment(i).Padding(1, 8).Radius(4).Label(name)
-				if i == choice {
-					s.Background(pal.codeBg).TextColor(t.Text)
-				} else {
-					s.TextColor(t.TextMuted)
-				}
-				s.Children(func() { ui.Text(c, name).FontSize(11) })
-			}
-		})
-		if split := choice == 1; split != spec.split {
-			spec.split = split
-			w.layoutDiff(e)
-			// The tabs opened next take the same.
-			w.diffSplit = split
 		}
 	})
 }
@@ -444,5 +403,50 @@ func (w *window) openChange(i int) {
 		// An untracked folder, collapsed: its files are not listed.
 	default:
 		w.openWorkTreeDiff(f.File)
+	}
+}
+
+// diffControls are the controls of a diff tab, atop the window at its
+// right: which run of changes the caret is in, the buttons going to the
+// one before and the next, and one column or the sides apart.
+func (w *window) diffControls(c *ui.Context, pal *palette, e *editorTab) {
+	t := c.Theme()
+	spec := e.diff
+	if n := len(spec.changes); n > 0 && e.ed != nil && !spec.unchanged {
+		at := spec.changeAt(e.ed.Selection().Caret.Line)
+		label := plural(n, "change")
+		if at > 0 {
+			label = fmt.Sprintf("%d of %d", at, n)
+		}
+		ui.Text(c, label).Font(w.codeFont()).FontSize(11).TextColor(t.TextMuted).Shrink(0)
+		if iconButton(c, iconArrowUp, "Previous Change (⇧⌥F5)").Clicked() {
+			w.goToChange(-1)
+		}
+		if iconButton(c, iconArrowDown, "Next Change (⌥F5)").Clicked() {
+			w.goToChange(1)
+		}
+	}
+	choice := 0
+	if spec.split {
+		choice = 1
+	}
+	seg := ui.SegmentedBase(c, &choice, 2)
+	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.1)).Label("Diff layout").Children(func() {
+		for i, it := range []struct {
+			icon *ui.SVG
+			name string
+		}{{iconUnified, "Inline"}, {iconSplit, "Side by Side"}} {
+			s := seg.Segment(i).Size(30, 24).Radius(6).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
+			if i == choice {
+				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
+			}
+			s.Children(func() { ui.Icon(c, it.icon).FontSize(15) })
+		}
+	})
+	if split := choice == 1; split != spec.split {
+		spec.split = split
+		w.layoutDiff(e)
+		// The tabs opened next take the same.
+		w.diffSplit = split
 	}
 }

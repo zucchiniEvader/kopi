@@ -140,6 +140,9 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 			ui.Spinner(c).Label("Loading").Size(14, 14)
 		}
 		ui.Spacer(c)
+		if e := w.activeTab(); e != nil && e.diff != nil {
+			w.diffControls(c, pal, e)
+		}
 		if !w.commitOpen && w.reviewVisible() {
 			// Find, the comments, and the layout.
 			if iconButton(c, iconSearch, "Find in diffs").Clicked() {
