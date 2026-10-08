@@ -53,16 +53,25 @@ type langServer struct {
 	stop   func()
 	// docs holds the versions of the documents opened, by URI; diags the
 	// problems of each document; errors the files with errors and the
-	// directories holding them, by path in the repository.
+	// directories holding them, by path in the repository; counted what
+	// each document added to errors.
 	docs     map[string]int
 	diags    map[string][]lsp.Diagnostic
 	errors   map[string]int
+	counted  map[string]counted
 	progress map[string]*work // the work going on, by token
 	order    []string         // the tokens, oldest first
 	// legend names the server's semantic token types and modifiers.
 	legend semanticLegend
 	// debugger tells that the server loaded java-debug.
 	debugger bool
+}
+
+// counted is what a document's errors add to the errors of its file and
+// its directories.
+type counted struct {
+	rel string // the file's path in the repository
+	n   int
 }
 
 // work is a task the server reports the progress of.
@@ -178,9 +187,9 @@ func (w *window) start(s *langServer) {
 	gen := s.gen
 	s.state, s.status, s.detail = serverStarting, "Starting", ""
 	s.docs, s.progress, s.order = map[string]int{}, map[string]*work{}, nil
-	if s.diags == nil {
-		s.diags, s.errors = map[string][]lsp.Diagnostic{}, map[string]int{}
-	}
+	// The new server says the problems again: those of the one before,
+	// as of a workspace started over, are gone.
+	s.diags, s.errors, s.counted = map[string][]lsp.Diagnostic{}, map[string]int{}, map[string]counted{}
 	launch, settings, root := w.launcher(s), w.settings, w.repo.Root
 	java := s == &w.java
 	go func() {
@@ -514,34 +523,48 @@ func editorPos(b *editor.Buffer, p lsp.Position) editor.Pos {
 }
 
 // setDiagnostics keeps the problems a server found in a document, shows
-// them in its editor, and marks the files with errors and their
-// directories.
+// them in its editor, and marks the file, if it has errors, and its
+// directories. It counts the one document again, not every one: a server
+// building a project sends the problems of its files one by one.
 func (w *window) setDiagnostics(s *langServer, uri string, diags []lsp.Diagnostic) {
 	if len(diags) == 0 {
 		delete(s.diags, uri)
 	} else {
 		s.diags[uri] = diags
 	}
-	s.errors = map[string]int{}
-	for u, ds := range s.diags {
-		n := 0
-		for _, d := range ds {
-			if d.Severity == lsp.SeverityError {
-				n++
-			}
+	n := 0
+	for _, d := range diags {
+		if d.Severity == lsp.SeverityError {
+			n++
 		}
-		rel, ok := w.repoPath(lsp.PathOf(u))
-		if n == 0 || !ok {
-			continue
+	}
+	old, had := s.counted[uri]
+	if had {
+		addErrors(s.errors, old.rel, -old.n)
+		delete(s.counted, uri)
+	}
+	if n > 0 {
+		rel, ok := old.rel, had
+		if !had {
+			rel, ok = w.repoPath(lsp.PathOf(uri))
 		}
-		s.errors[rel] += n
-		for d := path.Dir(rel); d != "." && d != "/"; d = path.Dir(d) {
-			s.errors[d] += n
+		if ok {
+			addErrors(s.errors, rel, n)
+			s.counted[uri] = counted{rel, n}
 		}
 	}
 	for _, e := range w.editors {
 		if e.uri == uri {
 			w.applyDiagnostics(e)
+		}
+	}
+}
+
+// addErrors adds n errors to a file and to its directories.
+func addErrors(m map[string]int, rel string, n int) {
+	for p := rel; p != "." && p != "/" && p != ""; p = path.Dir(p) {
+		if m[p] += n; m[p] <= 0 {
+			delete(m, p)
 		}
 	}
 }
