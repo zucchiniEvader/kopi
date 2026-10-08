@@ -10,6 +10,9 @@ import (
 	"github.com/zucchiniEvader/kopi/internal/git"
 )
 
+// spinnerStep is how often a spinner steps: a twelfth of 0.9 s.
+const spinnerStep = 75 * time.Millisecond
+
 // gitView is the Git tab: the branch, with its switcher and its sync
 // with the upstream; the changes, with the commit's button; and the
 // history, as a graph, each of these under a title that closes and opens
@@ -55,6 +58,10 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 		// What runs, or what it did, a while.
 		switch {
 		case w.gitOp != "":
+			// The spinners' own repaints can stop after the pointer moves
+			// over the window (MyGo 0.2.12): the view is built again at
+			// their pace while git runs, which keeps them turning.
+			c.After(spinnerStep)
 			ui.Row(c).Shrink(0).Padding(0, 14, 6).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c).Size(11, 11)
 				ui.Text(c, w.gitOp+"…").FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)

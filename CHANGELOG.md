@@ -9,6 +9,8 @@
   branch with no upstream is published. What runs shows under them, then
   what it did, as "Pulled 3 commits" or "Already up to date", or why it
   failed; the branch's menu still opens meanwhile.
+- The spinner of a fetch, a pull or a push keeps turning when the pointer
+  moves over the window.
 - The history is a graph: each line of descent in a color of its own, the
   branches and tags at their commits, the commits to pull above HEAD, and
   every branch, from the menu atop it.
