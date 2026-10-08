@@ -30,11 +30,21 @@ func (w *window) view(c *ui.Context) {
 	c.Root().Background(w.sidebarBg(t))
 	w.shortcuts(c)
 
-	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
+	root := ui.Row(c).Fill().AlignItems(ui.Stretch)
+	// How far the sidebar is open, from 0 to 1, as it slides in and out.
+	open := float32(0)
+	if w.sidebarShown {
+		open = 1
+	}
+	open = root.AnimateWith("sidebar", open, sidebarSlide, ui.EaseInOut)
+	w.sidebarOpen = open
+	root.Children(func() {
 		right := w.settings.SidebarPosition == "right"
-		if w.sidebarShown && !right {
-			w.sidebar(c)
-			w.sidebarResizer(c, pal)
+		if open > 0 && !right {
+			w.slidingSidebar(c, open, right)
+			if open == 1 {
+				w.sidebarResizer(c, pal)
+			}
 		}
 		ui.Column(c).Grow(1).MinWidth(0).Background(pal.appBg).Children(func() {
 			w.toolbar(c, pal)
@@ -43,9 +53,11 @@ func (w *window) view(c *ui.Context) {
 				w.runPanel(c, pal)
 			}
 		})
-		if w.sidebarShown && right {
-			w.sidebarResizer(c, pal)
-			w.sidebar(c)
+		if open > 0 && right {
+			if open == 1 {
+				w.sidebarResizer(c, pal)
+			}
+			w.slidingSidebar(c, open, right)
 		}
 	})
 	w.palette(c)
@@ -86,16 +98,15 @@ var debugFrames = os.Getenv("KOPI_DEBUG") != ""
 func (w *window) toolbar(c *ui.Context, pal *palette) {
 	t := c.Theme()
 	bar := c.TitleBar()
-	sidebarRight := w.sidebarShown && w.settings.SidebarPosition == "right"
-	// The tabs start at the sidebar's edge, else after the traffic
-	// lights and the sidebar's toggle.
-	left := float32(0)
-	if !w.sidebarShown || sidebarRight {
-		left = bar.Left + 8
-	}
-	right := float32(12)
-	if !sidebarRight {
-		right += bar.Right
+	// The tabs start at the sidebar's edge, else after the window's
+	// buttons and the sidebar's toggle: as the sidebar slides, they keep
+	// clear of the buttons as much as its width does not.
+	shown := w.sidebarWidth * w.sidebarOpen
+	left, right := bar.Left+8, 12+bar.Right
+	if w.settings.SidebarPosition == "right" {
+		right = 12 + max(0, bar.Right-shown)
+	} else {
+		left = max(0, bar.Left+8-shown)
 	}
 	row := ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(8).Shrink(0).DragWindow()
 	if len(w.editors) > 0 || w.reviewOpen {
@@ -105,7 +116,8 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 		row.Background(pal.appBg)
 	}
 	row.Children(func() {
-		if !w.sidebarShown {
+		if w.sidebarOpen == 0 {
+			// Once the sidebar is gone, with its own.
 			w.sidebarToggle(c)
 		}
 		// The tabs; the repository's name and place show in the explorer,

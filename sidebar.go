@@ -281,6 +281,29 @@ func (w *window) sidebar(c *ui.Context) {
 	})
 }
 
+// sidebarSlide is how long the sidebar takes to slide in or out.
+const sidebarSlide = 220 * time.Millisecond
+
+// slidingSidebar shows the sidebar open as far as open, from 0 to 1: in a
+// box of that part of its width, which cuts it off, it slides out by its
+// edge, its content keeping its width.
+func (w *window) slidingSidebar(c *ui.Context, open float32, right bool) {
+	if open >= 1 {
+		w.sidebar(c)
+		return
+	}
+	width := w.sidebarWidth * open
+	ui.Row(c).Width(width).Shrink(0).AlignItems(ui.Stretch).ClipX().Children(func() {
+		// On the left, the part cut off is the sidebar's left: it goes out
+		// by the window's edge; on the right, by its right.
+		inner := ui.Row(c).Width(w.sidebarWidth).Shrink(0).AlignItems(ui.Stretch)
+		if !right {
+			inner.Margin(0, 0, 0, width-w.sidebarWidth)
+		}
+		inner.Children(func() { w.sidebar(c) })
+	})
+}
+
 // projectSwitcher is the project of the window, its name and where it
 // is, as a button whose menu switches the window to another project.
 func (w *window) projectSwitcher(c *ui.Context) {

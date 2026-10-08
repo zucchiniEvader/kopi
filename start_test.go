@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/git"
@@ -93,5 +94,36 @@ func TestProjectSwitcher(t *testing.T) {
 	want := []string{item(w.repo.Root), "-", item(other), "Open in New Window", "-", "Open Folder…"}
 	if !slices.Equal(got, want) {
 		t.Errorf("menu %q,\nwant %q", got, want)
+	}
+}
+
+// TestSidebarSlides hides and shows the sidebar: it slides out by its
+// edge, partly shown on the way, then is gone; with less motion, at once.
+func TestSidebarSlides(t *testing.T) {
+	w, tt := launchTestWindow(t, testRepo(t))
+	w.tab = tabExplorer
+	tt.Frame()
+	full, _ := tt.Find("main.go")
+	w.toggleSidebar()
+	tt.Frame()
+	time.Sleep(sidebarSlide / 2)
+	tt.Frame()
+	mid, ok := tt.Find("main.go")
+	if !ok || w.sidebarOpen <= 0 || w.sidebarOpen >= 1 || mid.W <= 0 || mid.W >= full.W || mid.Y != full.Y {
+		t.Errorf("halfway: open %v, row %+v, was %+v", w.sidebarOpen, mid, full)
+	}
+	time.Sleep(sidebarSlide)
+	tt.Frame()
+	if _, ok := tt.Find("main.go"); ok || w.sidebarOpen != 0 {
+		t.Errorf("the sidebar stays: open %v", w.sidebarOpen)
+	}
+	if _, ok := tt.Find("Show sidebar (⌘⇧B)"); !ok {
+		t.Error("no button shows the sidebar again")
+	}
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	w.toggleSidebar()
+	tt.Frame()
+	if w.sidebarOpen != 1 {
+		t.Errorf("with less motion, open %v", w.sidebarOpen)
 	}
 }

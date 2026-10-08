@@ -22,6 +22,8 @@
 - The project's name atop the sidebar switches projects: its menu brings
   the windows of the others to the front, switches the window to a recent
   one or a folder chosen, or opens one in a new window.
+- The sidebar slides in and out as it shows and hides, at once with
+  Reduce Motion.
 
 ## 0.2.2
 

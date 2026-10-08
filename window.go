@@ -199,6 +199,9 @@ type window struct {
 
 	// gitShown is whether the last frame showed the Git tab.
 	gitShown bool
+	// sidebarOpen is how far the sidebar is open as it slides, from 0 to
+	// 1.
+	sidebarOpen float32
 	// startErr is why a folder did not open, which a window with no folder
 	// says.
 	startErr error
