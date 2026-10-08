@@ -384,7 +384,9 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 	// edge fades where more tabs are past it.
 	s := &w.tabScroll
 	bg := pal.headerBg.Alpha(0.6).Over(pal.appBg)
-	ui.Box(c).Shrink(1).MinWidth(0).Height(titleBarHeight).ClipY().Children(func() {
+	// Inset from the bar's edge, outside the scroll, which brings a tab
+	// chosen to its edges.
+	ui.Box(c).Shrink(1).MinWidth(0).Height(titleBarHeight).Margin(0, 0, 0, 4).ClipY().Children(func() {
 		fade := func(left bool) {
 			f := ui.Box(c).Absolute().Top(0).Width(tabFade).Height(titleBarHeight).PassThrough()
 			if left {
@@ -411,22 +413,28 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 			return true
 		})
 		tabs.Children(func() {
-			ui.Row(c).Height(titleBarHeight).Children(func() {
+			ui.Row(c).Height(titleBarHeight).Gap(2).AlignItems(ui.Center).Children(func() {
+				// Each tab is a rounded block inset in the bar, touching
+				// none of its edges: the one shown is filled, as a raised
+				// key, the others clear until hovered.
 				tab := func(active, library bool) *ui.Element {
-					b := ui.ButtonBase(c).FillHeight().Padding(0, 6, 0, 12).Gap(6).Shrink(0).BorderWidth(0, 1, 0, 0).BorderColor(pal.cardBorder).TextColor(t.TextMuted)
+					b := ui.ButtonBase(c).Height(28).Padding(0, 5, 0, 10).Gap(6).Shrink(0).Radius(7).TextColor(t.TextMuted)
 					switch {
-					case active && library:
-						// A library's document is no source of the
-						// repository: lighter, its mark muted.
-						b.Background(libraryBg(pal)).DrawOver(func(p *ui.Painter, r ui.Rect) {
-							p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: 2}, t.TextMuted.Alpha(0.6), 0)
-						})
 					case active:
-						b.Background(pal.codeBg).TextColor(t.Text).DrawOver(func(p *ui.Painter, r ui.Rect) {
-							p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: 2}, t.Accent, 0)
-						})
+						bg := pal.codeBg
+						if library {
+							// A library's document is no source of the
+							// repository: its tab is gray.
+							bg = libraryBg(pal)
+						}
+						if t.Dark {
+							bg = ui.RGBA(255, 255, 255, 0.09)
+						} else {
+							b.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.08))
+						}
+						b.Background(bg).Border(1, ui.RGBA(127, 127, 127, 0.16)).TextColor(t.Text)
 					case b.Hovered():
-						b.Background(ui.RGBA(127, 127, 127, 0.08))
+						b.Background(ui.RGBA(127, 127, 127, 0.1))
 					}
 					return b
 				}
