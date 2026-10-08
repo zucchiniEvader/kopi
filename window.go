@@ -194,6 +194,9 @@ type window struct {
 	changed   bool
 	signature string
 	help      bool
+
+	// gitShown is whether the last frame showed the Git tab.
+	gitShown bool
 }
 
 var (
@@ -203,7 +206,12 @@ var (
 
 // openWindow opens a window on the repository holding dir.
 func openWindow(dir string, src source) error {
-	repo, err := git.Open(dir)
+	open := git.Open
+	if src.kind == sourceWorkingTree {
+		// A folder outside any repository opens too, with no changes.
+		open = git.OpenFolder
+	}
+	repo, err := open(dir)
 	if err != nil {
 		return err
 	}
@@ -322,6 +330,7 @@ func newWindow(repo *git.Repo, src source) *window {
 	if src.kind != sourceWorkingTree {
 		w.tab, w.reviewOpen = tabGit, true
 	}
+	w.gitShown = w.sidebarShown && w.tab == tabGit
 	w.dragWidth = w.sidebarWidth
 	w.list.Key = func(i int) any { return w.key(&w.rows[i]) }
 	w.list.Header = func(i int) bool { return w.rows[i].kind == rowHeader }
@@ -503,6 +512,12 @@ func (w *window) load() {
 	w.loadErr = nil
 	w.changed = false
 	w.genA.Store(int64(gen))
+	if w.repo.Plain {
+		w.loading = false
+		w.loadedOnce = true
+		w.setFiles(nil)
+		return
+	}
 	// What is known already needs no git: the commit, from the history, and
 	// the branch, which showing a commit does not change.
 	known := w.commit
@@ -937,6 +952,9 @@ func (w *window) loadUser() {
 
 // loadHistory reads the commits of the History tab.
 func (w *window) loadHistory() {
+	if w.repo.Plain {
+		return
+	}
 	limit := w.historyLimit
 	w.historyLoading = true
 	w.background(func() {

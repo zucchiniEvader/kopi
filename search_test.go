@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -107,5 +108,50 @@ func TestGitSections(t *testing.T) {
 	tt.Frame()
 	if _, ok := tt.Find("Refresh (⌘R)"); ok {
 		t.Error("a refresh button")
+	}
+}
+
+// TestGitTabRefresh reads the changes again as the Git tab shows.
+func TestGitTabRefresh(t *testing.T) {
+	dir := testRepo(t)
+	w, tt := launchTestWindow(t, dir)
+	n := len(w.files)
+	writeFile(t, dir, "new.txt", "hello\n")
+	tt.Frame()
+	if len(w.files) != n {
+		t.Fatal("changes read with the Git tab hidden")
+	}
+	w.tab = tabGit
+	tt.Frame()
+	tt.Frame()
+	if len(w.files) != n+1 || !tt.HasText("new.txt") {
+		t.Errorf("the Git tab shows %d files, not the new one: %q", len(w.files), tt.Texts())
+	}
+}
+
+// TestPlainFolder opens a folder outside any repository: its files, and
+// no changes.
+func TestPlainFolder(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "src/App.java", "class App { int needle; }\n")
+	writeFile(t, dir, ".hidden/x.txt", "needle\n")
+	w, tt := launchTestWindow(t, dir)
+	if !w.repo.Plain || w.loadErr != nil || len(w.files) != 0 {
+		t.Fatalf("plain %v, error %v, %d files", w.repo.Plain, w.loadErr, len(w.files))
+	}
+	if files := listFiles(dir); !slices.Equal(files, []string{"src/App.java"}) {
+		t.Errorf("files %q", files)
+	}
+	for _, re := range []bool{false, true} {
+		files, total, _, err := runSearch(dir, "needle", editor.FindOptions{Regexp: re})
+		if err != nil || total != 1 || files[0].path != "src/App.java" {
+			t.Errorf("regexp %v: %d matches, %v", re, total, err)
+		}
+	}
+	w.tab = tabGit
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("Not a Git repository") {
+		t.Errorf("Git tab %q", tt.Texts())
 	}
 }

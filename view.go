@@ -72,6 +72,13 @@ func (w *window) view(c *ui.Context) {
 		w.diffListEl.Focus()
 		w.focusList = false
 	}
+	// The Git tab, as it shows, reads the changes and the history again.
+	gitShown := w.sidebarShown && w.tab == tabGit
+	if gitShown && !w.gitShown && w.loadedOnce && !w.loading {
+		w.load()
+		w.loadHistory()
+	}
+	w.gitShown = gitShown
 }
 
 // debugFrames logs the views that take long to build.
@@ -246,6 +253,8 @@ func (w *window) mainArea(c *ui.Context, pal *palette) {
 		w.commitMessage(c, pal).Margin(11, 12, 0)
 	}
 	switch {
+	case w.repo.Plain:
+		emptyPanel(c, pal, "Not a Git repository", abbreviateHome(w.repo.Root), nil)
 	case w.loadErr != nil:
 		emptyPanel(c, pal, "Unable to read repository", errorText(w.loadErr), nil)
 	case slow:
@@ -380,11 +389,9 @@ func (v *welcome) view(c *ui.Context) {
 	c.Root().Background(pal.appBg)
 	bar := c.TitleBar()
 	ui.Box(c).Height(max(bar.Height, 40)).DragWindow().FillWidth()
-	subtitle := "Open a Git repository to start"
+	subtitle := "Open a folder to start"
 	if v.err != nil && !errors.Is(v.err, git.ErrNotRepository) {
 		subtitle = "Unable to read repository: " + errorText(v.err)
-	} else if v.err != nil {
-		subtitle = "Kopi opened outside a Git repository: open one to start"
 	}
 	startPanel(c, pal, subtitle, []startAction{
 		{"Open Folder…", "⌘O", openFolder},

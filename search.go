@@ -18,6 +18,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/editor"
+	"github.com/zucchiniEvader/kopi/internal/git"
 	"github.com/zucchiniEvader/kopi/internal/proc"
 )
 
@@ -92,9 +93,10 @@ func runSearch(root, query string, o editor.FindOptions) ([]searchFile, int, boo
 	if err != nil {
 		return nil, 0, false, fmt.Errorf("invalid regular expression")
 	}
-	if o.Regexp {
+	if _, err := git.Open(root); o.Regexp || err != nil {
 		// Git's expressions are POSIX's: the editor's are Go's, which the
-		// app runs itself, on the files git lists.
+		// app runs itself, on the files git lists, or the folder's
+		// outside a repository.
 		files, total, cut := scanFiles(root, listFiles(root), re)
 		return files, total, cut, nil
 	}

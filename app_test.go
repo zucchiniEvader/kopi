@@ -115,7 +115,7 @@ func newTestWindow(t *testing.T, dir string) (*window, *ui.Tester) {
 // app opens it.
 func launchTestWindow(t *testing.T, dir string) (*window, *ui.Tester) {
 	t.Helper()
-	repo, err := git.Open(dir)
+	repo, err := git.OpenFolder(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

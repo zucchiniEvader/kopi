@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"io/fs"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -43,13 +45,15 @@ func (w *window) openQuick() {
 }
 
 // listFiles lists the files of the work tree, tracked or not, but those
-// ignored and those deleted.
+// ignored and those deleted; outside a repository, the folder's files.
 func listFiles(root string) []string {
+	failed := false
 	run := func(args ...string) []string {
 		cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
 		proc.HideConsole(cmd)
 		out, err := cmd.Output()
 		if err != nil {
+			failed = true
 			return nil
 		}
 		var list []string
@@ -61,6 +65,9 @@ func listFiles(root string) []string {
 		return list
 	}
 	files := run("ls-files", "-z", "--cached", "--others", "--exclude-standard", "--deduplicate")
+	if failed {
+		return walkFiles(root)
+	}
 	deleted := run("ls-files", "-z", "--deleted")
 	if len(deleted) > 0 {
 		gone := map[string]bool{}
@@ -69,6 +76,34 @@ func listFiles(root string) []string {
 		}
 		files = slices.DeleteFunc(files, func(f string) bool { return gone[f] })
 	}
+	return files
+}
+
+// maxWalkFiles is the most files walkFiles lists.
+const maxWalkFiles = 100000
+
+// walkFiles lists the files under root, with slashes, but those of hidden
+// folders and of node_modules.
+func walkFiles(root string) []string {
+	var files []string
+	filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if name := d.Name(); p != root && (strings.HasPrefix(name, ".") || name == "node_modules") {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if len(files) == maxWalkFiles {
+			return fs.SkipAll
+		}
+		if rel, err := filepath.Rel(root, p); err == nil && d.Type().IsRegular() && !explorerHidden[d.Name()] {
+			files = append(files, filepath.ToSlash(rel))
+		}
+		return nil
+	})
 	return files
 }
 

@@ -31,6 +31,9 @@ const EmptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 // Repo is a git repository's work tree.
 type Repo struct {
 	Root string
+	// Plain is a folder outside any repository, of which git knows
+	// nothing.
+	Plain bool
 }
 
 // ErrNotRepository is returned by Open for a directory outside any work
@@ -53,6 +56,23 @@ func Open(dir string) (*Repo, error) {
 		return nil, fmt.Errorf("%s: %w", abs, ErrNotRepository)
 	}
 	return &Repo{Root: strings.TrimSpace(string(out))}, nil
+}
+
+// OpenFolder opens dir as Open does, or as a plain folder when it is
+// outside any repository.
+func OpenFolder(dir string) (*Repo, error) {
+	r, err := Open(dir)
+	if !errors.Is(err, ErrNotRepository) {
+		return r, err
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	if fi, err := os.Stat(abs); err == nil && !fi.IsDir() {
+		abs = filepath.Dir(abs)
+	}
+	return &Repo{Root: abs, Plain: true}, nil
 }
 
 // Error is a git command that failed, with what it printed.

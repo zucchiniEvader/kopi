@@ -223,31 +223,34 @@ func (w *window) sidebar(c *ui.Context) {
 		left, right = 10, max(bar.Right+6, 10)
 	}
 	ui.Column(c).Width(w.sidebarWidth).Shrink(0).Background(w.sidebarBg(t)).Children(func() {
-		// The title bar, under the window controls: the views of the
-		// sidebar and its toggle, centered on the window controls. They
-		// keep to the right, clear of the traffic lights, on macOS, and
-		// to the left elsewhere, where the window buttons are on the right.
+		// The title bar, under the window controls: the repository, its
+		// name and where it is, and the sidebar's toggle, centered on the
+		// window controls. The toggle keeps to the right, clear of the
+		// traffic lights, on macOS, and to the left elsewhere, where the
+		// window buttons are on the right.
 		mac := runtime.GOOS == "darwin"
-		ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(6).DragWindow().Children(func() {
-			if mac {
-				ui.Spacer(c)
+		ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(6).AlignItems(ui.Center).DragWindow().Children(func() {
+			if !mac {
+				w.sidebarToggle(c)
 			}
+			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+				ui.Text(c, filepath.Base(w.repo.Root)).FontSize(12).Bold().SingleLine()
+				ui.Text(c, abbreviateHome(filepath.Dir(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			})
+			if mac {
+				w.sidebarToggle(c)
+			}
+		})
+		// The views of the sidebar, atop its body, on lines of their own
+		// as more come than the width holds.
+		ui.Row(c).Shrink(0).Padding(0, 8).Children(func() {
 			if w.tabControl(c) {
 				w.commitOpen = false
 			}
-			w.sidebarToggle(c)
-			if !mac {
-				ui.Spacer(c)
-			}
 		})
+		ui.Box(c).Height(1).Shrink(0).FillWidth().Margin(0, 0, 4).Background(ui.RGBA(127, 127, 127, 0.22))
 		ui.Column(c).Padding(2, 10, 8).Children(func() {
 			switch w.tab {
-			case tabExplorer:
-				// The repository: its name, and where it is.
-				ui.Column(c).Padding(2, 4).Gap(1).Tooltip(w.repo.Root).Children(func() {
-					ui.Text(c, filepath.Base(w.repo.Root)).FontSize(12).Bold().SingleLine()
-					ui.Text(c, abbreviateHome(filepath.Dir(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine()
-				})
 			case tabSearch:
 				w.searchHeader(c)
 			case tabRun:
@@ -283,23 +286,24 @@ func (w *window) sidebarBg(t *ui.Theme) ui.Color {
 // their controls on the traffic lights of a window with an inset title bar.
 const titleBarHeight = 40
 
-// tabControl switches the sidebar between the files and the history, and
-// reports a switch.
+// tabControl switches the sidebar between its views, and reports a
+// switch: a row of icons, the view shown underlined.
 func (w *window) tabControl(c *ui.Context) bool {
 	t := c.Theme()
-	pal := paletteFor(t)
 	tab := w.tab
 	seg := ui.SegmentedBase(c, &tab, 4)
-	seg.Track.Padding(2).Gap(2).Radius(8).Background(ui.RGBA(127, 127, 127, 0.12)).Label("Sidebar").Children(func() {
+	seg.Track.Grow(1).Shrink(1).Wrap().Gap(2).Label("Sidebar").Children(func() {
 		for i, it := range []struct {
 			icon *ui.SVG
 			name string
 		}{{iconFiles, "Explorer (⌘1)"}, {iconSearch, "Search (⇧⌘F)"}, {iconBranch, "Git (⌃⇧G)"}, {iconBugPlay, "Run and Debug (⇧⌘D)"}} {
-			s := seg.Segment(i).Size(30, 24).Radius(6).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
+			s := seg.Segment(i).Size(36, 34).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
 			if i == tab {
-				s.Background(pal.headerBg).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12)).TextColor(t.Text)
+				s.BorderWidth(0, 0, 2, 0).BorderColor(t.Text).TextColor(t.Text)
+			} else if s.Hovered() {
+				s.TextColor(t.Text)
 			}
-			s.Children(func() { ui.Icon(c, it.icon).FontSize(15) })
+			s.Children(func() { ui.Icon(c, it.icon).FontSize(17) })
 		}
 	})
 	if tab != w.tab {
@@ -785,6 +789,13 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 					Padding(0, 6).Radius(8).Background(ui.RGBA(127, 127, 127, 0.15))
 			}
 		})
+	}
+	if w.repo.Plain {
+		ui.Column(c).Padding(4, 14).Gap(2).Children(func() {
+			ui.Text(c, "Not a Git repository").FontSize(12).Bold()
+			ui.Text(c, abbreviateHome(w.repo.Root)).FontSize(11).TextColor(t.TextMuted)
+		})
+		return
 	}
 	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
 		// The branch, and what the review shows other than the work tree.
