@@ -1,7 +1,7 @@
 {
   "name": "Kopi",
   "identifier": "io.github.zucchinievader.kopi",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "copyright": "© 2026 zucchiniEvader; Godiff © 2026 EGOIST",
   "out": "build"
 }
