@@ -754,11 +754,13 @@ func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, e
 	key := filepath.Base(root) + "-" + hex.EncodeToString(sum[:4])
 	data := filepath.Join(cache, "jdtls-workspaces", key)
 	config := filepath.Join(cache, "jdtls-config", filepath.Base(home))
+	// Lombok's agent, whose generated methods the server knows only with
+	// it, for every project: one may get Lombok from a parent pom its own
+	// build files never name, and the agent does nothing where no class
+	// uses it.
 	var jvmArgs []string
-	if java.UsesLombok(root) {
-		if jar := java.FindLombok(); jar != "" {
-			jvmArgs = append(jvmArgs, "-javaagent:"+jar)
-		}
+	if jar := java.FindLombok(); jar != "" {
+		jvmArgs = append(jvmArgs, "-javaagent:"+jar)
 	}
 	cmd, err := java.Command(jdk, home, config, data, jvmArgs...)
 	if err != nil {

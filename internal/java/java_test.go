@@ -181,16 +181,6 @@ func TestDownload(t *testing.T) {
 }
 
 func TestLombok(t *testing.T) {
-	root := t.TempDir()
-	os.MkdirAll(filepath.Join(root, "service", "api"), 0o755)
-	os.WriteFile(filepath.Join(root, "pom.xml"), []byte("<project><modules><module>service</module></modules></project>"), 0o644)
-	if UsesLombok(root) {
-		t.Error("no Lombok in the parent")
-	}
-	os.WriteFile(filepath.Join(root, "service", "api", "pom.xml"), []byte("<artifactId>lombok</artifactId>"), 0o644)
-	if !UsesLombok(root) {
-		t.Error("a module's Lombok")
-	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	for _, v := range []string{"1.18.9", "1.18.46", "1.18.40"} {
