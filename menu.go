@@ -52,7 +52,7 @@ func buildMenu() *mygo.Menu {
 			{Role: mygo.RoleAbout},
 			updater.MenuItem(),
 			mygo.Separator(),
-			{Label: "Settings…", Accelerator: "CmdOrCtrl+,", Click: func(*mygo.MenuItem, *mygo.Window) { openConfig() }},
+			{Label: "Settings…", Accelerator: "CmdOrCtrl+,", Click: func(_ *mygo.MenuItem, win *mygo.Window) { openConfig(win) }},
 			{Label: "Install Command Line Tool…", Hidden: runtime.GOOS == "windows", Click: func(*mygo.MenuItem, *mygo.Window) { installCLI() }},
 			mygo.Separator(),
 			{Role: mygo.RoleServices},

@@ -3,10 +3,12 @@ package main
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/editor"
 	"github.com/zucchiniEvader/kopi/internal/git"
 )
 
@@ -125,5 +127,47 @@ func TestSidebarSlides(t *testing.T) {
 	tt.Frame()
 	if w.sidebarOpen != 1 {
 		t.Errorf("with less motion, open %v", w.sidebarOpen)
+	}
+}
+
+// TestSettingsInATab opens the settings in a tab of the window, which
+// saves them, and they apply.
+func TestSettingsInATab(t *testing.T) {
+	w, tt := launchTestWindow(t, testRepo(t))
+	old := cfg.Get()
+	t.Cleanup(func() {
+		cfg.write(old)
+		cfg.load()
+	})
+	path := cfg.ensure()
+	w.openSettings(path)
+	tt.Frame()
+	e := w.activeTab()
+	if e == nil || e.abs != path || e.library || e.ed == nil || e.ed.ReadOnly {
+		t.Fatalf("settings tab %+v", e)
+	}
+	if _, ok := tt.Find("Close " + filepath.Base(path)); !ok {
+		t.Errorf("no tab %s: %q", filepath.Base(path), tt.Texts())
+	}
+	// The font size, changed and saved, applies.
+	b := e.ed.Buffer()
+	for i := range b.Lines() {
+		line := b.Line(i)
+		if k := strings.Index(line, `"codeFontSize": `); k >= 0 {
+			a := editor.Pos{Line: i, Col: k + len(`"codeFontSize": `)}
+			z := editor.Pos{Line: i, Col: strings.IndexAny(line[a.Col:], ",}") + a.Col}
+			if z.Col < a.Col {
+				z.Col = len(line)
+			}
+			e.ed.SetSelection(editor.Selection{Anchor: a, Caret: z})
+			e.ed.Focus()
+			tt.Frame()
+			tt.Type("17")
+		}
+	}
+	w.saveEditor()
+	cfg.load()
+	if got := cfg.Get().CodeFontSize; got != 17 {
+		t.Errorf("font size %d after saving:\n%s", got, e.ed.Text())
 	}
 }

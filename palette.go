@@ -88,7 +88,7 @@ func (w *window) commands() []command {
 		{title: "Increase Code Font Size", keys: "⌘+", run: func() { changeFontSize(1) }},
 		{title: "Decrease Code Font Size", keys: "⌘-", run: func() { changeFontSize(-1) }},
 		{title: "Reset Code Font Size", keys: "⌘0", run: func() { changeFontSize(0) }},
-		{title: "Open Config File", run: openConfig},
+		{title: "Open Settings", keys: "⌘,", run: func() { w.openSettings(cfg.ensure()) }},
 		{title: "Refresh Changes", keys: "⌘R", run: w.refresh},
 		{title: "Keyboard Shortcuts", keys: "⇧?", run: func() { w.help = true }},
 	}
@@ -117,13 +117,40 @@ func changeFontSize(delta int) {
 	})
 }
 
-func openConfig() {
+// openConfig opens the settings file in a tab of the window in front,
+// win when it is Kopi's, or of a window it opens without one; saved, the
+// settings apply.
+func openConfig(win *mygo.Window) {
 	path := cfg.ensure()
+	w := focused(win)
+	if w == nil {
+		windowsMu.Lock()
+		if len(windows) > 0 {
+			w = windows[len(windows)-1]
+		}
+		windowsMu.Unlock()
+	}
+	if w != nil {
+		w.win.Update(func() { w.openSettings(path) })
+		w.win.Show()
+		w.win.Focus()
+		return
+	}
 	go func() {
-		if err := launchEditor(cfg.Get().EditorCommand, "", path, 0); err != nil {
-			mygo.Dialog.Error("Could not open the config file", err.Error())
+		openEmptyWindow(nil)
+		windowsMu.Lock()
+		defer windowsMu.Unlock()
+		if len(windows) > 0 {
+			w := windows[len(windows)-1]
+			w.win.Update(func() { w.openSettings(path) })
 		}
 	}()
+}
+
+// openSettings opens the settings file in a tab: the app's own file, not
+// one of a library.
+func (w *window) openSettings(path string) {
+	w.openAbs(path).library = false
 }
 
 func (w *window) openCurrent() {

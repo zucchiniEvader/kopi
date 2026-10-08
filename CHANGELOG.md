@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.4
+
+- Settings… (⌘,) opens the settings in a tab of Kopi, not in another
+  editor; saved, they apply.
+
 ## 0.2.3
 
 - A new app icon: a flat cat.
