@@ -72,3 +72,26 @@ func TestStartScreens(t *testing.T) {
 		t.Errorf("title %q", windowTitle("", source{}))
 	}
 }
+
+// TestProjectSwitcher opens the menu of the project's name: the project,
+// checked, the recent ones to switch to, or to open in a new window, and
+// a folder to choose.
+func TestProjectSwitcher(t *testing.T) {
+	other := filepath.Join(t.TempDir(), "other")
+	writeFile(t, other, "a.txt", "a\n")
+	w, tt := launchTestWindow(t, testRepo(t))
+	old := state.data.Recent
+	state.data.Recent = []string{w.repo.Root, other}
+	t.Cleanup(func() { state.data.Recent = old })
+	name := filepath.Base(w.repo.Root)
+	if err := tt.Click(name + ", switch project"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	got := tt.Menu()
+	item := func(dir string) string { return filepath.Base(dir) + "    " + abbreviateHome(filepath.Dir(dir)) }
+	want := []string{item(w.repo.Root), "-", item(other), "Open in New Window", "-", "Open Folder…"}
+	if !slices.Equal(got, want) {
+		t.Errorf("menu %q,\nwant %q", got, want)
+	}
+}

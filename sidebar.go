@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/diff"
 	"github.com/zucchiniEvader/kopi/internal/git"
@@ -233,14 +234,8 @@ func (w *window) sidebar(c *ui.Context) {
 			if !mac {
 				w.sidebarToggle(c)
 			}
-			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-				if w.noFolder() {
-					ui.Text(c, "No folder opened").FontSize(12).Bold().TextColor(t.TextMuted).SingleLine()
-					return
-				}
-				ui.Text(c, filepath.Base(w.repo.Root)).FontSize(12).Bold().SingleLine()
-				ui.Text(c, abbreviateHome(filepath.Dir(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine()
-			})
+			w.projectSwitcher(c)
+			ui.Spacer(c)
 			if mac {
 				w.sidebarToggle(c)
 			}
@@ -284,6 +279,116 @@ func (w *window) sidebar(c *ui.Context) {
 			w.gitView(c, pal)
 		}
 	})
+}
+
+// projectSwitcher is the project of the window, its name and where it
+// is, as a button whose menu switches the window to another project.
+func (w *window) projectSwitcher(c *ui.Context) {
+	t := c.Theme()
+	label := "Switch Project"
+	if !w.noFolder() {
+		label = filepath.Base(w.repo.Root) + ", switch project"
+	}
+	b := ui.ButtonBase(c).Shrink(1).MinWidth(0).Padding(3, 6).Margin(0, 0, 0, -6).Gap(6).Radius(6).AlignItems(ui.Center).
+		Label(label).Tooltip(w.repo.Root)
+	if b.Hovered() || b.Pressed() {
+		b.Background(ui.RGBA(127, 127, 127, 0.13))
+	}
+	b.Menu(w.projectMenu)
+	b.Children(func() {
+		ui.Column(c).Shrink(1).MinWidth(0).Gap(1).Children(func() {
+			if w.noFolder() {
+				ui.Text(c, "No folder opened").FontSize(12).Bold().TextColor(t.TextMuted).SingleLine()
+				return
+			}
+			ui.Text(c, filepath.Base(w.repo.Root)).FontSize(12).Bold().SingleLine()
+			ui.Text(c, abbreviateHome(filepath.Dir(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine()
+		})
+		ui.Icon(c, iconChevronDown).FontSize(11).TextColor(t.TextMuted).Shrink(0)
+	})
+}
+
+// projectMenu lists the projects: this window's, those of the other
+// windows, which come to the front, and the recent ones, which the window
+// switches to, or which open in a new window.
+func (w *window) projectMenu(m *ui.Menu) {
+	item := func(dir string) string { return filepath.Base(dir) + "    " + abbreviateHome(filepath.Dir(dir)) }
+	if !w.noFolder() {
+		m.Item(item(w.repo.Root)).Checked(true)
+	}
+	windowsMu.Lock()
+	var others []*window
+	for _, o := range windows {
+		if o != w && !o.noFolder() {
+			others = append(others, o)
+		}
+	}
+	windowsMu.Unlock()
+	for _, o := range others {
+		if m.Item(item(o.repo.Root)).Chosen() {
+			o.win.Show()
+			o.win.Focus()
+		}
+	}
+	open := map[string]bool{w.repo.Root: true}
+	for _, o := range others {
+		open[o.repo.Root] = true
+	}
+	var recent []string
+	for _, dir := range state.recent() {
+		if !open[dir] {
+			recent = append(recent, dir)
+		}
+	}
+	if len(recent) > 0 {
+		m.Separator()
+		for _, dir := range recent {
+			if m.Item(item(dir)).Chosen() {
+				w.switchProject(dir)
+			}
+		}
+		m.Submenu("Open in New Window", func(m *ui.Menu) {
+			for _, dir := range recent {
+				if m.Item(item(dir)).Chosen() {
+					openRecent(dir)
+				}
+			}
+		})
+	}
+	m.Separator()
+	if m.Item("Open Folder…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
+		w.chooseAndSwitch()
+	}
+}
+
+// switchProject opens the project in dir, or brings its window to the
+// front, and closes this window, which asks first about changes not
+// saved: the window switches to it. Its own project changes nothing.
+func (w *window) switchProject(dir string) {
+	root := w.repo.Root
+	go func() {
+		if r, err := git.OpenFolder(dir); err == nil && r.Root == root {
+			return
+		}
+		if err := openWindow(dir, source{kind: sourceWorkingTree}); err != nil {
+			mygo.Dialog.Error("Could not open "+filepath.Base(dir), errorText(err))
+			return
+		}
+		if w.win != nil {
+			w.win.Update(w.win.Close)
+		}
+	}()
+}
+
+// chooseAndSwitch asks for a folder, and switches the window to it.
+func (w *window) chooseAndSwitch() {
+	go func() {
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: w.win, Title: "Open a Folder", Directory: true})
+		if err != nil || len(paths) == 0 {
+			return
+		}
+		w.switchProject(paths[0])
+	}()
 }
 
 // sidebarBg is the sidebar's background: none on macOS, where the

@@ -19,6 +19,10 @@
 - A window with a folder no longer lists the recent folders, nor a button
   to review the changes, when no file is open: the review is ⇧⌘R away.
 
+- The project's name atop the sidebar switches projects: its menu brings
+  the windows of the others to the front, switches the window to a recent
+  one or a folder chosen, or opens one in a new window.
+
 ## 0.2.2
 
 - Kopi updates itself: it checks for a new version once a day, and from
