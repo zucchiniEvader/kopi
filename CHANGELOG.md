@@ -22,9 +22,8 @@
   which of them the caret is in, and opens on the first.
 - A change or a commit chosen with the pointer no longer flashes in the
   accent color as the focus moves: it shows gray, as in the explorer.
-- The tab shown is underlined by a short line of the accent color, inset
-  from its sides, and the others are muted, rather than cells reaching the
-  bar's edges with a line along the top; choosing one moves none.
+- The line of the accent color atop the tab shown is shorter, inset from
+  its sides and the window's top edge, with rounded ends.
 - The tabs no longer jump as the sidebar ends sliding in or out: they
   glide all the way, and the sidebar's toggle above them shows as the
   sidebar's edge passes it.

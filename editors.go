@@ -384,9 +384,7 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 	// edge fades where more tabs are past it.
 	s := &w.tabScroll
 	bg := pal.headerBg.Alpha(0.6).Over(pal.appBg)
-	// Inset from the bar's edge, outside the scroll, which brings a tab
-	// chosen to its edges.
-	ui.Box(c).Shrink(1).MinWidth(0).Height(titleBarHeight).Margin(0, 0, 0, 4).ClipY().Children(func() {
+	ui.Box(c).Shrink(1).MinWidth(0).Height(titleBarHeight).ClipY().Children(func() {
 		fade := func(left bool) {
 			f := ui.Box(c).Absolute().Top(0).Width(tabFade).Height(titleBarHeight).PassThrough()
 			if left {
@@ -413,26 +411,26 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 			return true
 		})
 		tabs.Children(func() {
-			ui.Row(c).Height(titleBarHeight).Gap(2).AlignItems(ui.Center).Children(func() {
-				// The tab shown is underlined, a short rounded line inset
-				// from its sides, above the bar's bottom edge; the others
-				// are muted until hovered. Nothing but their colors
-				// differs, so that none moves as another is chosen.
+			ui.Row(c).Height(titleBarHeight).Children(func() {
+				// The tab shown joins the editor below, marked by a short
+				// rounded line along its top, inset from its sides and the
+				// window's edge rather than drawn to them.
 				tab := func(active, library bool) *ui.Element {
-					b := ui.ButtonBase(c).Height(titleBarHeight).Padding(0, 4, 0, 10).Gap(6).Shrink(0).TextColor(t.TextMuted)
-					switch {
-					case active:
-						line := t.Accent
-						if library {
-							// A library's document is no source of the
-							// repository: its line is gray.
-							line = t.TextMuted.Alpha(0.6)
+					b := ui.ButtonBase(c).FillHeight().Padding(0, 6, 0, 12).Gap(6).Shrink(0).BorderWidth(0, 1, 0, 0).BorderColor(pal.cardBorder).TextColor(t.TextMuted)
+					mark := func(color ui.Color) func(p *ui.Painter, r ui.Rect) {
+						return func(p *ui.Painter, r ui.Rect) {
+							p.Fill(ui.Rect{X: r.X + 8, Y: r.Y + 3, W: r.W - 16, H: 2}, color, 1)
 						}
-						b.TextColor(t.Text).DrawOver(func(p *ui.Painter, r ui.Rect) {
-							p.Fill(ui.Rect{X: r.X + 8, Y: r.Y + r.H - 4, W: r.W - 16, H: 2}, line, 1)
-						})
+					}
+					switch {
+					case active && library:
+						// A library's document is no source of the
+						// repository: lighter, its mark muted.
+						b.Background(libraryBg(pal)).DrawOver(mark(t.TextMuted.Alpha(0.6)))
+					case active:
+						b.Background(pal.codeBg).TextColor(t.Text).DrawOver(mark(t.Accent))
 					case b.Hovered():
-						b.TextColor(t.Text)
+						b.Background(ui.RGBA(127, 127, 127, 0.08))
 					}
 					return b
 				}
