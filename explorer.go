@@ -80,10 +80,28 @@ func (e *explorer) kids(root, dir string) []string {
 			}
 			return 1
 		}
-		return strings.Compare(strings.ToLower(path.Base(a)), strings.ToLower(path.Base(b)))
+		an, bn := strings.ToLower(path.Base(a)), strings.ToLower(path.Base(b))
+		if !e.dirs[a] {
+			// Files by their type, as Markdown apart from the code.
+			if c := strings.Compare(fileType(an), fileType(bn)); c != 0 {
+				return c
+			}
+		}
+		return strings.Compare(an, bn)
 	})
 	e.children[dir] = kids
 	return kids
+}
+
+// fileType is what files are grouped by in the explorer: the extension of
+// a name, without its dot; "" for names without one, as Makefile, and for
+// dotfiles, as .gitignore, which go first.
+func fileType(name string) string {
+	name = strings.TrimLeft(name, ".")
+	if i := strings.LastIndexByte(name, '.'); i >= 0 {
+		return name[i+1:]
+	}
+	return ""
 }
 
 // explorerRow is a row of the explorer: a file, or a directory with the
