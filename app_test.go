@@ -452,30 +452,34 @@ func TestImage(t *testing.T) {
 
 func TestParseArgs(t *testing.T) {
 	dir := testRepo(t)
-	gitIn(t, dir, "branch", "feature")
 	for _, tc := range []struct {
 		args []string
-		want source
 		dir  string
 	}{
-		{nil, source{}, dir},
-		{[]string{"HEAD"}, source{kind: sourceCommit, ref: "HEAD"}, dir},
-		{[]string{"feature"}, source{kind: sourceBranch, ref: "feature"}, dir},
-		{[]string{"--commit", "main"}, source{kind: sourceCommit, ref: "main"}, dir},
-		{[]string{"docs"}, source{}, filepath.Join(dir, "docs")},
-		{[]string{"HEAD~0", "./docs"}, source{kind: sourceCommit, ref: "HEAD~0"}, filepath.Join(dir, "docs")},
+		{nil, dir},
+		{[]string{"docs"}, filepath.Join(dir, "docs")},
+		{[]string{"./docs"}, filepath.Join(dir, "docs")},
+		{[]string{filepath.Join(dir, "docs")}, filepath.Join(dir, "docs")},
+		{[]string{"main.go"}, filepath.Join(dir, "main.go")},
+		{[]string{"-psn_0_123"}, dir},
 	} {
 		req, err := parseArgs(tc.args, dir)
 		if err != nil {
 			t.Errorf("%v: %v", tc.args, err)
 			continue
 		}
-		if req.src != tc.want || req.dir != tc.dir {
-			t.Errorf("%v: got %+v in %s", tc.args, req.src, req.dir)
+		if req.dir != tc.dir {
+			t.Errorf("%v: got %s", tc.args, req.dir)
 		}
 	}
-	if _, err := parseArgs([]string{"nonexistent-ref"}, dir); err == nil {
-		t.Error("no error for an unknown ref")
+	// No commits, no branches: folders only.
+	for _, args := range [][]string{{"HEAD"}, {"--commit", "HEAD"}, {"--branch", "main"}, {"docs", "."}} {
+		if _, err := parseArgs(args, dir); err == nil {
+			t.Errorf("%v: no error", args)
+		}
+	}
+	if _, err := parseArgs([]string{"--help"}, dir); err != errHelp {
+		t.Errorf("--help: %v", err)
 	}
 }
 

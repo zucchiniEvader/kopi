@@ -5,9 +5,6 @@
 //
 //	kopi                 the folder here
 //	kopi <path>          another folder
-//	kopi <commit>        the review of a commit, as HEAD~1 or a1b2c3d
-//	kopi <branch>        the review of the work tree's changes since it
-//	                     branched off
 package main
 
 import (
@@ -15,7 +12,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"strings"
@@ -24,82 +20,48 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/updater/native"
-	"github.com/zucchiniEvader/kopi/internal/git"
 )
 
-const usage = `Usage: kopi [<path>] [<commit> | <branch>]
+const usage = `Usage: kopi [<path>]
 
 Open the folder at <path> (default: the current directory) in Kopi, a code
-editor. In a Git repository, <commit> opens the review of a commit, and
-<branch> that of the work tree's changes since it branched off <branch>.
+editor; a file opens the folder holding it.
 
 Options:
-  --commit <ref>   open the review of a commit
-  --branch <ref>   open the review of the changes since a branch
   --cwd <dir>      the directory relative paths start from
   -h, --help       show this help
 `
 
-// request is what a command line asks to open.
+// request is what a command line asks to open: a folder.
 type request struct {
 	dir string
-	src source
 }
 
-var commitLike = regexp.MustCompile(`^([0-9a-fA-F]{4,64}|(HEAD|@)([~^][0-9]*)*|.*[~^].*|.*@\{.*\})$`)
-
-// parseArgs reads a command line, relative to dir.
+// parseArgs reads a command line, relative to dir: the folder to open, dir
+// itself by default. A file opens the folder holding it.
 func parseArgs(args []string, dir string) (request, error) {
 	req := request{dir: dir}
-	var refs []string
-	for i := 0; i < len(args); i++ {
-		a := args[i]
+	path := ""
+	for _, a := range args {
 		switch {
 		case a == "-h" || a == "--help":
 			return req, errHelp
-		case a == "--commit" || a == "--branch":
-			if i+1 >= len(args) {
-				return req, fmt.Errorf("%s needs a revision", a)
-			}
-			i++
-			kind := sourceCommit
-			if a == "--branch" {
-				kind = sourceBranch
-			}
-			req.src = source{kind: kind, ref: args[i]}
 		case strings.HasPrefix(a, "-psn_"), a == "":
 			// What macOS passes to apps opened from Finder.
 		case strings.HasPrefix(a, "-"):
 			return req, fmt.Errorf("unknown option %s", a)
-		case strings.HasPrefix(a, "/") || strings.HasPrefix(a, "./") || strings.HasPrefix(a, "../") || strings.HasPrefix(a, "~"):
-			req.dir = resolve(dir, a)
+		case path != "":
+			return req, fmt.Errorf("unexpected argument %s: kopi opens one folder", a)
 		default:
-			refs = append(refs, a)
+			path = a
 		}
 	}
-	for _, a := range refs {
-		if fi, err := os.Stat(resolve(dir, a)); err == nil && fi.IsDir() && !commitLike.MatchString(a) {
-			req.dir = resolve(dir, a)
-			continue
+	if path != "" {
+		p := resolve(dir, path)
+		if _, err := os.Stat(p); err != nil {
+			return req, fmt.Errorf("no such folder: %s", path)
 		}
-		if req.src.kind != sourceWorkingTree {
-			return req, fmt.Errorf("unexpected argument %s", a)
-		}
-		req.src = source{kind: sourceBranch, ref: a}
-	}
-	// A revision is a commit unless it names a branch.
-	if req.src.kind == sourceBranch && req.src.ref != "" {
-		if repo, err := git.Open(req.dir); err == nil {
-			_, local := repo.Git("show-ref", "--verify", "--quiet", "refs/heads/"+req.src.ref)
-			_, remote := repo.Git("show-ref", "--verify", "--quiet", "refs/remotes/"+req.src.ref)
-			if local != nil && remote != nil {
-				if _, err := repo.Resolve(req.src.ref); err == nil {
-					req.src.kind = sourceCommit
-				} else {
-					return req, fmt.Errorf("%q is neither a branch nor a commit of this repository", req.src.ref)
-				}
-			}
-		}
+		req.dir = p
 	}
 	return req, nil
 }
@@ -135,7 +97,7 @@ func noWindows() bool {
 func open(req request, fromUser bool) {
 	var err error
 	if fromUser {
-		if err = openWindow(req.dir, req.src); err == nil {
+		if err = openWindow(req.dir, source{}); err == nil {
 			closeEmptyWindows()
 			return
 		}

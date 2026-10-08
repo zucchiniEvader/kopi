@@ -58,14 +58,15 @@ Java's language server needs Java 21 or later on the machine (see
 ## Usage
 
 ```sh
-kopi [<path>] [<commit> | <branch>]
+kopi [<path>]
 ```
 
 - `kopi` opens the folder you are in, a Git repository or not.
-- `kopi ../other-project` opens another folder.
-- `kopi HEAD~1` opens the review of a commit, against its first parent.
-- `kopi main` opens the review of the work tree, committed or not, since it
-  branched off `main`.
+- `kopi ../other-project` opens another folder; a file opens the folder
+  holding it.
+
+The review of a commit, or of the changes since a branch, opens from the
+command bar (<kbd>⌘K</kbd>): **Open Commit** and **Open Branch**.
 
 Every folder opens in a window of its own; the project's name atop the
 sidebar switches the window to another. **Kopi → Install Command Line

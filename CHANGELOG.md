@@ -4,8 +4,9 @@
 
 - Settings… (⌘,) opens the settings in a tab of Kopi, not in another
   editor; saved, they apply.
-- The kopi command, its help and its message once installed speak of a
-  code editor: it opens a folder, and a commit or a branch opens a review.
+- The kopi command opens a folder, the one it runs in or the one it names,
+  and no longer reviews commits or branches, which the command bar opens:
+  Open Commit and Open Branch.
 
 ## 0.2.3
 
