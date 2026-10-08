@@ -162,7 +162,7 @@ func TestJavaLanguageServer(t *testing.T) {
 	w, tt, fake := javaWindow(t)
 	w.openFile("src/Main.java", 0)
 	e := w.activeTab()
-	pump(t, w, tt, "the server", func() bool { return w.java.state == javaReady && fake.has("textDocument/didOpen Main.java") })
+	pump(t, w, tt, "the server", func() bool { return w.java.state == serverReady && fake.has("textDocument/didOpen Main.java") })
 
 	// Problems show in the editor, the status bar and the explorer.
 	pump(t, w, tt, "diagnostics", func() bool { return len(e.ed.Diagnostics()) == 1 })
@@ -232,7 +232,7 @@ func TestJavaLanguageServer(t *testing.T) {
 	w.closeEditor(indexOf(w.editors, e))
 	pump(t, w, tt, "save and close", func() bool { return fake.has("textDocument/didSave") && fake.has("textDocument/didClose") })
 
-	w.javaStop()
+	w.stopServers()
 	pump(t, w, tt, "the shutdown", func() bool { return fake.has("shutdown") && fake.has("exit") })
 }
 
@@ -242,14 +242,14 @@ func TestJavaServerFails(t *testing.T) {
 		return nil, nil, errString("no Java 21 or newer found: set javaHome in the settings")
 	}
 	w.openFile("src/Main.java", 0)
-	pump(t, w, tt, "the failure", func() bool { return w.java.state == javaFailed })
+	pump(t, w, tt, "the failure", func() bool { return w.java.state == serverFailed })
 	if !tt.HasText("Java: Unavailable") || !strings.Contains(w.java.detail, "javaHome") {
 		t.Errorf("texts %q, detail %q", tt.Texts(), w.java.detail)
 	}
 	// Other files start nothing.
-	w.java = javaServer{}
+	w.java = langServer{lang: javaLang}
 	w.openFile("main.go", 0)
-	if w.java.state != javaIdle {
+	if w.java.state != serverIdle {
 		t.Error("a Go file started the Java server")
 	}
 }

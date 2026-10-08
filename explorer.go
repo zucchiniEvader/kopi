@@ -193,14 +193,14 @@ func (w *window) explorerView(c *ui.Context) {
 				first, _, _ := strings.Cut(rows[i].label, "/")
 				w.fileIcon(c, first, true, e.open[p], muted)
 				name := ui.Text(c, rows[i].label).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
-				if w.java.errors[p] > 0 && !(selected && focused) {
+				if w.errorsAt(p) > 0 && !(selected && focused) {
 					name.TextColor(pal.delText)
 				}
 				return
 			}
 			w.fileIcon(c, p, false, false, muted)
 			name := ui.Text(c, path.Base(p)).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
-			errs := w.java.errors[p]
+			errs := w.errorsAt(p)
 			switch {
 			case selected && focused:
 			case errs > 0:

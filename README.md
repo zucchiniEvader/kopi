@@ -24,6 +24,9 @@ are Godiff's.
   or later: problems as you type, hovers, go to definition (<kbd>⌘</kbd>-click,
   <kbd>F12</kbd>) into the JDK's and the libraries' sources, Maven, Gradle and
   Lombok.
+- **Go**: gopls, found on the machine or installed with Go once: problems as
+  you type, hovers, go to definition into the standard library's and the
+  modules' sources.
 - **Run and debug**: `.vscode/launch.json` as VS Code's Java debugger reads
   it, or the Java file shown; Run | Debug on main methods; a Run and Debug
   tab with breakpoints, variables and the call stack, through Microsoft's

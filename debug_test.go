@@ -171,7 +171,7 @@ func TestDebugSession(t *testing.T) {
 	if !tt.HasText("App.java:16") {
 		t.Errorf("the breakpoints list %q", tt.Texts())
 	}
-	wait("the server", func() bool { return w.java.state == javaReady })
+	wait("the server", func() bool { return w.java.state == serverReady })
 	w.java.debugger = true
 	e.ed.OnLens(5, 1) // Debug
 	wait("the pause", func() bool { return w.debug.paused && len(w.debug.scopes) > 0 && w.debug.vars[10] != nil })

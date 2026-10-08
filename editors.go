@@ -165,7 +165,7 @@ func (w *window) openAbs(abs string) *editorTab {
 			e.ed = editor.New(p, string(data))
 		}
 		w.editors = append(w.editors, e)
-		w.javaAttach(e)
+		w.attach(e)
 		w.debugAttach(e)
 	}
 	w.show(e)
@@ -183,7 +183,7 @@ func (w *window) openText(uri, name, text string) *editorTab {
 		e = &editorTab{path: uri, uri: uri, ed: editor.New(strings.TrimSuffix(name, ".class")+".java", text), library: true}
 		e.ed.ReadOnly = true
 		w.editors = append(w.editors, e)
-		w.javaAttach(e)
+		w.attach(e)
 	}
 	w.show(e)
 	return e
@@ -244,7 +244,7 @@ func (w *window) writeEditor(e *editorTab) error {
 	e.ed.MarkSaved()
 	e.stamp, _ = stampOf(p)
 	e.disk, e.onDisk, e.keptDeleted = diskSame, "", false
-	w.javaSaved(e)
+	w.didSave(e)
 	if w.source.kind == sourceWorkingTree {
 		w.load()
 	}
@@ -288,7 +288,7 @@ func (w *window) closeEditor(i int) {
 }
 
 func (w *window) removeEditor(i int) {
-	w.javaClosed(w.editors[i])
+	w.didClose(w.editors[i])
 	w.editors = slices.Delete(w.editors, i, i+1)
 	switch {
 	case len(w.editors) == 0:
@@ -478,7 +478,7 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 				name = e.origin() + " · " + e.title() + " (read-only)"
 			}
 			small(name).Grow(1).Shrink(1).MinWidth(0)
-			if isJava(e.path) {
+			if s := w.serverFor(e.path); s != nil {
 				if errs, warns := counts(e); errs+warns > 0 {
 					ui.Row(c).Gap(8).Children(func() {
 						if errs > 0 {
@@ -489,7 +489,7 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 						}
 					})
 				}
-				w.javaChip(c)
+				w.serverChip(c, s)
 			}
 			caret := e.ed.Selection().Caret
 			col := utf8.RuneCountInString(e.ed.Buffer().Line(caret.Line)[:caret.Col]) + 1
@@ -508,24 +508,24 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 	})
 }
 
-// javaChip says what the Java language server does, with what failed as
-// its tip.
-func (w *window) javaChip(c *ui.Context) {
+// serverChip says what a language server does, with what failed as its
+// tip.
+func (w *window) serverChip(c *ui.Context, s *langServer) {
 	t := c.Theme()
-	status := w.javaStatus()
+	status := s.statusText()
 	if status == "" {
 		return
 	}
 	row := ui.Row(c).Gap(5).AlignItems(ui.Center).Shrink(1).MinWidth(0).MaxWidth(360)
-	if w.java.detail != "" {
-		row.Tooltip(w.java.detail)
+	if s.detail != "" {
+		row.Tooltip(s.detail)
 	}
 	row.Children(func() {
-		if w.java.busy() {
+		if s.busy() {
 			ui.Spinner(c).Size(10, 10).Label("Working")
 		}
 		color := t.TextMuted
-		if w.java.state == javaFailed {
+		if s.state == serverFailed {
 			color = t.Danger
 		}
 		ui.Text(c, status).FontSize(11).TextColor(color).SingleLine().Shrink(1).MinWidth(0)

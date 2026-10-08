@@ -104,11 +104,13 @@ type window struct {
 	// closing is set once the window may close with unsaved changes.
 	closing bool
 
-	// The Java language server, and what starts it, nil in tests, which
-	// give their own. posted, in tests, holds what the server's
-	// goroutines post to the main thread.
-	java       javaServer
-	javaLaunch javaLauncher
+	// The language servers of Java and Go, and what starts them, nil in
+	// tests, which give their own. posted, in tests, holds what the
+	// servers' goroutines post to the main thread.
+	java       langServer
+	golang     langServer
+	javaLaunch serverLauncher
+	goLaunch   serverLauncher
 	posted     chan func()
 
 	// The search of the editor, and the bar going to a file.
@@ -236,6 +238,7 @@ func openWindow(dir string, src source) error {
 
 	w := newWindow(repo, src)
 	w.javaLaunch = launchJava
+	w.goLaunch = launchGo
 	w.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:          windowTitle(repo.Root, src),
 		Width:          1280,
@@ -272,7 +275,7 @@ func openWindow(dir string, src source) error {
 			w.debug.client.Close()
 		}
 		w.runKill()
-		w.javaStop()
+		w.stopServers()
 		offSettings()
 		windowsMu.Lock()
 		for i, o := range windows {
@@ -306,6 +309,8 @@ func newWindow(repo *git.Repo, src source) *window {
 	width, shown := state.layout()
 	w := &window{
 		repo:         repo,
+		java:         langServer{lang: javaLang},
+		golang:       langServer{lang: goLang},
 		launch:       src,
 		source:       src,
 		settings:     cfg.Get(),
@@ -365,11 +370,11 @@ func (w *window) applySettings(s Settings) {
 	}
 	if old.JavaHome != s.JavaHome || old.JdtlsPath != s.JdtlsPath {
 		// Start the server again with the Java or the jdtls chosen.
-		if w.java.state != javaIdle {
-			w.javaStop()
+		if w.java.state != serverIdle {
+			w.stop(&w.java)
 			for _, e := range w.editors {
 				if e.abs != "" && isJava(e.path) && e.ed != nil {
-					w.javaAttach(e)
+					w.attach(e)
 				}
 			}
 		}

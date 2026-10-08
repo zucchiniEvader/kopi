@@ -214,10 +214,10 @@ func (w *window) launchConfig(cfg launch.Config, debug bool) {
 		}
 	}
 	j := &w.java
-	if j.state != javaReady {
+	if j.state != serverReady {
 		r.waiting, r.pending = true, &pendingRun{cfg, debug}
 		w.say(lineInfo, "Waiting for the Java language server…")
-		w.javaStart()
+		w.start(&w.java)
 		return
 	}
 	if debug && !j.debugger {
