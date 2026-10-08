@@ -249,14 +249,16 @@ func (w *window) sidebar(c *ui.Context) {
 			}
 		})
 		ui.Box(c).Height(1).Shrink(0).FillWidth().Margin(0, 0, 4).Background(ui.RGBA(127, 127, 127, 0.22))
-		ui.Column(c).Padding(2, 10, 8).Children(func() {
-			switch w.tab {
-			case tabSearch:
-				w.searchHeader(c)
-			case tabRun:
-				w.runHeader(c)
-			}
-		})
+		// The headers of the views that have one.
+		if w.tab == tabSearch || w.tab == tabRun {
+			ui.Column(c).Padding(2, 10, 8).Children(func() {
+				if w.tab == tabSearch {
+					w.searchHeader(c)
+				} else {
+					w.runHeader(c)
+				}
+			})
+		}
 		switch w.tab {
 		case tabExplorer:
 			w.explorerView(c)

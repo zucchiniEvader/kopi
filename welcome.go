@@ -97,7 +97,7 @@ func recentRow(c *ui.Context, dir string) {
 	row.Children(func() {
 		ui.Icon(c, iconFolder).FontSize(14).TextColor(t.TextMuted)
 		ui.Text(c, filepath.Base(dir)).FontSize(13).TextColor(t.Accent).Shrink(0)
-		ui.Text(c, abbreviateHome(filepath.Dir(dir))).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+		ui.Text(c, abbreviateHome(filepath.Dir(dir))).FontSize(12).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 	})
 }
 
