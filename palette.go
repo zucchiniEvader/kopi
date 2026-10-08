@@ -295,7 +295,7 @@ func (w *window) shortcutsHelp(c *ui.Context) {
 		{"Navigation", [][2]string{{"Command bar", "⌘K"}, {"Go to file", "⌘P"}, {"Toggle sidebar", "⌘⇧B"},
 			{"Explorer, search, Git", "⌘1 … ⌘3"}, {"Close tab", "⌘W"}}},
 		{"Search", [][2]string{{"Find", "⌘F"}, {"Replace", "⌥⌘F"}, {"Find in files", "⇧⌘F"}, {"Next match", "↩"}, {"Previous match", "⇧↩"}, {"Close search", "Esc"}}},
-		{"Git", [][2]string{{"Commit", "⌘↩ / ⇧⌘↩"}, {"Next change", "⌥F5"}, {"Previous change", "⇧⌥F5"}, {"Refresh changes", "⌘R"}}},
+		{"Git", [][2]string{{"Commit", "↩ / ⇧⌘↩"}, {"Next change", "⌥F5"}, {"Previous change", "⇧⌥F5"}, {"Refresh changes", "⌘R"}}},
 		{"Code", [][2]string{{"Bigger text", "⌘+"}, {"Smaller text", "⌘-"}, {"Actual size", "⌘0"}}},
 	}
 	ui.Modal(c, &w.help, func() {

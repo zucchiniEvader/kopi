@@ -161,7 +161,7 @@ func TestCommit(t *testing.T) {
 	tt.Type("Greet louder")
 	tt.Frame()
 	snapshot(t, tt, "commit")
-	tt.Key(ui.Cmd, ui.KeyEnter)
+	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
 	if w.gitErr != "" || !strings.HasPrefix(w.gitNote, "Committed 3 files as ") {
 		t.Fatalf("not committed: %q, %q", w.gitErr, w.gitNote)

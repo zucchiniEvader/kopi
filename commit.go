@@ -53,16 +53,18 @@ func (w *window) canCommit() bool {
 	return w.gitOp == "" && chosen > 0 && strings.TrimSpace(w.message) != ""
 }
 
-// commitBox is the message of the next commit, atop the changes, and
-// the button that makes it of the files chosen; ⌘↩ in the message does.
+// commitBox is the message of the next commit, one line atop the
+// changes, and the button that makes it of the files chosen; ↩ in the
+// message does.
 func (w *window) commitBox(c *ui.Context) {
 	t := c.Theme()
 	chosen, all := w.commitCounts()
 	ui.Column(c).Shrink(0).Padding(0, 10, 8).Gap(6).Children(func() {
-		box := ui.Row(c).Padding(6, 8).Radius(7).Background(ui.RGBA(127, 127, 127, 0.12))
+		// One line, as the search's field: ↩ commits.
+		box := ui.Row(c).Height(28).Padding(0, 8).Radius(7).AlignItems(ui.Center).Background(ui.RGBA(127, 127, 127, 0.12))
 		box.Children(func() {
-			in := ui.TextAreaBase(c, &w.message).Placeholder("Message (⌘↩ to commit)").Label("Commit message").
-				FontSize(12).MinHeight(36).MaxHeight(160).Grow(1).MinWidth(0)
+			in := ui.TextInputBase(c, &w.message).Placeholder("Message (↩ to commit)").Label("Commit message").
+				FontSize(12).Grow(1).MinWidth(0)
 			if w.commitFocus {
 				in.Focus()
 				w.commitFocus = false
@@ -71,7 +73,7 @@ func (w *window) commitBox(c *ui.Context) {
 				box.Shadow(0, 0, 0, 3, t.Focus.Alpha(0.45))
 				w.typing = true
 			}
-			if in.Shortcut(ui.Cmd, ui.KeyEnter) && w.canCommit() {
+			if (in.Submitted() || in.Shortcut(ui.Cmd, ui.KeyEnter)) && w.canCommit() {
 				w.makeCommit()
 			}
 		})

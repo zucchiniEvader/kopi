@@ -105,7 +105,7 @@ func navKeys() (back, forward, backLabel, forwardLabel string) {
 
 // navButtons are Back and Forward, at the left of the tabs.
 func (w *window) navButtons(c *ui.Context) {
-	ui.Row(c).Gap(0).Shrink(0).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).Gap(0).Shrink(0).Margin(0, 0, 0, 6).AlignItems(ui.Center).Children(func() {
 		if b := iconButton(c, iconArrowLeft, "Go Back ("+backLabel+")").Disabled(!w.canNavigate(-1)); b.Clicked() {
 			w.navigate(-1)
 		}
