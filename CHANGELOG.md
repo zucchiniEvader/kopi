@@ -2,6 +2,7 @@
 
 ## 0.2.3
 
+- A new app icon: a flat cat.
 - The tabs scroll with no scroll bar: an edge fades where more tabs are
   past it, a mouse's wheel scrolls them, and the tab chosen comes into
   view.
@@ -18,7 +19,6 @@
   recent ones. The first launch no longer opens the root folder, /.
 - A window with a folder no longer lists the recent folders, nor a button
   to review the changes, when no file is open: the review is ⇧⌘R away.
-
 - The project's name atop the sidebar switches projects: its menu brings
   the windows of the others to the front, switches the window to a recent
   one or a folder chosen, or opens one in a new window.
