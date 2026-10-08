@@ -8,6 +8,9 @@
 - Clicking a file in the explorer no longer flashes its row in the accent
   color: the choice shows gray, and in the accent color only while the keys
   move it.
+- Tests have a color of their own, teal, in the explorer and the tabs: the
+  folders of tests, as src/test, and files named as tests, as AppTest.java,
+  server_test.go or App.test.tsx.
 
 ## 0.2.2
 

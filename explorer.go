@@ -202,8 +202,12 @@ func (w *window) explorerView(c *ui.Context) {
 				first, _, _ := strings.Cut(rows[i].label, "/")
 				w.fileIcon(c, first, true, e.open[p], muted)
 				name := ui.Text(c, rows[i].label).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
-				if w.errorsAt(p) > 0 && !(selected && focused) {
+				switch {
+				case selected && focused:
+				case w.errorsAt(p) > 0:
 					name.TextColor(pal.delText)
+				case isTestPath(p):
+					name.TextColor(pal.testText)
 				}
 				return
 			}
@@ -214,6 +218,8 @@ func (w *window) explorerView(c *ui.Context) {
 			case selected && focused:
 			case errs > 0:
 				name.TextColor(pal.delText)
+			case isTestPath(p):
+				name.TextColor(pal.testText)
 			case strings.HasPrefix(path.Base(p), "."):
 				name.TextColor(t.TextMuted)
 			}

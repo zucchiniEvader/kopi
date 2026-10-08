@@ -472,7 +472,10 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 							ui.Text(c, e.title()).FontSize(13).Italic().SingleLine()
 						} else {
 							w.fileIcon(c, e.title(), false, false, t.TextMuted)
-							ui.Text(c, e.title()).FontSize(13).SingleLine()
+							title := ui.Text(c, e.title()).FontSize(13).SingleLine()
+							if isTestPath(e.path) {
+								title.TextColor(pal.testText)
+							}
 						}
 						if closeButton(c, "Close "+e.title(), i == w.activeEditor || b.Hovered(), e.ed != nil && e.ed.Dirty()).Clicked() {
 							closing = i

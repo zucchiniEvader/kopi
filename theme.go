@@ -35,6 +35,7 @@ type palette struct {
 	viewed     ui.Color
 	ref        ui.Color // commit hashes and generated files
 	muted      ui.Color
+	testText   ui.Color // the names of tests, in the explorer and the tabs
 	syntax     [highlight.NumClasses]ui.Color
 }
 
@@ -67,6 +68,7 @@ var (
 		viewed:     ui.RGB(31, 122, 68),
 		ref:        ui.Hex("#c56e0e"),
 		muted:      ui.RGBA(17, 17, 17, 0.48),
+		testText:   ui.Hex("#13867a"),
 	}
 	darkPalette = palette{
 		appBg:      ui.Hex("#141414"),
@@ -96,6 +98,7 @@ var (
 		viewed:     ui.RGB(111, 208, 148),
 		ref:        ui.Hex("#eb9a3d"),
 		muted:      ui.RGBA(230, 230, 230, 0.48),
+		testText:   ui.Hex("#4ec9b0"),
 	}
 )
 
