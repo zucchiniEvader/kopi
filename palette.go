@@ -55,6 +55,10 @@ func (w *window) commands() []command {
 		{title: "Show Git", hint: "Changes and history", keys: "⌘3", run: func() { w.tab, w.sidebarShown = tabGit, true }},
 		{title: "Save", keys: "⌘S", run: w.saveEditor},
 		{title: "Close Tab", keys: "⌘W", run: w.closeTab},
+		{title: "Git: Fetch", hint: "From every remote", run: w.fetch},
+		{title: "Git: Pull", hint: "From the upstream", run: w.pull},
+		{title: "Git: Push", hint: "To the upstream, or publish the branch", run: w.push},
+		{title: "Git: New Branch…", hint: "From HEAD", run: func() { w.openDialog(dialogNewBranch) }},
 		{title: "Show Uncommitted Changes", run: func() { w.setSource(w.launchWorkTree()); w.showReview() }},
 		{title: "Commit…", run: func() {
 			if w.source.kind == sourceWorkingTree && !w.commitOpen {
@@ -304,6 +308,7 @@ const (
 	dialogNone dialogKind = iota
 	dialogCommit
 	dialogBranch
+	dialogNewBranch // a branch to make at HEAD
 )
 
 func (w *window) openDialog(k dialogKind) {
@@ -320,8 +325,13 @@ func (w *window) sourceDialog(c *ui.Context) {
 		return
 	}
 	title, desc, label, placeholder := "Open Commit", "Review a commit by SHA or revision, such as HEAD~1.", "Commit", "HEAD~1 or a commit SHA"
-	if w.dialog == dialogBranch {
+	action, busy := "Open", "Opening…"
+	switch w.dialog {
+	case dialogBranch:
 		title, desc, label, placeholder = "Open Branch", "Compare the current working tree with a branch.", "Branch name", "main"
+	case dialogNewBranch:
+		title, desc, label, placeholder = "New Branch", "A branch from "+w.branch+", checked out with the changes.", "Branch name", "feature/name"
+		action, busy = "Create", "Creating…"
 	}
 	open := func() {
 		v := strings.TrimSpace(w.dialogValue)
@@ -335,6 +345,22 @@ func (w *window) sourceDialog(c *ui.Context) {
 		// git answers off the main thread.
 		kind := w.dialog
 		w.dialogBusy = true
+		if kind == dialogNewBranch {
+			w.background(func() {
+				err := w.repo.CreateBranch(v)
+				w.update(func() {
+					w.dialogBusy = false
+					if err != nil {
+						w.dialogErr = errorText(err)
+						return
+					}
+					w.dialogOpen = false
+					w.load()
+					w.loadHistory()
+				})
+			})
+			return
+		}
 		w.background(func() {
 			hash, err := w.repo.Resolve(v)
 			w.update(func() {
@@ -372,9 +398,9 @@ func (w *window) sourceDialog(c *ui.Context) {
 				if ui.Button(c, "Cancel").Clicked() {
 					w.dialogOpen = false
 				}
-				label := "Open"
+				label := action
 				if w.dialogBusy {
-					label = "Opening…"
+					label = busy
 				}
 				if ui.PrimaryButton(c, label).Disabled(w.dialogBusy).Clicked() {
 					open()

@@ -92,6 +92,20 @@ type window struct {
 	historyEl                          *ui.Element
 	commitTimes                        map[string]commitTime
 	historyLoading                     bool
+	// historyAll shows every branch in the graph, else HEAD's, and its
+	// upstream's; graph is the graph of history.
+	historyAll bool
+	graph      []graphRow
+	// Where the branch stands against its upstream, the branches, the
+	// remotes; the operation of git running, as "Pulling", and why the
+	// last failed.
+	sync     git.Sync
+	branches []git.Branch
+	remotes  []string
+	gitOp    string
+	gitErr   string
+	// deletingBranch is the branch asked about deleting.
+	deletingBranch string
 	// reloaded are the files that changed in the last refresh.
 	reloaded  map[string]bool
 	dragWidth float32
@@ -974,23 +988,71 @@ func (w *window) loadUser() {
 	})
 }
 
-// loadHistory reads the commits of the History tab.
+// loadHistory reads the commits of the History tab, with their graph,
+// and where the branch stands: the branches, and its upstream.
 func (w *window) loadHistory() {
 	if w.repo.Plain {
 		return
 	}
-	limit := w.historyLimit
+	limit, all := w.historyLimit, w.historyAll
 	w.historyLoading = true
 	w.background(func() {
-		commits, err := w.repo.Log(0, limit)
+		sync := w.repo.Sync()
+		branches, _ := w.repo.Branches()
+		remotes := w.repo.Remotes()
+		commits, err := w.repo.Graph(limit, all, sync.Upstream)
 		if err != nil {
 			commits = nil
 		}
+		graph := layoutGraph(commits)
 		w.update(func() {
-			w.history = commits
+			w.sync, w.branches, w.remotes = sync, branches, remotes
+			w.history, w.graph = commits, graph
 			w.historyMore = len(commits) >= limit
 			w.historyLoading = false
 		})
+	})
+}
+
+// runGit runs an operation of git off the main thread, one at a time,
+// as busy says, as "Pulling"; then reads everything again, and says why
+// it failed.
+func (w *window) runGit(busy string, fn func() error) {
+	if w.gitOp != "" || w.repo.Plain {
+		return
+	}
+	w.gitOp, w.gitErr = busy, ""
+	w.background(func() {
+		err := fn()
+		w.update(func() {
+			w.gitOp = ""
+			if err != nil {
+				w.gitErr = errorText(err)
+			}
+			// The files may have changed: the branch's, or those pulled.
+			w.explorer.reset()
+			w.load()
+			w.loadHistory()
+			w.checkDisk()
+		})
+	})
+}
+
+func (w *window) fetch() { w.runGit("Fetching", w.repo.Fetch) }
+func (w *window) pull()  { w.runGit("Pulling", w.repo.Pull) }
+func (w *window) push()  { w.runGit("Pushing", w.repo.Push) }
+
+// switchBranch checks out a branch: a local one, or a remote's, through
+// the local branch of its name.
+func (w *window) switchBranch(b git.Branch) {
+	if b.Current {
+		return
+	}
+	w.runGit("Switching", func() error {
+		if b.Remote {
+			return w.repo.TrackBranch(b.Name)
+		}
+		return w.repo.SwitchBranch(b.Name)
 	})
 }
 
@@ -1031,6 +1093,11 @@ func (w *window) checkChanges() {
 			w.explorer.reset()
 			if w.source == src && !w.loading {
 				w.changed = true
+			}
+			// Where the branch stands may have changed with a commit, a
+			// fetch or a push made outside.
+			if w.gitShown && !w.historyLoading {
+				w.loadHistory()
 			}
 		})
 	}

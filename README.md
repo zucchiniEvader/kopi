@@ -35,6 +35,10 @@ are Godiff's.
 - **Updates**: a new version, from the releases here, checked once a day and
   from Check for Updates…, installed in place with its notes from
   `CHANGELOG.md`.
+- **Git**: the branch, switched, made, compared with and deleted from its
+  menu; fetch, pull and push, with the commits to pull and to push; the
+  history as a graph, of the branch or of every one, with its branches
+  and tags.
 - **Review** (from Godiff): staged, unstaged and untracked changes against
   `HEAD`, split and unified diffs with word-level highlighting, viewed files,
   review comments as Markdown, commits, history, and comparisons with a

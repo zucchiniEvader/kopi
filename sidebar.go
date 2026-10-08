@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -728,100 +727,6 @@ func (w *window) selectTreeFile(i int) {
 	}
 }
 
-// historyView lists the commits of the History tab.
-func (w *window) historyView(c *ui.Context) {
-	t := c.Theme()
-	pal := paletteFor(t)
-	// The commits: the uncommitted changes are the Changes section's.
-	type entry struct {
-		commit *git.Commit
-	}
-	entries := make([]entry, len(w.history))
-	for i := range w.history {
-		entries[i] = entry{commit: &w.history[i]}
-	}
-	target := w.source
-	current := -1
-	for i, e := range entries {
-		if target.kind == sourceCommit && target.ref == e.commit.Hash {
-			current = i
-		}
-	}
-	open := func(i int) {
-		if i < 0 || i >= len(entries) {
-			return
-		}
-		w.commitOpen = false
-		w.historyList.ScrollIntoView(i)
-		w.setSource(source{kind: sourceCommit, ref: entries[i].commit.Hash})
-	}
-	w.historyList.Key = func(i int) any { return entries[i].commit.Hash }
-	w.historyList.Label = func(i int) string { return entries[i].commit.Subject }
-	focused := w.focusHistory || w.historyEl != nil && w.historyEl.FocusWithin()
-	now := time.Now()
-	list := ui.List(c, &w.historyList, len(entries), func(i int) {
-		e := entries[i]
-		row := ui.Row(c).Gap(8).Padding(5, 8).Radius(6).AlignItems(ui.Start).Role(ui.RoleButton).Label(e.commit.Subject)
-		muted, ref := t.TextMuted, pal.ref
-		switch {
-		case i == current && focused:
-			row.Background(t.Accent).TextColor(t.AccentText)
-			muted, ref = t.AccentText.Alpha(0.75), t.AccentText
-		case i == current:
-			row.Background(ui.RGBA(127, 127, 127, 0.2))
-		case row.Hovered():
-			row.Background(ui.RGBA(127, 127, 127, 0.08))
-		}
-		if row.Clicked() {
-			if debugFrames {
-				log.Printf("history row %d clicked", i)
-			}
-			open(i)
-		}
-		row.Children(func() {
-			cm := e.commit
-			when := w.commitTimes[cm.Hash]
-			if when.at != now.Truncate(time.Minute) {
-				// Formatted once a minute, rather than every frame.
-				when = commitTime{at: now.Truncate(time.Minute), ago: relativeTime(now, cm.Time), full: cm.Time.Format("Mon Jan 2 15:04:05 2006")}
-				w.commitTimes[cm.Hash] = when
-			}
-			ui.Text(c, cm.Short).Font(w.codeFont()).FontSize(12).TextColor(ref).Width(56).Shrink(0)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, cm.Subject).FontSize(12).SingleLine().Tooltip(cm.Subject)
-				ui.Row(c).Gap(6).Children(func() {
-					ui.Text(c, cm.Author).FontSize(10).SingleLine().TextColor(muted).Grow(1).MinWidth(0)
-					ui.Text(c, when.ago).FontSize(10).TextColor(muted).Shrink(0).Tooltip(when.full)
-				})
-			})
-		})
-	}).Grow(1).Padding(2, 8).Gap(1).Focusable().FocusRing(false).Label("History")
-	w.historyEl = list
-	if w.focusHistory {
-		list.Focus()
-		w.focusHistory = false
-	}
-	list.Children(func() {
-		if len(entries) == 0 {
-			ui.Text(c, "No commits yet").FontSize(12).TextColor(t.TextMuted).Padding(12)
-		}
-	})
-	if list.Shortcut(0, ui.KeyDown) {
-		open(current + 1)
-	}
-	if list.Shortcut(0, ui.KeyUp) {
-		open(max(current-1, 0))
-	}
-	// More commits load well before the end comes into view, so that
-	// scrolling does not stop there.
-	if w.historyMore && !w.historyLoading {
-		if _, last := w.historyList.Visible(); last >= len(entries)-historyPage/2 {
-			w.historyLimit += historyPage
-			w.loadHistory()
-		}
-	}
-}
-
 // commitTime is how a commit's time shows, as of a minute.
 type commitTime struct {
 	at        time.Time
@@ -914,78 +819,6 @@ func (w *window) sidebarResizer(c *ui.Context, pal *palette) {
 				go state.setLayout(w.sidebarWidth, w.sidebarShown)
 			}
 			w.dragWidth = w.sidebarWidth
-		}
-	})
-}
-
-// gitView is the Git tab: the changes, with the commit's button, and the
-// history, each under a title that closes and opens it; open, they share
-// the tab's height.
-func (w *window) gitView(c *ui.Context, pal *palette) {
-	t := c.Theme()
-	header := func(title, badge string, closed *bool) {
-		row := ui.Row(c).Height(28).Shrink(0).Padding(0, 10, 0, 8).Gap(4).AlignItems(ui.Center).Label(title)
-		if row.Hovered() {
-			row.Background(ui.RGBA(127, 127, 127, 0.06))
-		}
-		if row.Clicked() {
-			*closed = !*closed
-		}
-		row.Children(func() {
-			ic := ui.Icon(c, iconChevronDown).FontSize(12).TextColor(t.TextMuted)
-			ic.Rotate(ic.Animate("rot", map[bool]float32{false: 0, true: -90}[*closed], 150*time.Millisecond))
-			ui.Text(c, strings.ToUpper(title)).FontSize(11).Bold().TextColor(t.TextMuted)
-			if badge != "" {
-				ui.Text(c, badge).FontSize(10).FontWeight(600).TextColor(t.TextMuted).
-					Padding(0, 6).Radius(8).Background(ui.RGBA(127, 127, 127, 0.15))
-			}
-		})
-	}
-	if w.repo.Plain {
-		ui.Column(c).Padding(4, 14).Gap(2).Children(func() {
-			ui.Text(c, "Not a Git repository").FontSize(12).Bold()
-			ui.Text(c, abbreviateHome(w.repo.Root)).FontSize(11).TextColor(t.TextMuted)
-		})
-		return
-	}
-	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-		// The branch, and what the review shows other than the work tree.
-		ui.Row(c).Shrink(0).Padding(0, 10, 8).Gap(6).AlignItems(ui.Center).Children(func() {
-			if w.branch != "" {
-				chip(c, pal, iconBranch, w.branch, t.Text).Tooltip("Branch " + w.branch)
-			}
-			switch w.source.kind {
-			case sourceCommit:
-				chip(c, pal, iconCommit, shortHash(w.source.ref), pal.ref).Font(w.codeFont()).Tooltip(w.source.ref)
-			case sourceBranch:
-				chip(c, pal, iconBranch, "vs "+w.source.ref, pal.ref).Tooltip("The work tree, committed or not, since it branched off " + w.source.ref)
-			}
-			// Back from a commit or a branch to the local changes, which
-			// the history no longer lists.
-			if w.source.kind != sourceWorkingTree && iconButton(c, iconClose, "Back to Local Changes").Size(22, 22).Clicked() {
-				w.setSource(w.launchWorkTree())
-			}
-		})
-		badge := ""
-		if n := len(w.files); n > 0 && w.source.kind == sourceWorkingTree {
-			badge = compact(n)
-		}
-		header("Changes", badge, &w.gitChangesClosed)
-		if !w.gitChangesClosed {
-			ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-				w.fileTree(c)
-				w.sidebarFooter(c, pal)
-			})
-		}
-		ui.Box(c).Height(1).Shrink(0).Background(pal.cardBorder)
-		header("History", "", &w.gitHistoryClosed)
-		if !w.gitHistoryClosed {
-			ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-				w.historyView(c)
-			})
-		}
-		if w.gitChangesClosed && w.gitHistoryClosed {
-			ui.Spacer(c)
 		}
 	})
 }

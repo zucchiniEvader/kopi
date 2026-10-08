@@ -2,6 +2,14 @@
 
 ## 0.2.5
 
+- The Git tab has the branch atop it: its menu switches to a branch,
+  local or a remote's, makes one, compares the work tree with one, or
+  deletes one, after asking.
+- Fetch, pull and push beside it, with the commits to pull and to push; a
+  branch with no upstream is published. Why one failed shows under them.
+- The history is a graph: each line of descent in a color of its own, the
+  branches and tags at their commits, the commits to pull above HEAD, and
+  every branch, from the menu atop it.
 - A long project name atop the sidebar no longer runs under the sidebar's
   toggle: it ends in "…", and where the project is shows only with room
   for it.

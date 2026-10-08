@@ -73,6 +73,17 @@ func (w *window) view(c *ui.Context) {
 			w.discarding = nil
 		}
 	}
+	if w.deletingBranch != "" {
+		open := true
+		name := w.deletingBranch
+		if choice := ui.AlertDialog(c, &open, "Delete the branch "+name+"?",
+			"Git refuses to delete a branch with commits merged nowhere else.", "Cancel", "Delete"); choice == 1 {
+			w.deletingBranch = ""
+			w.runGit("Deleting", func() error { return w.repo.DeleteBranch(name) })
+		} else if !open {
+			w.deletingBranch = ""
+		}
+	}
 	if !w.focusedOnce && w.diffListEl != nil && len(w.rows) > 0 {
 		// The review takes the keys as the window opens.
 		w.focusedOnce = true
