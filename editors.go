@@ -414,22 +414,25 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 		})
 		tabs.Children(func() {
 			ui.Row(c).Height(titleBarHeight).Gap(2).AlignItems(ui.Center).Children(func() {
-				// Each tab is a block inset in the bar, touching none of its
-				// edges, as the rows of the sidebar's lists: the one shown
-				// filled gray, the others clear until hovered. Nothing but
-				// their fill differs, so that none moves as another is
-				// chosen.
+				// The tab shown is underlined, a short rounded line inset
+				// from its sides, above the bar's bottom edge; the others
+				// are muted until hovered. Nothing but their colors
+				// differs, so that none moves as another is chosen.
 				tab := func(active, library bool) *ui.Element {
-					b := ui.ButtonBase(c).Height(28).Padding(0, 4, 0, 10).Gap(6).Shrink(0).Radius(6).TextColor(t.TextMuted)
+					b := ui.ButtonBase(c).Height(titleBarHeight).Padding(0, 4, 0, 10).Gap(6).Shrink(0).TextColor(t.TextMuted)
 					switch {
-					case active && library:
-						// A library's document is no source of the
-						// repository: its tab is lighter.
-						b.Background(ui.RGBA(127, 127, 127, 0.1)).TextColor(t.Text)
 					case active:
-						b.Background(ui.RGBA(127, 127, 127, 0.16)).TextColor(t.Text)
+						line := t.Accent
+						if library {
+							// A library's document is no source of the
+							// repository: its line is gray.
+							line = t.TextMuted.Alpha(0.6)
+						}
+						b.TextColor(t.Text).DrawOver(func(p *ui.Painter, r ui.Rect) {
+							p.Fill(ui.Rect{X: r.X + 8, Y: r.Y + r.H - 4, W: r.W - 16, H: 2}, line, 1)
+						})
 					case b.Hovered():
-						b.Background(ui.RGBA(127, 127, 127, 0.08))
+						b.TextColor(t.Text)
 					}
 					return b
 				}
