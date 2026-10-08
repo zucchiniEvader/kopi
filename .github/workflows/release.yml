@@ -78,9 +78,17 @@ jobs:
           rm "$RUNNER_TEMP/certificate.p12"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          # Apple's intermediate authorities, of either generation, without
+          # which the certificate is no valid identity.
+          for ca in DeveloperIDCA DeveloperIDG2CA; do
+            curl -fsSL "https://www.apple.com/certificateauthority/$ca.cer" -o "$RUNNER_TEMP/$ca.cer"
+            security import "$RUNNER_TEMP/$ca.cer" -k "$keychain" || true
+          done
           identity="$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')"
           if [ -z "$identity" ]; then
-            echo "No Developer ID Application certificate in CSC_LINK" >&2
+            echo "No valid Developer ID Application identity in CSC_LINK. The keychain holds:" >&2
+            security find-identity -p codesigning "$keychain" >&2
+            security find-certificate -a "$keychain" | grep '"labl"' >&2 || true
             exit 1
           fi
           echo "Signing as $identity"
