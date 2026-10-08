@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"path"
 	"strings"
 
@@ -21,9 +22,12 @@ type diffSpec struct {
 	file           *diff.File
 	loading        bool
 	// left is the old side, shown beside the editor's while split.
-	left       *editor.Editor
-	scrolled   [2]float32 // where both sides were scrolled together
-	split      bool
+	left     *editor.Editor
+	scrolled [2]float32 // where both sides were scrolled together
+	split    bool
+	// changes are the lines where the runs of changes start, in the
+	// editor's text.
+	changes    []int
 	additions  int
 	deletions  int
 	unchanged  bool
@@ -101,7 +105,17 @@ func (w *window) layoutDiff(e *editorTab) {
 		e.ed, spec.left = nil, nil
 		return
 	}
+	first := e.ed == nil
+	defer func() {
+		// A change opened shows its first run of changes.
+		if first && e.ed != nil && len(spec.changes) > 0 {
+			e.ed.GoTo(spec.changes[0])
+		}
+	}()
 	show := func(ed **editor.Editor, text string, marks []editor.LineMark, both bool) {
+		if ed == &e.ed {
+			spec.changes = changeStarts(marks)
+		}
 		if *ed == nil {
 			*ed = editor.New(spec.path, text)
 			(*ed).ReadOnly = true
@@ -120,6 +134,68 @@ func (w *window) layoutDiff(e *editorTab) {
 	spec.left = nil
 	text, marks := unifiedDoc(f)
 	show(&e.ed, text, marks, true)
+}
+
+// changeStarts returns the lines where runs of changes start: lines
+// added or deleted after a line of context, or the first.
+func changeStarts(marks []editor.LineMark) []int {
+	var starts []int
+	changed := false
+	for i, m := range marks {
+		now := m.Kind != editor.MarkContext
+		if now && !changed {
+			starts = append(starts, i)
+		}
+		changed = now
+	}
+	return starts
+}
+
+// goToChange puts the caret on the next run of changes of the diff tab
+// shown, by is 1, or the one before, by is -1, from the last to the
+// first and back.
+func (w *window) goToChange(by int) {
+	e := w.activeTab()
+	if e == nil || e.diff == nil || e.ed == nil || len(e.diff.changes) == 0 {
+		return
+	}
+	starts := e.diff.changes
+	caret := e.ed.Selection().Caret.Line
+	to := -1
+	if by > 0 {
+		for _, s := range starts {
+			if s > caret {
+				to = s
+				break
+			}
+		}
+		if to < 0 {
+			to = starts[0]
+		}
+	} else {
+		for _, s := range starts {
+			if s < caret {
+				to = s
+			}
+		}
+		if to < 0 {
+			to = starts[len(starts)-1]
+		}
+	}
+	e.ed.GoTo(to)
+	e.ed.Focus()
+}
+
+// changeAt returns which run of changes the caret is in, or past, from 1;
+// 0 before the first.
+func (s *diffSpec) changeAt(line int) int {
+	n := 0
+	for i, c := range s.changes {
+		if c <= line {
+			n = i + 1
+		}
+	}
+	return n
 }
 
 // reloadWorkTreeDiffs reads again the changes of the work tree the diff
@@ -305,6 +381,24 @@ func (w *window) diffStatus(c *ui.Context, pal *palette, e *editorTab) {
 			if spec.unchanged {
 				small("No changes")
 			} else {
+				// Where the caret is among the runs of changes, and the
+				// buttons going to the one before and the next.
+				if n := len(spec.changes); n > 0 && e.ed != nil {
+					at := spec.changeAt(e.ed.Selection().Caret.Line)
+					label := plural(n, "change")
+					if at > 0 {
+						label = fmt.Sprintf("%d of %d", at, n)
+					}
+					small(label).Shrink(0)
+					ui.Row(c).Gap(0).Shrink(0).Children(func() {
+						if iconButton(c, iconArrowUp, "Previous Change (⇧⌥F5)").Size(22, 22).Clicked() {
+							w.goToChange(-1)
+						}
+						if iconButton(c, iconArrowDown, "Next Change (⌥F5)").Size(22, 22).Clicked() {
+							w.goToChange(1)
+						}
+					})
+				}
 				ui.RichText(c,
 					ui.Span{Text: "+" + thousands(spec.additions), Color: pal.addText},
 					ui.Span{Text: " −" + thousands(spec.deletions), Color: pal.delText},

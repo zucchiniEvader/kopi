@@ -115,6 +115,10 @@ type window struct {
 	historyOpen  map[string]bool
 	historyFiles map[string][]*diff.File
 	historySel   string
+	// treeKeyboard and historyKeyboard tell that the keys move the choice
+	// of the changes and of the history, which then shows in the accent
+	// color.
+	treeKeyboard, historyKeyboard bool
 	// deletingBranch is the branch asked about deleting.
 	deletingBranch string
 	// reloaded are the files that changed in the last refresh.

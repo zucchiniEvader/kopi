@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egoist/mygo/ui"
+
 	"github.com/zucchiniEvader/kopi/internal/diff"
 	"github.com/zucchiniEvader/kopi/internal/editor"
 )
@@ -99,4 +101,101 @@ func TestDiffTabFollowsTheFile(t *testing.T) {
 		t.Errorf("not inline: %q", e.ed.Text())
 	}
 	snapshot(t, tt, "diff-inline")
+}
+
+func TestChangeStarts(t *testing.T) {
+	_, marks := unifiedDoc(aChange())
+	if got := changeStarts(marks); !reflect.DeepEqual(got, []int{1, 5}) {
+		t.Errorf("starts %v", got)
+	}
+}
+
+// TestGoToChange opens a change on its first run of changes, and goes to
+// the next and the one before, round from the last to the first.
+func TestGoToChange(t *testing.T) {
+	dir := testRepo(t)
+	src := strings.Replace(mainGo, `"Hello, " + name`, `"Hi, " + name`, 1)
+	src = strings.Replace(src, `"world"`, `"there"`, 1)
+	writeFile(t, dir, "main.go", src)
+	w, tt := launchTestWindow(t, dir)
+	w.tab = tabGit
+	tt.Frame()
+	if err := tt.Click("main.go"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	e := w.activeTab()
+	if e == nil || e.diff == nil || len(e.diff.changes) != 2 {
+		t.Fatalf("tab %+v", e)
+	}
+	line := func() int { return e.ed.Selection().Caret.Line }
+	first, second := e.diff.changes[0], e.diff.changes[1]
+	if line() != first || !tt.HasText("1 of 2") {
+		t.Errorf("opened on line %d, not %d: %q", line(), first, tt.Texts())
+	}
+	if err := tt.Click("Next Change (⌥F5)"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if line() != second || !tt.HasText("2 of 2") {
+		t.Errorf("next: line %d, not %d", line(), second)
+	}
+	w.goToChange(1)
+	if line() != first {
+		t.Errorf("past the last: line %d, not %d", line(), first)
+	}
+	w.goToChange(-1)
+	if line() != second {
+		t.Errorf("before the first: line %d, not %d", line(), second)
+	}
+	// Side by side, the sides go together.
+	if err := tt.Click("Side by Side"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	w.goToChange(1)
+	tt.Frame()
+	tt.Frame()
+	_, ly := e.diff.left.Scroll()
+	_, ry := e.ed.Scroll()
+	if ly != ry {
+		t.Errorf("the sides scroll apart: %v, %v", ly, ry)
+	}
+}
+
+// TestChosenGrayWithThePointer keeps a row chosen with the pointer gray
+// as the focus comes and goes, in the changes and the history: the accent
+// color shows only while the keys move the choice.
+func TestChosenGrayWithThePointer(t *testing.T) {
+	w, tt := launchTestWindow(t, testRepo(t))
+	w.tab = tabGit
+	tt.Frame()
+	if err := tt.Click("old.txt"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if w.treeKeyboard {
+		t.Error("a change chosen with the pointer shows in the accent color")
+	}
+	w.treeEl.Focus()
+	tt.Frame()
+	tt.Key(0, ui.KeyUp)
+	tt.Frame()
+	if !w.treeKeyboard {
+		t.Error("a change chosen with the keys does not show in the accent color")
+	}
+	if err := tt.Click("First commit"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if w.historyKeyboard || w.treeKeyboard {
+		t.Errorf("chosen with the pointer: history %v, changes %v", w.historyKeyboard, w.treeKeyboard)
+	}
+	w.historyEl.Focus()
+	tt.Frame()
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	if !w.historyKeyboard {
+		t.Error("a commit chosen with the keys does not show in the accent color")
+	}
 }

@@ -17,6 +17,11 @@
   of a change of the work tree follows the file.
 - A commit chosen in the history opens in place, listing its files, whose
   changes open in tabs: the Git tab no longer turns into the commit's.
+- A diff tab goes to the next change and the one before (⌥F5, ⇧⌥F5, or the
+  arrows below it), says which of them the caret is in, and opens on the
+  first.
+- A change or a commit chosen with the pointer no longer flashes in the
+  accent color as the focus moves: it shows gray, as in the explorer.
 - The history is a graph: each line of descent in a color of its own, the
   branches and tags at their commits, the commits to pull above HEAD, and
   every branch, from the menu atop it.

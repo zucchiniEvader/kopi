@@ -55,6 +55,8 @@ func (w *window) commands() []command {
 		{title: "Show Git", hint: "Changes and history", keys: "⌘3", run: func() { w.tab, w.sidebarShown = tabGit, true }},
 		{title: "Save", keys: "⌘S", run: w.saveEditor},
 		{title: "Close Tab", keys: "⌘W", run: w.closeTab},
+		{title: "Next Change", hint: "In the diff tab", keys: "⌥F5", run: func() { w.goToChange(1) }},
+		{title: "Previous Change", hint: "In the diff tab", keys: "⇧⌥F5", run: func() { w.goToChange(-1) }},
 		{title: "Git: Fetch", hint: "From every remote", run: w.fetch},
 		{title: "Git: Pull", hint: "From the upstream", run: w.pull},
 		{title: "Git: Push", hint: "To the upstream, or publish the branch", run: w.push},

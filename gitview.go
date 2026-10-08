@@ -413,7 +413,14 @@ func (w *window) historyView(c *ui.Context) {
 		}
 		return commits[items[i].commit].Subject
 	}
-	focused := w.focusHistory || w.historyEl != nil && w.historyEl.FocusWithin()
+	// The choice shows in the accent color only while the keys move it,
+	// as the explorer's.
+	if w.focusHistory {
+		w.historyKeyboard = true
+	} else if w.historyEl == nil || !w.historyEl.FocusWithin() {
+		w.historyKeyboard = false
+	}
+	focused := w.historyKeyboard && (w.focusHistory || w.historyEl != nil && w.historyEl.FocusWithin())
 	now := time.Now()
 	list := ui.List(c, &w.historyList, len(items), func(i int) {
 		it := items[i]
@@ -440,6 +447,7 @@ func (w *window) historyView(c *ui.Context) {
 			row.Background(ui.RGBA(127, 127, 127, 0.08))
 		}
 		if row.Clicked() {
+			w.historyKeyboard = false
 			activate(i)
 		}
 		if it.file != -1 {
@@ -526,6 +534,7 @@ func (w *window) historyView(c *ui.Context) {
 	// The keys move the choice; Enter, Right and Left open and close a
 	// commit, and Enter opens a file's change.
 	move := func(i int) {
+		w.historyKeyboard = true
 		if i >= 0 && i < len(items) {
 			w.historySel = w.historyKey(items[i])
 			w.historyList.ScrollIntoView(i)
@@ -543,10 +552,13 @@ func (w *window) historyView(c *ui.Context) {
 		open := w.historyOpen[cm.Hash]
 		switch {
 		case list.Shortcut(0, ui.KeyEnter):
+			w.historyKeyboard = true
 			activate(at)
 		case list.Shortcut(0, ui.KeyRight) && it.file == -1 && !open:
+			w.historyKeyboard = true
 			w.toggleHistoryCommit(cm)
 		case list.Shortcut(0, ui.KeyLeft):
+			w.historyKeyboard = true
 			if it.file == -1 && open {
 				w.toggleHistoryCommit(cm)
 			} else if it.file != -1 {

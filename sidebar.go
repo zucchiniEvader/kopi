@@ -568,7 +568,12 @@ func (w *window) fileTree(c *ui.Context) {
 	}
 	rows := w.visibleTree()
 	w.treeRows = rows
-	focused := w.treeEl != nil && w.treeEl.FocusWithin()
+	// The choice shows in the accent color only while the keys move it:
+	// chosen with the pointer, it stays gray as the focus comes and goes.
+	if w.treeEl == nil || !w.treeEl.FocusWithin() {
+		w.treeKeyboard = false
+	}
+	focused := w.treeEl != nil && w.treeEl.FocusWithin() && w.treeKeyboard
 	choose := func(key string) {
 		w.treeSel = key
 		if n := w.treeItems[key]; n != nil && !n.dir {
@@ -602,6 +607,7 @@ func (w *window) fileTree(c *ui.Context) {
 			row.Background(ui.RGBA(127, 127, 127, 0.08))
 		}
 		if row.Clicked() {
+			w.treeKeyboard = false
 			if n.dir {
 				w.closedDirs[key] = !w.closedDirs[key]
 			}
@@ -663,6 +669,7 @@ func (w *window) fileTree(c *ui.Context) {
 	}
 	// The keys move the choice; Enter opens it.
 	move := func(i int) {
+		w.treeKeyboard = true
 		if i >= 0 && i < len(rows) {
 			w.treeSel = rows[i].key
 			w.treeList.ScrollIntoView(i)
@@ -681,6 +688,7 @@ func (w *window) fileTree(c *ui.Context) {
 		move(len(rows) - 1)
 	}
 	if at >= 0 && list.Shortcut(0, ui.KeyEnter) {
+		w.treeKeyboard = true
 		choose(rows[at].key)
 	}
 	if at >= 0 {

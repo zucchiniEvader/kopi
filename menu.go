@@ -119,6 +119,8 @@ func buildMenu() *mygo.Menu {
 		{Label: "Git", Submenu: []*mygo.MenuItem{
 			{Label: "Review Changes", Accelerator: "CmdOrCtrl+Shift+R", Click: inWindow(func(w *window) { w.showReview() })},
 			{Label: "Refresh Changes", Accelerator: "CmdOrCtrl+R", Click: inWindow(func(w *window) { w.refresh() })},
+			{Label: "Next Change", Accelerator: "Alt+F5", Click: inWindow(func(w *window) { w.goToChange(1) })},
+			{Label: "Previous Change", Accelerator: "Shift+Alt+F5", Click: inWindow(func(w *window) { w.goToChange(-1) })},
 			{Label: "Commit…", Accelerator: "CmdOrCtrl+Shift+Enter", Click: inWindow(func(w *window) {
 				if w.source.kind == sourceWorkingTree && !w.commitOpen && len(w.files) > 0 {
 					w.showReview()
