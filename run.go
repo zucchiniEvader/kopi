@@ -594,12 +594,7 @@ func (w *window) runPanel(c *ui.Context, pal *palette) {
 		ui.Row(c).Height(34).Shrink(0).Padding(0, 8, 0, 12).Gap(4).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
 			ui.Text(c, "RUN").FontSize(11).Bold().TextColor(t.TextMuted).Margin(0, 6, 0, 0)
 			if len(r.configs) > 0 {
-				w.chosenConfig()
-				names := make([]string, len(r.configs))
-				for i, cf := range r.configs {
-					names[i] = cf.Name
-				}
-				ui.Select(c, &r.choice, names).Label("Configuration").FontSize(12)
+				w.configButton(c).MaxWidth(220)
 			} else {
 				ui.Text(c, currentFile).FontSize(12).TextColor(t.TextMuted).Tooltip("Runs the Java file shown: add configurations to " + launch.File)
 			}

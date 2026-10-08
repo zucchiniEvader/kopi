@@ -24,6 +24,8 @@
   one or a folder chosen, or opens one in a new window.
 - The sidebar slides in and out as it shows and hides, at once with
   Reduce Motion.
+- The launch configuration is chosen from a pop-up button with the
+  system's menu, which also opens launch.json.
 
 ## 0.2.2
 

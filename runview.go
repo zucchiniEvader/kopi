@@ -79,12 +79,7 @@ func (w *window) runHeader(c *ui.Context) {
 	}
 	ui.Row(c).Height(30).Gap(4).AlignItems(ui.Center).Children(func() {
 		if len(r.configs) > 0 {
-			w.chosenConfig()
-			names := make([]string, len(r.configs))
-			for i, cf := range r.configs {
-				names[i] = cf.Name
-			}
-			ui.Select(c, &r.choice, names).Label("Configuration").FontSize(12).Grow(1).Shrink(1).MinWidth(0)
+			w.configButton(c).Grow(1)
 		} else {
 			ui.Text(c, currentFile).FontSize(12).TextColor(t.TextMuted).SingleLine().Grow(1).Padding(0, 4).
 				Tooltip("Runs the Java file shown; launch.json gives configurations")
@@ -96,6 +91,37 @@ func (w *window) runHeader(c *ui.Context) {
 			w.debugOrContinue()
 		}
 	})
+}
+
+// configButton chooses the launch configuration, as a pop-up button of
+// macOS: the one chosen, and the system's menu of them, it checked.
+func (w *window) configButton(c *ui.Context) *ui.Element {
+	r := &w.run
+	t := c.Theme()
+	name := w.chosenConfig().Name
+	b := ui.ButtonBase(c).Height(26).Shrink(1).MinWidth(0).Padding(0, 6, 0, 10).Gap(6).Radius(7).
+		AlignItems(ui.Center).Label("Configuration: " + name).Background(ui.RGBA(127, 127, 127, 0.12))
+	if b.Pressed() {
+		b.Background(ui.RGBA(127, 127, 127, 0.24))
+	} else if b.Hovered() {
+		b.Background(ui.RGBA(127, 127, 127, 0.18))
+	}
+	b.Menu(func(m *ui.Menu) {
+		for _, cf := range r.configs {
+			if m.Item(cf.Name).Checked(cf.Name == r.choice).Chosen() {
+				r.choice = cf.Name
+			}
+		}
+		m.Separator()
+		if m.Item("Open launch.json").Chosen() {
+			w.openLaunchConfig()
+		}
+	})
+	b.Children(func() {
+		ui.Text(c, name).FontSize(12).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+		ui.Icon(c, iconChevronsUpDown).FontSize(12).TextColor(t.TextMuted).Shrink(0)
+	})
+	return b
 }
 
 // runView is the Run and Debug tab: the program running, the debug

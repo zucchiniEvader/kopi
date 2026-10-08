@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -153,5 +154,37 @@ func TestRunWithoutMain(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(w.repo.Root, ".vscode/launch.json"))
 	if err != nil || !strings.Contains(string(data), `"mainClass": "com.example.App"`) || w.activeTab().path != ".vscode/launch.json" {
 		t.Errorf("launch.json %s, %v", data, err)
+	}
+}
+
+// TestConfigMenu chooses the launch configuration from the system's menu
+// of the pop-up button.
+func TestConfigMenu(t *testing.T) {
+	w, tt := launchTestWindow(t, testRepo(t))
+	writeFile(t, w.repo.Root, ".vscode/launch.json", `{
+  "configurations": [
+    {"type": "java", "name": "Boom", "request": "launch", "mainClass": "com.example.App"},
+    {"type": "java", "name": "Sleep", "request": "launch", "mainClass": "com.example.App"},
+  ]
+}`)
+	w.tab = tabRun
+	tt.Frame()
+	if err := tt.Click("Configuration: Boom"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	if got, want := tt.Menu(), []string{"Boom", "Sleep", "-", "Open launch.json"}; !slices.Equal(got, want) {
+		t.Errorf("menu %q, want %q", got, want)
+	}
+	if err := tt.ChooseMenuItem("Sleep"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if w.run.choice != "Sleep" {
+		t.Errorf("choice %q", w.run.choice)
+	}
+	if _, ok := tt.Find("Configuration: Sleep"); !ok {
+		t.Errorf("the button does not say Sleep: %q", tt.Texts())
 	}
 }
