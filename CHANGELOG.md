@@ -11,6 +11,9 @@
   failed; the branch's menu still opens meanwhile.
 - The spinner of a fetch, a pull or a push keeps turning when the pointer
   moves over the window.
+- The history is a graph: each line of descent in a color of its own, the
+  branches and tags at their commits, the commits to pull above HEAD, and
+  every branch, from the menu atop it.
 - A change opens in a tab of its own, as the editor shows code: the whole
   file, its lines deleted and added marked, with their words that changed,
   in one column or side by side. A file of the changes opens it; the tab
@@ -27,9 +30,6 @@
 - The tabs no longer jump as the sidebar ends sliding in or out: they
   glide all the way, and the sidebar's toggle above them shows as the
   sidebar's edge passes it.
-- The history is a graph: each line of descent in a color of its own, the
-  branches and tags at their commits, the commits to pull above HEAD, and
-  every branch, from the menu atop it.
 - A long project name atop the sidebar no longer runs under the sidebar's
   toggle: it ends in "…", and where the project is shows only with room
   for it.
