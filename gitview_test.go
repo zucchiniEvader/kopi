@@ -79,7 +79,7 @@ func TestGitBranchAndSync(t *testing.T) {
 		t.Fatalf("%v: %q", err, tt.Texts())
 	}
 	tt.Frame()
-	want := []string{"main", "Remote Branches", "-", "New Branch…", "Compare with Branch"}
+	want := []string{"main", "Remote Branches", "-", "New Branch…"}
 	if got := tt.Menu(); !slices.Equal(got, want) {
 		t.Errorf("menu %q,\nwant %q", got, want)
 	}

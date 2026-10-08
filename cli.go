@@ -48,10 +48,10 @@ func appBundle() string {
 // runs in, as codiff's terminal helper does.
 func cliScript() string {
 	if bundle := appBundle(); bundle != "" && runtime.GOOS == "darwin" {
-		return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with Kopi.\nexec open -n -a %q --args --cwd \"$PWD\" \"$@\"\n", bundle)
+		return fmt.Sprintf("#!/bin/sh\n# Opens the folder here in Kopi.\nexec open -n -a %q --args --cwd \"$PWD\" \"$@\"\n", bundle)
 	}
 	exe, _ := os.Executable()
-	return fmt.Sprintf("#!/bin/sh\n# Reviews the changes of the Git repository here with Kopi.\n%q --cwd \"$PWD\" \"$@\" >/dev/null 2>&1 &\n", exe)
+	return fmt.Sprintf("#!/bin/sh\n# Opens the folder here in Kopi.\n%q --cwd \"$PWD\" \"$@\" >/dev/null 2>&1 &\n", exe)
 }
 
 // installCLI writes the kopi command into a directory of the PATH.

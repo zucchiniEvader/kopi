@@ -5,10 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/zucchiniEvader/kopi/internal/editor"
 )
 
 func TestExplorerOpensEditor(t *testing.T) {
@@ -53,11 +51,10 @@ func TestExplorerOpensEditor(t *testing.T) {
 	if !tt.Focused("Editor") {
 		t.Error("the editor has no focus")
 	}
-	// The review's keys, as J, type in the editor.
-	selHunk := w.selHunk
+	// Keys type in the editor.
 	tt.TypeKey(0, ui.KeyJ, "j")
-	if w.selHunk != selHunk || !strings.HasPrefix(e.ed.Text(), "jpackage") {
-		t.Errorf("J chose hunk %d; text %q", w.selHunk, e.ed.Text()[:10])
+	if !strings.HasPrefix(e.ed.Text(), "jpackage") {
+		t.Errorf("text %q", e.ed.Text()[:10])
 	}
 	if !e.ed.Dirty() {
 		t.Error("not dirty after typing")
@@ -69,70 +66,19 @@ func TestExplorerOpensEditor(t *testing.T) {
 	if !strings.HasPrefix(string(data), "// edited\npackage main") || e.ed.Dirty() {
 		t.Errorf("saved %q, dirty %v", string(data)[:20], e.ed.Dirty())
 	}
-	// Saving loads the changes again, with the edit.
+	// Saving reads the changes again, with the edit.
 	tt.Frame()
-	if err := tt.Click("Review"); err != nil {
-		t.Fatal(err)
+	for _, f := range w.files {
+		if f.Path == "main.go" && f.Additions != 2 {
+			t.Errorf("the changes do not have the edit: +%d", f.Additions)
+		}
 	}
-	tt.Frame()
-	if w.activeTab() != nil || w.diffListEl == nil {
-		t.Fatal("the review does not show")
-	}
-	if !tt.HasText("// edited") {
-		t.Error("the review does not show the edit")
-	}
-	// Back to the file, then closed.
-	if err := tt.Click("main.go"); err != nil {
-		t.Fatal(err)
-	}
+	// Closed.
 	if err := tt.Click("Close main.go"); err != nil {
 		t.Fatal(err)
 	}
 	if len(w.editors) != 0 || w.activeTab() != nil {
 		t.Errorf("%d editors after closing", len(w.editors))
-	}
-}
-
-func TestOpenFromReview(t *testing.T) {
-	w, tt := newTestWindow(t, testRepo(t))
-	w.openInEditor("src/new.go", 4)
-	tt.Frame()
-	e := w.activeTab()
-	if e == nil || e.ed == nil {
-		t.Fatal("no editor")
-	}
-	if c := e.ed.Selection().Caret; c != (editor.Pos{Line: 3}) {
-		t.Errorf("caret %v, want line 4", c)
-	}
-	// The explorer shows where the file is.
-	if !w.explorer.open["src"] || w.explorer.sel != "src/new.go" {
-		t.Errorf("explorer open %v, chose %q", w.explorer.open, w.explorer.sel)
-	}
-	// The review's toolbar is the review's.
-	if tt.HasText("Split") || tt.Focused("Find in diffs (⌘F)") {
-		t.Error("the review's controls show over an editor")
-	}
-	// A deleted file has no editor of its own: the user's editor, which
-	// the tests replace, gets it.
-	launchedMu.Lock()
-	n := len(editorLaunches)
-	launchedMu.Unlock()
-	w.openInEditor("old.txt", 1)
-	if len(w.editors) != 1 {
-		t.Errorf("%d editors after opening a deleted file", len(w.editors))
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		launchedMu.Lock()
-		got := len(editorLaunches)
-		launchedMu.Unlock()
-		if got > n {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the user's editor was not asked")
-		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -192,45 +138,21 @@ func TestExplorerCompactsPackages(t *testing.T) {
 	}
 }
 
-// The window opens on the explorer, with the keys, and no review, which
-// opens and closes as a tab.
+// The window opens on the explorer, with the keys, and the start's
+// actions.
 func TestLaunch(t *testing.T) {
 	w, tt := launchTestWindow(t, testRepo(t))
 	tt.Frame()
 	if w.tab != tabExplorer || !tt.Focused("Files") {
 		t.Errorf("tab %d, explorer focused %v", w.tab, tt.Focused("Files"))
 	}
-	if _, tab := tt.Find("Close Review"); w.reviewOpen || tab || !tt.HasText("Go to File") {
-		t.Errorf("review open %v: %q", w.reviewOpen, tt.Texts())
+	if !tt.HasText("Go to File") {
+		t.Errorf("no start: %q", tt.Texts())
 	}
 	// The keys choose files at once.
 	tt.Key(0, ui.KeyDown)
 	if w.explorer.sel == "" {
 		t.Error("Down chose nothing")
-	}
-	// No button opens the review, which ⇧⌘R opens, and which closes.
-	if tt.HasText("Review 4 Changes") {
-		t.Error("the start shows a button to review the changes")
-	}
-	w.showReview()
-	tt.Frame()
-	if _, tab := tt.Find("Close Review"); !w.reviewVisible() || !tab {
-		t.Fatal("the review does not show")
-	}
-	if err := tt.Click("Close Review"); err != nil {
-		t.Fatal(err)
-	}
-	if w.reviewOpen || !tt.HasText("Go to File") {
-		t.Errorf("the review stays: %q", tt.Texts())
-	}
-	// Closing it with a file open shows the file.
-	w.openFile("main.go", 0)
-	w.showReview()
-	tt.Frame()
-	w.closeTab()
-	tt.Frame()
-	if e := w.activeTab(); e == nil || e.path != "main.go" || w.reviewOpen {
-		t.Errorf("after ⌘W on the review: %+v, review %v", e, w.reviewOpen)
 	}
 	// A changed file chosen in the changes opens its change.
 	if err := tt.Click("Git (⌃⇧G)"); err != nil {

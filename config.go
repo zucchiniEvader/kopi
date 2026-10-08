@@ -16,11 +16,9 @@ import (
 // Settings are the user's preferences, in ~/.kopi/kopi.jsonc as
 // codiff keeps its own in ~/.codiff/codiff.jsonc.
 type Settings struct {
-	CodeFontFamily      string `json:"codeFontFamily"`
-	CodeFontSize        int    `json:"codeFontSize"`
-	CopyCommentsOnClose bool   `json:"copyCommentsOnClose"`
-	DiffStyle           string `json:"diffStyle"` // split or unified
-	EditorCommand       string `json:"editorCommand"`
+	CodeFontFamily string `json:"codeFontFamily"`
+	CodeFontSize   int    `json:"codeFontSize"`
+	EditorCommand  string `json:"editorCommand"`
 	// JavaHome is the JDK that runs the Java language server, found on
 	// the machine when empty; JdtlsPath its installation, downloaded when
 	// empty and the machine has none.
@@ -28,23 +26,18 @@ type Settings struct {
 	// IconTheme is the file icon theme: material, as VS Code's Material
 	// Icon Theme, downloaded once; none; or the folder of a VS Code
 	// extension contributing an icon theme of SVGs, or its theme's JSON.
-	IconTheme            string `json:"iconTheme"`
-	JdtlsPath            string `json:"jdtlsPath"`
-	ReviewCommentsPrefix string `json:"reviewCommentsPrefix"`
-	SidebarPosition      string `json:"sidebarPosition"` // left or right
-	ShowWhitespace       bool   `json:"showWhitespace"`
-	Theme                string `json:"theme"` // system, light or dark
-	WordWrap             bool   `json:"wordWrap"`
+	IconTheme       string `json:"iconTheme"`
+	JdtlsPath       string `json:"jdtlsPath"`
+	SidebarPosition string `json:"sidebarPosition"` // left or right
+	Theme           string `json:"theme"`           // system, light or dark
 }
 
 func defaultSettings() Settings {
 	return Settings{
-		CodeFontSize:         13,
-		DiffStyle:            "split",
-		ReviewCommentsPrefix: "# Address these Review Comments",
-		SidebarPosition:      "left",
-		IconTheme:            "material",
-		Theme:                "system",
+		CodeFontSize:    13,
+		SidebarPosition: "left",
+		IconTheme:       "material",
+		Theme:           "system",
 	}
 }
 
@@ -61,17 +54,11 @@ func (s *Settings) normalize() {
 		s.CodeFontSize = d.CodeFontSize
 	}
 	s.CodeFontSize = min(max(s.CodeFontSize, 10), 32)
-	if s.DiffStyle != "split" && s.DiffStyle != "unified" {
-		s.DiffStyle = d.DiffStyle
-	}
 	if s.SidebarPosition != "left" && s.SidebarPosition != "right" {
 		s.SidebarPosition = d.SidebarPosition
 	}
 	if s.Theme != "system" && s.Theme != "light" && s.Theme != "dark" {
 		s.Theme = d.Theme
-	}
-	if s.ReviewCommentsPrefix == "" {
-		s.ReviewCommentsPrefix = d.ReviewCommentsPrefix
 	}
 }
 
@@ -305,35 +292,6 @@ func (s *store) open() {
 	if s.data.Viewed == nil {
 		s.data.Viewed = map[string]map[string]string{}
 	}
-}
-
-func (s *store) viewed(root string) map[string]string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := map[string]string{}
-	for k, v := range s.data.Viewed[root] {
-		out[k] = v
-	}
-	return out
-}
-
-func (s *store) setViewed(root, path, fingerprint string) {
-	s.mu.Lock()
-	if s.data.Viewed == nil {
-		s.data.Viewed = map[string]map[string]string{}
-	}
-	m := s.data.Viewed[root]
-	if m == nil {
-		m = map[string]string{}
-		s.data.Viewed[root] = m
-	}
-	if fingerprint == "" {
-		delete(m, path)
-	} else {
-		m[path] = fingerprint
-	}
-	s.mu.Unlock()
-	s.save()
 }
 
 func (s *store) layout() (width float32, shown bool) {

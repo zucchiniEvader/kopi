@@ -4,13 +4,12 @@ A native, minimal code editor, drawn by
 [MyGo](https://mygo.egoist.dev/)'s native UI on the GPU: no webview, no
 JavaScript, with the system's fonts, accent color, dark mode, menus and
 vibrancy. It edits Java and Go with their language servers, runs and
-debugs Java programs with VS Code's launch configurations, and reviews and
-commits the work tree's Git changes.
+debugs Java programs with VS Code's launch configurations, and shows,
+commits, pulls and pushes the work tree's Git changes.
 
 Kopi grew out of [Godiff](https://github.com/egoist/godiff), EGOIST's diff
 viewer, itself a reimplementation of
-[codiff](https://github.com/nkzw-tech/codiff): its review, history and commits
-are Godiff's.
+[codiff](https://github.com/nkzw-tech/codiff).
 
 ## Features
 
@@ -35,15 +34,12 @@ are Godiff's.
 - **Updates**: a new version, from the releases here, checked once a day and
   from Check for Updates…, installed in place with its notes from
   `CHANGELOG.md`.
-- **Git**: the branch, switched, made, compared with and deleted from its
+- **Git**: the changes against `HEAD`, chosen for a commit made from the
+  sidebar; the change of a file in a tab, inline or side by side, with
+  word-level highlighting; the branch, switched, made and deleted from its
   menu; fetch, pull and push, with the commits to pull and to push; the
-  history as a graph, of the branch or of every one, with its branches
-  and tags, each commit opening in place to list its files; the changes
-  of a file in a tab, inline or side by side.
-- **Review** (from Godiff): staged, unstaged and untracked changes against
-  `HEAD`, split and unified diffs with word-level highlighting, viewed files,
-  review comments as Markdown, commits, history, and comparisons with a
-  branch.
+  history as a graph, of the branch or of every one, with its branches and
+  tags, each commit opening in place to list its files.
 
 ## Install
 
@@ -70,9 +66,6 @@ kopi [<path>]
 - `kopi ../other-project` opens another folder; a file opens the folder
   holding it.
 
-The review of a commit, or of the changes since a branch, opens from the
-command bar (<kbd>⌘K</kbd>): **Open Commit** and **Open Branch**.
-
 Every folder opens in a window of its own; the project's name atop the
 sidebar switches the window to another. **Kopi → Install Command Line
 Tool…** installs the `kopi` command.
@@ -92,12 +85,11 @@ Tool…** installs the `kopi` command.
 | <kbd>F10</kbd> / <kbd>F11</kbd> / <kbd>⇧F11</kbd> | Step over / into / out |
 | <kbd>⌘J</kbd> | The run panel |
 | <kbd>⌘1</kbd> … <kbd>⌘3</kbd>, <kbd>⇧⌘D</kbd> | Explorer, search, Git (changes and history), run and debug |
-| <kbd>⇧⌘R</kbd> | The review of the changes |
-| <kbd>J</kbd> / <kbd>K</kbd> | Next / previous hunk, in the review |
+| <kbd>⌘↩</kbd> / <kbd>⇧⌘↩</kbd> | Commit, in the message / anywhere |
+| <kbd>⌥F5</kbd> / <kbd>⇧⌥F5</kbd> | Next / previous change, in a diff tab |
 | <kbd>⌘K</kbd> | Command bar |
 | <kbd>⌘⇧B</kbd> | Toggle the sidebar |
 | <kbd>⌘+</kbd> / <kbd>⌘-</kbd> / <kbd>⌘0</kbd> | Code font size |
-| <kbd>⇧?</kbd> | All the shortcuts |
 
 ## Configuration
 
@@ -113,14 +105,9 @@ from `~/.godiff/godiff.jsonc`:
     "javaHome": "",                // the JDK running jdtls; empty finds one
     "jdtlsPath": "",               // a jdtls installation; empty downloads one
     "iconTheme": "material",       // "none", or a VS Code icon theme's folder
-    "copyCommentsOnClose": false,
-    "diffStyle": "split",          // or "unified"
     "editorCommand": "",           // e.g. "zed {file}:{line}"
-    "reviewCommentsPrefix": "# Address these Review Comments",
     "sidebarPosition": "left",     // or "right"
-    "showWhitespace": false,
-    "theme": "system",             // or "light", "dark"
-    "wordWrap": false
+    "theme": "system"              // or "light", "dark"
   }
 }
 ```
@@ -163,9 +150,9 @@ The code is in a few parts:
   protocols; `internal/java`: finding Java, and downloading jdtls and
   java-debug; `internal/launch`: launch.json.
 - `internal/icontheme`: VS Code's file icon themes.
-- `internal/git`, `internal/diff`, `internal/highlight`: Godiff's repository,
-  patches and highlighting.
+- `internal/git`, `internal/diff`, `internal/highlight`: the repository,
+  its branches and remotes, patches and highlighting.
 - The `main` package: the window and its views: the explorer and editors
   (`explorer.go`, `editors.go`), Java (`java.go`), running and debugging
-  (`run.go`, `debug.go`, `runview.go`), and Godiff's review (`view.go`,
-  `sidebar.go`, `diffview.go`, `commit.go`, `palette.go`).
+  (`run.go`, `debug.go`, `runview.go`), and Git (`gitview.go`, `graph.go`,
+  `difftab.go`, `commit.go`, `sidebar.go`).

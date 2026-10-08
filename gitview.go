@@ -14,8 +14,8 @@ import (
 const spinnerStep = 75 * time.Millisecond
 
 // gitView is the Git tab: the branch, with its switcher and its sync
-// with the upstream; the changes, with the commit's button; and the
-// history, as a graph, each of these under a title that closes and opens
+// with the upstream; the next commit's message; the changes, chosen for
+// the commit or not; and the history, as a graph, each of these under a title that closes and opens
 // it; open, they share the tab's height.
 func (w *window) gitView(c *ui.Context, pal *palette) {
 	t := c.Theme()
@@ -82,23 +82,10 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 				}
 			})
 		}
-		// What the review shows other than the work tree.
-		if w.source.kind != sourceWorkingTree {
-			ui.Row(c).Shrink(0).Padding(0, 10, 8).Gap(6).AlignItems(ui.Center).Children(func() {
-				switch w.source.kind {
-				case sourceCommit:
-					chip(c, pal, iconCommit, shortHash(w.source.ref), pal.ref).Font(w.codeFont()).Tooltip(w.source.ref)
-				case sourceBranch:
-					chip(c, pal, iconBranch, "vs "+w.source.ref, pal.ref).Tooltip("The work tree, committed or not, since it branched off " + w.source.ref)
-				}
-				// Back from a commit or a branch to the local changes.
-				if iconButton(c, iconClose, "Back to Local Changes").Size(22, 22).Clicked() {
-					w.setSource(w.launchWorkTree())
-				}
-			})
-		}
+		// The next commit's message, and its button.
+		w.commitBox(c)
 		badge := ""
-		if n := len(w.files); n > 0 && w.source.kind == sourceWorkingTree {
+		if n := len(w.files); n > 0 {
 			badge = compact(n)
 		}
 		header("Changes", badge, &w.gitChangesClosed, nil)
@@ -122,7 +109,7 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 }
 
 // branchSwitcher is the branch checked out, as a button whose menu
-// switches to another, makes one, compares with one or deletes one.
+// switches to another, makes one or deletes one.
 func (w *window) branchSwitcher(c *ui.Context) {
 	t := c.Theme()
 	name := w.sync.Branch
@@ -147,19 +134,15 @@ func (w *window) branchSwitcher(c *ui.Context) {
 }
 
 // branchMenu lists the local branches, the one checked out checked, and
-// the remotes', to switch to; then makes a branch, compares the work
-// tree with one, or deletes one.
+// the remotes', to switch to; then makes a branch, or deletes one.
 func (w *window) branchMenu(m *ui.Menu) {
-	var local, remote, others []git.Branch
+	var local, remote []git.Branch
 	for _, b := range w.branches {
 		switch {
 		case b.Remote:
 			remote = append(remote, b)
 		default:
 			local = append(local, b)
-		}
-		if !b.Current {
-			others = append(others, b)
 		}
 	}
 	for _, b := range local {
@@ -181,15 +164,6 @@ func (w *window) branchMenu(m *ui.Menu) {
 	}
 	if m.Item("New Branch…").Chosen() {
 		w.openDialog(dialogNewBranch)
-	}
-	if len(others) > 0 {
-		m.Submenu("Compare with Branch", func(m *ui.Menu) {
-			for _, b := range others {
-				if m.Item(b.Name).Chosen() {
-					w.setSource(source{kind: sourceBranch, ref: b.Name})
-				}
-			}
-		})
 	}
 	var deletable []git.Branch
 	for _, b := range local {

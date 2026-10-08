@@ -33,7 +33,6 @@ func TestTabMenu(t *testing.T) {
 		for _, p := range []string{"main.go", "docs/long.txt", "src/new.go"} {
 			w.openFile(p, 0)
 		}
-		w.showReview()
 		tt.Frame()
 	}
 	open()
@@ -48,7 +47,7 @@ func TestTabMenu(t *testing.T) {
 	if tt.Clipboard() != "docs/long.txt" {
 		t.Errorf("clipboard %q", tt.Clipboard())
 	}
-	// To the right, then the others, the review with them.
+	// To the right, then the others.
 	rightClickTab(t, tt, "long.txt")
 	tt.ChooseMenuItem("Close to the Right")
 	if got := tabNames(w); !slices.Equal(got, []string{"main.go", "long.txt"}) {
@@ -56,8 +55,8 @@ func TestTabMenu(t *testing.T) {
 	}
 	rightClickTab(t, tt, "long.txt")
 	tt.ChooseMenuItem("Close Others")
-	if got := tabNames(w); !slices.Equal(got, []string{"long.txt"}) || w.reviewOpen || w.activeTab().title() != "long.txt" {
-		t.Errorf("after closing the others: %q, review %v", got, w.reviewOpen)
+	if got := tabNames(w); !slices.Equal(got, []string{"long.txt"}) || w.activeTab().title() != "long.txt" {
+		t.Errorf("after closing the others: %q", got)
 	}
 	// The saved, keeping the one with changes.
 	open()
@@ -70,15 +69,14 @@ func TestTabMenu(t *testing.T) {
 	if got := tabNames(w); !slices.Equal(got, []string{"long.txt"}) {
 		t.Errorf("after closing the saved: %q", got)
 	}
-	// All, the review's menu too.
+	// All.
 	open()
-	r, _ := tt.Find("Close Review")
-	tt.RightClickAt(r.X-40, r.Y+r.H/2)
+	rightClickTab(t, tt, "main.go")
 	if err := tt.ChooseMenuItem("Close All"); err != nil {
 		t.Fatal(err)
 	}
-	if len(w.editors) != 0 || w.reviewOpen {
-		t.Errorf("after closing all: %q, review %v", tabNames(w), w.reviewOpen)
+	if len(w.editors) != 0 {
+		t.Errorf("after closing all: %q", tabNames(w))
 	}
 	// Reveal in Explorer.
 	w.openFile("src/new.go", 0)

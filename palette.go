@@ -17,22 +17,6 @@ type command struct {
 
 // commands lists the command bar's actions, in its order.
 func (w *window) commands() []command {
-	selected := ""
-	if w.current >= 0 && w.current < len(w.files) {
-		selected = w.files[w.current].Path
-	}
-	layout := "Switch to Unified"
-	if !w.split() {
-		layout = "Switch to Split"
-	}
-	wrap := "Enable Word Wrap"
-	if w.settings.WordWrap {
-		wrap = "Disable Word Wrap"
-	}
-	whitespace := "Show Whitespace Changes"
-	if w.settings.ShowWhitespace {
-		whitespace = "Hide Whitespace Changes"
-	}
 	return []command{
 		{title: "Go to File", keys: "⌘P", run: w.openQuick},
 		{title: "Run", hint: "The launch configuration, or the Java file shown", keys: "⌃F5", run: w.runStart},
@@ -45,10 +29,6 @@ func (w *window) commands() []command {
 		{title: "Find", keys: "⌘F", run: func() { w.find(false) }},
 		{title: "Replace", keys: "⌥⌘F", run: func() { w.find(true) }},
 		{title: "Find in Files", keys: "⇧⌘F", run: w.focusSearch},
-		{title: "Find in Diffs", run: func() { w.showReview(); w.finding = true }},
-		{title: "Show Review", hint: "The changes", keys: "⌘⇧R", run: w.showReview},
-		{title: "Open Commit", hint: "Review a commit", run: func() { w.openDialog(dialogCommit) }},
-		{title: "Open Branch", hint: "Compare with a branch", run: func() { w.openDialog(dialogBranch) }},
 		{title: "Open Folder", keys: "⌘O", run: openFolder},
 		{title: "Show Explorer", keys: "⌘1", run: func() { w.tab, w.sidebarShown = tabExplorer, true }},
 		{title: "Show Search", keys: "⌘2", run: w.focusSearch},
@@ -57,60 +37,20 @@ func (w *window) commands() []command {
 		{title: "Close Tab", keys: "⌘W", run: w.closeTab},
 		{title: "Next Change", hint: "In the diff tab", keys: "⌥F5", run: func() { w.goToChange(1) }},
 		{title: "Previous Change", hint: "In the diff tab", keys: "⇧⌥F5", run: func() { w.goToChange(-1) }},
+		{title: "Git: Commit", hint: "The files chosen in the changes", keys: "⇧⌘↩", run: w.commitOrAsk},
 		{title: "Git: Fetch", hint: "From every remote", run: w.fetch},
 		{title: "Git: Pull", hint: "From the upstream", run: w.pull},
 		{title: "Git: Push", hint: "To the upstream, or publish the branch", run: w.push},
 		{title: "Git: New Branch…", hint: "From HEAD", run: func() { w.openDialog(dialogNewBranch) }},
-		{title: "Show Uncommitted Changes", run: func() { w.setSource(w.launchWorkTree()); w.showReview() }},
-		{title: "Commit…", run: func() {
-			if w.source.kind == sourceWorkingTree && !w.commitOpen {
-				w.showReview()
-				w.toggleCommit()
-			}
-		}},
-		{title: "Copy Review Comments", run: w.copyComments},
-		{title: "Copy Review Comments and Close", run: func() {
-			w.copyComments()
-			if w.win != nil {
-				w.win.Close()
-			}
-		}},
-		{title: "Toggle Viewed", hint: selected, run: func() {
-			if w.current >= 0 && w.current < len(w.files) {
-				f := w.files[w.current]
-				w.setViewed(f, !w.isViewed(f))
-			}
-		}},
-		{title: "Open File in Editor", hint: selected, keys: "⌘⇧O", run: w.openCurrent},
-		{title: "Open File in External Editor", hint: selected, run: w.openCurrentExternal},
 		{title: "Toggle Sidebar", keys: "⌘⇧B", run: w.toggleSidebar},
-		{title: "Collapse All Files", run: func() { w.setAllCollapsed(true) }},
-		{title: "Expand All Files", run: func() { w.setAllCollapsed(false) }},
-		{title: "Toggle Diff Layout", hint: layout, run: toggleLayout},
-		{title: "Toggle Word Wrap", hint: wrap, keys: "⌥Z", run: toggleWrap},
-		{title: "Toggle Whitespace", hint: whitespace, run: func() {
-			cfg.Update(func(s *Settings) { s.ShowWhitespace = !s.ShowWhitespace })
-		}},
 		{title: "Increase Code Font Size", keys: "⌘+", run: func() { changeFontSize(1) }},
 		{title: "Decrease Code Font Size", keys: "⌘-", run: func() { changeFontSize(-1) }},
 		{title: "Reset Code Font Size", keys: "⌘0", run: func() { changeFontSize(0) }},
 		{title: "Open Settings", keys: "⌘,", run: func() { w.openSettings(cfg.ensure()) }},
 		{title: "Refresh Changes", keys: "⌘R", run: w.refresh},
-		{title: "Keyboard Shortcuts", keys: "⇧?", run: func() { w.help = true }},
+		{title: "Keyboard Shortcuts", run: func() { w.help = true }},
 	}
 }
-
-func toggleLayout() {
-	cfg.Update(func(s *Settings) {
-		if s.DiffStyle == "split" {
-			s.DiffStyle = "unified"
-		} else {
-			s.DiffStyle = "split"
-		}
-	})
-}
-
-func toggleWrap() { cfg.Update(func(s *Settings) { s.WordWrap = !s.WordWrap }) }
 
 // changeFontSize makes the code larger or smaller, or resets it with 0.
 func changeFontSize(delta int) {
@@ -157,43 +97,6 @@ func openConfig(win *mygo.Window) {
 // one of a library.
 func (w *window) openSettings(path string) {
 	w.openAbs(path).library = false
-}
-
-func (w *window) openCurrent() {
-	if e := w.activeTab(); e != nil {
-		return
-	}
-	if w.current >= 0 && w.current < len(w.files) {
-		f := w.files[w.current]
-		w.openInEditor(f.Path, firstLine(f))
-	}
-}
-
-func (w *window) openCurrentExternal() {
-	if e := w.activeTab(); e != nil {
-		line := 0
-		if e.ed != nil {
-			line = e.ed.Selection().Caret.Line + 1
-		}
-		w.openExternal(e.path, line)
-		return
-	}
-	if w.current >= 0 && w.current < len(w.files) {
-		f := w.files[w.current]
-		w.openExternal(f.Path, firstLine(f))
-	}
-}
-
-func (w *window) copyComments() {
-	md := w.commentsMarkdown()
-	if md == "" {
-		return
-	}
-	if w.win != nil {
-		mygo.Clipboard.WriteText(md)
-	}
-	w.copied = md
-	w.copiedAt = w.now
 }
 
 // palette shows the command bar while it is open.
@@ -303,14 +206,12 @@ func (w *window) paletteMoved(e *ui.Element) bool {
 	return moved
 }
 
-// dialogKind is what the open dialog asks for.
+// dialogKind is what the dialog asks for.
 type dialogKind uint8
 
 const (
-	dialogNone dialogKind = iota
-	dialogCommit
-	dialogBranch
-	dialogNewBranch // a branch to make at HEAD
+	dialogNone      dialogKind = iota
+	dialogNewBranch            // a branch to make at HEAD
 )
 
 func (w *window) openDialog(k dialogKind) {
@@ -320,92 +221,59 @@ func (w *window) openDialog(k dialogKind) {
 	w.dialogErr = ""
 }
 
-// sourceDialog asks for a commit or a branch to review.
-func (w *window) sourceDialog(c *ui.Context) {
+// branchDialog asks for the name of a branch to make at HEAD, and checks
+// it out.
+func (w *window) branchDialog(c *ui.Context) {
 	t := c.Theme()
 	if w.dialog == dialogNone {
 		return
 	}
-	title, desc, label, placeholder := "Open Commit", "Review a commit by SHA or revision, such as HEAD~1.", "Commit", "HEAD~1 or a commit SHA"
-	action, busy := "Open", "Opening…"
-	switch w.dialog {
-	case dialogBranch:
-		title, desc, label, placeholder = "Open Branch", "Compare the current working tree with a branch.", "Branch name", "main"
-	case dialogNewBranch:
-		title, desc, label, placeholder = "New Branch", "A branch from "+w.branch+", checked out with the changes.", "Branch name", "feature/name"
-		action, busy = "Create", "Creating…"
-	}
-	open := func() {
+	create := func() {
 		v := strings.TrimSpace(w.dialogValue)
 		if v == "" {
-			w.dialogErr = "Enter a " + strings.ToLower(label) + "."
+			w.dialogErr = "Enter a branch name."
 			return
 		}
 		if w.dialogBusy {
 			return
 		}
 		// git answers off the main thread.
-		kind := w.dialog
 		w.dialogBusy = true
-		if kind == dialogNewBranch {
-			w.background(func() {
-				err := w.repo.CreateBranch(v)
-				w.update(func() {
-					w.dialogBusy = false
-					if err != nil {
-						w.dialogErr = errorText(err)
-						return
-					}
-					w.dialogOpen = false
-					w.load()
-					w.loadHistory()
-				})
-			})
-			return
-		}
 		w.background(func() {
-			hash, err := w.repo.Resolve(v)
+			err := w.repo.CreateBranch(v)
 			w.update(func() {
 				w.dialogBusy = false
-				if !w.dialogOpen || w.dialog != kind {
+				if err != nil {
+					w.dialogErr = errorText(err)
 					return
 				}
-				switch {
-				case err != nil && kind == dialogBranch:
-					w.dialogErr = "Branch \"" + v + "\" does not exist in this repository."
-				case err != nil:
-					w.dialogErr = err.Error()
-				case kind == dialogCommit:
-					w.dialogOpen = false
-					w.setSource(source{kind: sourceCommit, ref: hash})
-				default:
-					w.dialogOpen = false
-					w.setSource(source{kind: sourceBranch, ref: v})
-				}
+				w.dialogOpen = false
+				w.load()
+				w.loadHistory()
 			})
 		})
 	}
 	ui.Modal(c, &w.dialogOpen, func() {
 		ui.Column(c).Width(420).Gap(14).Children(func() {
 			ui.Column(c).Gap(4).Children(func() {
-				ui.Text(c, title).FontSize(16).Bold()
-				ui.Text(c, desc).FontSize(13).TextColor(t.TextMuted)
+				ui.Text(c, "New Branch").FontSize(16).Bold()
+				ui.Text(c, "A branch from "+w.branch+", checked out with the changes.").FontSize(13).TextColor(t.TextMuted)
 			})
-			ui.Field(c, label, func() {
-				if ui.TextInput(c, &w.dialogValue).Placeholder(placeholder).Font(w.codeFont()).AutoFocus().Submitted() {
-					open()
+			ui.Field(c, "Branch name", func() {
+				if ui.TextInput(c, &w.dialogValue).Placeholder("feature/name").Font(w.codeFont()).AutoFocus().Submitted() {
+					create()
 				}
 			}).Error(w.dialogErr)
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 				if ui.Button(c, "Cancel").Clicked() {
 					w.dialogOpen = false
 				}
-				label := action
+				label := "Create"
 				if w.dialogBusy {
-					label = busy
+					label = "Creating…"
 				}
 				if ui.PrimaryButton(c, label).Disabled(w.dialogBusy).Clicked() {
-					open()
+					create()
 				}
 			})
 		})
@@ -422,10 +290,10 @@ func (w *window) shortcutsHelp(c *ui.Context) {
 		title string
 		keys  [][2]string
 	}{
-		{"Navigation", [][2]string{{"Command bar", "⌘K"}, {"Go to file", "⌘P"}, {"Next hunk", "J"}, {"Previous hunk", "K"},
-			{"Toggle sidebar", "⌘⇧B"}, {"Toggle word wrap", "⌥Z"}, {"Open file in editor", "⌘⇧O"}, {"Refresh changes", "⌘R"}}},
-		{"Search", [][2]string{{"Find", "⌘F"}, {"Replace", "⌥⌘F"}, {"Next match", "↩"}, {"Previous match", "⇧↩"}, {"Close search", "Esc"}}},
-		{"Comments", [][2]string{{"Comment on a line", "Click"}, {"Comment on the hunk", "↩"}, {"Add comment", "⌘↩"}, {"Discard comment", "Esc"}}},
+		{"Navigation", [][2]string{{"Command bar", "⌘K"}, {"Go to file", "⌘P"}, {"Toggle sidebar", "⌘⇧B"},
+			{"Explorer, search, Git", "⌘1 … ⌘3"}, {"Close tab", "⌘W"}}},
+		{"Search", [][2]string{{"Find", "⌘F"}, {"Replace", "⌥⌘F"}, {"Find in files", "⇧⌘F"}, {"Next match", "↩"}, {"Previous match", "⇧↩"}, {"Close search", "Esc"}}},
+		{"Git", [][2]string{{"Commit", "⌘↩ / ⇧⌘↩"}, {"Next change", "⌥F5"}, {"Previous change", "⇧⌥F5"}, {"Refresh changes", "⌘R"}}},
 		{"Code", [][2]string{{"Bigger text", "⌘+"}, {"Smaller text", "⌘-"}, {"Actual size", "⌘0"}}},
 	}
 	ui.Modal(c, &w.help, func() {

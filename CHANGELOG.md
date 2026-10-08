@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.6
+
+- The review is gone, its tab and ⇧⌘R with it: changes show in diff tabs.
+- A commit is made from the Git tab: its message atop the changes, ⌘↩ in
+  it or the button below it, of the files checked in the changes, a
+  folder's box choosing all its files. ⇧⌘↩ commits from anywhere, or
+  shows the message's field when it is empty.
+- Open Commit, Open Branch and Compare with Branch, the review's comments,
+  its files viewed and its find are gone, with their settings:
+  copyCommentsOnClose, diffStyle, reviewCommentsPrefix, showWhitespace and
+  wordWrap.
+- The changes read themselves again as the work tree changes, rather than
+  asking to be refreshed.
+
 ## 0.2.5
 
 - The Git tab has the branch atop it: its menu switches to a branch,

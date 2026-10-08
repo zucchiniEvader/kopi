@@ -1,14 +1,10 @@
 package main
 
 import (
-	"bytes"
-	"image"
-	"image/color"
 	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -101,12 +97,11 @@ var (
 )
 
 // newTestWindow opens a window's state on a repository, loaded, showing
-// the review and the changed files, which most tests look at.
+// the Git tab, which most tests look at.
 func newTestWindow(t *testing.T, dir string) (*window, *ui.Tester) {
 	t.Helper()
 	w, tt := launchTestWindow(t, dir)
 	w.tab = tabGit
-	w.showReview()
 	tt.Frame()
 	return w, tt
 }
@@ -119,13 +114,12 @@ func launchTestWindow(t *testing.T, dir string) (*window, *ui.Tester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := newWindow(repo, source{})
+	w := newWindow(repo)
 	w.settings = defaultSettings()
 	w.settings.IconTheme = "none"
 	w.sidebarShown, w.sidebarWidth = true, sidebarDefault
 	w.load()
 	w.loadHistory()
-	w.loadUser()
 	tt := ui.NewTester(w.view, 1280, 860)
 	tt.Frame()
 	return w, tt
@@ -145,121 +139,32 @@ func snapshot(t *testing.T, tt *ui.Tester, name string) {
 	png.Encode(f, tt.Image())
 }
 
-func TestReview(t *testing.T) {
-	w, tt := newTestWindow(t, testRepo(t))
-	if len(w.files) != 4 {
-		t.Fatalf("files: %d", len(w.files))
-	}
-	for _, f := range w.files {
-		if !f.loaded {
-			t.Errorf("%s not loaded", f.Path)
-		}
-	}
-	for _, want := range []string{"main.go", "new.go", "old.txt", "long.txt", "Total:"} {
-		if !tt.HasText(want) {
-			t.Errorf("no %q in %q", want, tt.Texts())
-		}
-	}
-	snapshot(t, tt, "review")
-
-	// The gap of unchanged lines shows them.
-	if !tt.HasText("51 unmodified lines") {
-		t.Fatalf("no gap in %q", tt.Texts())
-	}
-	if err := tt.Click("51 unmodified lines"); err != nil {
-		t.Fatal(err)
-	}
-	if tt.HasText("51 unmodified lines") {
-		t.Error("the gap did not expand")
-	}
-
-	// Viewed collapses a file.
-	f := w.files[0]
-	if err := tt.Click("Viewed"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if !w.isViewed(f) || !f.collapsed {
-		t.Errorf("%s: viewed %v, collapsed %v", f.Path, w.isViewed(f), f.collapsed)
-	}
-}
-
-func TestUnified(t *testing.T) {
-	w, tt := newTestWindow(t, testRepo(t))
-	if err := tt.Click("Unified"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if w.split() {
-		t.Error("still split")
-	}
-	snapshot(t, tt, "unified")
-}
-
-func TestComments(t *testing.T) {
-	w, tt := newTestWindow(t, testRepo(t))
-	// j chooses the first hunk, Enter comments on it.
-	w.focusList = true
-	tt.Frame()
-	tt.Key(0, ui.KeyJ)
-	tt.Key(0, ui.KeyEnter)
-	tt.Frame()
-	if len(w.comments) != 1 {
-		t.Fatalf("comments: %d", len(w.comments))
-	}
-	tt.Type("Rename this.")
-	tt.Key(ui.Cmd, ui.KeyEnter)
-	tt.Frame()
-	snapshot(t, tt, "comment")
-	if !w.comments[0].pending() {
-		t.Fatalf("comment %+v", w.comments[0])
-	}
-	md := w.commentsMarkdown()
-	if !strings.HasPrefix(md, "# Address these Review Comments\n\n1. **docs/long.txt** (New line ") || !strings.Contains(md, "   Rename this.") || !strings.Contains(md, "   ```diff\n   @@ ") {
-		t.Errorf("markdown:\n%s", md)
-	}
-}
-
-func TestFind(t *testing.T) {
-	w, tt := newTestWindow(t, testRepo(t))
-	w.finding = true
-	tt.Frame()
-	tt.Type("hi")
-	tt.Frame()
-	if len(w.matches) != 1 {
-		t.Fatalf("matches %+v for %q", w.matches, w.query)
-	}
-	snapshot(t, tt, "find")
-	if w.files[w.matches[0].file].Path != "main.go" {
-		t.Errorf("match in %s", w.files[w.matches[0].file].Path)
-	}
-	// Only the files with a match show.
-	if tt.HasText("new.go") {
-		t.Error("new.go shows while finding")
-	}
-}
-
+// TestCommit commits the files chosen in the changes with the message
+// atop them: a file left out stays out, and the message goes.
 func TestCommit(t *testing.T) {
 	dir := testRepo(t)
 	w, tt := newTestWindow(t, dir)
-	if err := tt.Click("Commit"); err != nil {
-		t.Fatal(err)
+	if _, ok := tt.Find("Commit"); !ok || w.canCommit() {
+		t.Errorf("a commit with no message can be made: %q", tt.Texts())
+	}
+	// Leave new.go out.
+	if err := tt.Click("Leave new.go out of the commit"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
 	}
 	tt.Frame()
-	if !w.commitOpen {
-		t.Fatal("commit view closed")
+	if !tt.HasText("Commit 3 of 4") {
+		t.Errorf("the button does not count the files: %q", tt.Texts())
+	}
+	if err := tt.Click("Commit message"); err != nil {
+		t.Fatal(err)
 	}
 	tt.Type("Greet louder")
 	tt.Frame()
 	snapshot(t, tt, "commit")
-	// Leave new.go out.
-	if err := tt.Click("src/new.go"); err != nil {
-		t.Fatal(err)
-	}
 	tt.Key(ui.Cmd, ui.KeyEnter)
 	tt.Frame()
-	if w.commitDone == "" {
-		t.Fatalf("not committed: %s %s", w.commitErr, w.commitOutput)
+	if w.gitErr != "" || !strings.HasPrefix(w.gitNote, "Committed 3 files as ") {
+		t.Fatalf("not committed: %q, %q", w.gitErr, w.gitNote)
 	}
 	log := gitIn(t, dir, "log", "--format=%s", "-n", "1", "--name-status")
 	if !strings.Contains(log, "Greet louder") || strings.Contains(log, "new.go") || !strings.Contains(log, "D\told.txt") {
@@ -267,6 +172,9 @@ func TestCommit(t *testing.T) {
 	}
 	if !strings.Contains(gitIn(t, dir, "status", "--porcelain"), "?? src/") {
 		t.Error("new.go was committed")
+	}
+	if w.message != "" || len(w.files) != 1 {
+		t.Errorf("after: message %q, %d files", w.message, len(w.files))
 	}
 }
 
@@ -295,8 +203,8 @@ func TestHistory(t *testing.T) {
 			t.Errorf("no %s in the commit open: %q", f, tt.Texts())
 		}
 	}
-	if w.source.kind != sourceWorkingTree || len(w.files) != 4 {
-		t.Errorf("the changes became the commit's: %+v, %d files", w.source, len(w.files))
+	if len(w.files) != 4 {
+		t.Errorf("the changes became the commit's: %d files", len(w.files))
 	}
 	if _, ok := tt.Find("Back to Local Changes"); ok {
 		t.Error("the Git tab changed, with the commit chosen")
@@ -368,19 +276,17 @@ func TestHistoryTakesFocus(t *testing.T) {
 }
 
 func TestPalette(t *testing.T) {
-	cfg.Update(func(s *Settings) { s.DiffStyle = "split" })
 	w, tt := newTestWindow(t, testRepo(t))
 	w.paletteOpen = true
 	tt.Frame()
-	tt.Type("toggle diff layout")
+	tt.Type("toggle sidebar")
 	tt.Frame()
 	snapshot(t, tt, "palette")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if w.paletteOpen || cfg.Get().DiffStyle != "unified" {
-		t.Errorf("open %v, style %s", w.paletteOpen, cfg.Get().DiffStyle)
+	if w.paletteOpen || w.sidebarShown {
+		t.Errorf("open %v, sidebar %v", w.paletteOpen, w.sidebarShown)
 	}
-	cfg.Update(func(s *Settings) { s.DiffStyle = "split" })
 }
 
 func TestTree(t *testing.T) {
@@ -424,68 +330,9 @@ func TestTree(t *testing.T) {
 func TestDark(t *testing.T) {
 	w, tt := newTestWindow(t, testRepo(t))
 	tt.SetDark(true)
-	w.nextHunk(1)
+	w.openFile("main.go", -1)
 	tt.Frame()
 	snapshot(t, tt, "dark")
-}
-
-func TestHorizontalScroll(t *testing.T) {
-	dir := testRepo(t)
-	writeFile(t, dir, "main.go", strings.Replace(mainGo, `"Hello, " + name`, `"Hello, " + name + "`+strings.Repeat("long ", 80)+`"`, 1))
-	w, tt := newTestWindow(t, dir)
-	box, ok := tt.Find("package main")
-	if !ok {
-		t.Fatal("no main.go")
-	}
-	tt.Scroll(box.X+40, box.Y+box.H/2, 120, 0)
-	tt.Frame()
-	if w.hscroll["main.go"] <= 0 {
-		t.Errorf("hscroll %v", w.hscroll)
-	}
-	tt.Scroll(box.X+40, box.Y+box.H/2, 0, 40)
-	tt.Frame()
-	if w.hscroll["main.go"] <= 0 {
-		t.Errorf("vertical scroll changed hscroll %v", w.hscroll)
-	}
-	snapshot(t, tt, "hscroll")
-}
-
-func pngOf(t *testing.T, w, h int, c color.Color) string {
-	img := image.NewNRGBA(image.Rect(0, 0, w, h))
-	for y := range h {
-		for x := range w {
-			if (x/8+y/8)%2 == 0 {
-				img.Set(x, y, c)
-			}
-		}
-	}
-	var b bytes.Buffer
-	png.Encode(&b, img)
-	return b.String()
-}
-
-func TestImage(t *testing.T) {
-	dir := testRepo(t)
-	writeFile(t, dir, "logo.png", pngOf(t, 64, 48, color.NRGBA{200, 40, 40, 255}))
-	gitIn(t, dir, "add", "logo.png")
-	gitIn(t, dir, "commit", "-q", "-m", "Add a logo")
-	writeFile(t, dir, "logo.png", pngOf(t, 96, 48, color.NRGBA{40, 90, 220, 255}))
-	w, tt := newTestWindow(t, dir)
-	var logo *fileState
-	for _, f := range w.files {
-		if f.Path == "logo.png" {
-			logo = f
-		}
-	}
-	if logo == nil || logo.oldImage == nil || logo.newImage == nil {
-		t.Fatalf("logo %+v", logo)
-	}
-	w.revealFile(slices.Index(w.files, logo))
-	tt.Frame()
-	if !tt.HasText("New · 96×48 · " + formatBytes(logo.newSize)) {
-		t.Errorf("texts %q", tt.Texts())
-	}
-	snapshot(t, tt, "image")
 }
 
 func TestParseArgs(t *testing.T) {
@@ -518,36 +365,5 @@ func TestParseArgs(t *testing.T) {
 	}
 	if _, err := parseArgs([]string{"--help"}, dir); err != errHelp {
 		t.Errorf("--help: %v", err)
-	}
-}
-
-func TestBranchCompare(t *testing.T) {
-	dir := testRepo(t)
-	gitIn(t, dir, "add", "-A")
-	gitIn(t, dir, "commit", "-q", "-m", "Second")
-	writeFile(t, dir, "local.txt", "uncommitted\n")
-	repo, err := git.Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first := strings.TrimSpace(gitIn(t, dir, "rev-list", "--max-parents=0", "HEAD"))
-	gitIn(t, dir, "branch", "base", first)
-	w := newWindow(repo, source{kind: sourceBranch, ref: "base"})
-	w.settings = defaultSettings()
-	w.load()
-	paths := map[string]bool{}
-	for _, f := range w.files {
-		paths[f.Path] = true
-	}
-	// The commit on top of base and the uncommitted file.
-	for _, p := range []string{"main.go", "src/new.go", "old.txt", "local.txt"} {
-		if !paths[p] {
-			t.Errorf("no %s in %v", p, paths)
-		}
-	}
-	tt := ui.NewTester(w.view, 1280, 860)
-	tt.Frame()
-	if w.tab != tabGit || !w.reviewVisible() || !tt.HasText("vs base") {
-		t.Errorf("texts %q", tt.Texts())
 	}
 }

@@ -92,7 +92,7 @@ func recentRow(c *ui.Context, dir string) {
 }
 
 // nothingOpen is the main area without a tab open: what to start with,
-// the review of the changes, and the repositories opened before.
+// and, in a window with no folder, the folders opened before.
 func (w *window) nothingOpen(c *ui.Context, pal *palette) {
 	actions := []startAction{
 		{"Go to File", "⌘P", w.openQuick},

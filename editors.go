@@ -97,8 +97,7 @@ func (w *window) realRoot() string {
 	return w.repo.Root
 }
 
-// activeTab returns the editor the main area shows, nil when it shows the
-// review.
+// activeTab returns the editor the main area shows, nil for none.
 func (w *window) activeTab() *editorTab {
 	if w.activeEditor >= 0 && w.activeEditor < len(w.editors) {
 		return w.editors[w.activeEditor]
@@ -114,27 +113,6 @@ func (w *window) editorOf(p string) *editorTab {
 		}
 	}
 	return nil
-}
-
-// showReview opens the review's tab, and shows it in the main area, in
-// place of an editor.
-func (w *window) showReview() {
-	if w.activeEditor >= 0 || !w.reviewOpen {
-		w.activeEditor = -1
-		w.reviewOpen = true
-		w.focusList = true
-	}
-}
-
-// reviewVisible reports whether the main area shows the review.
-func (w *window) reviewVisible() bool { return w.reviewOpen && w.activeTab() == nil }
-
-// closeReview closes the review's tab, showing the last editor.
-func (w *window) closeReview() {
-	w.reviewOpen, w.commitOpen = false, false
-	if w.activeEditor < 0 && len(w.editors) > 0 {
-		w.show(w.editors[len(w.editors)-1])
-	}
 }
 
 // openFile opens a file of the repository in an editor, the tab it has if
@@ -195,7 +173,6 @@ func (w *window) openText(uri, name, text string) *editorTab {
 // show shows a tab, and gives its editor the keys.
 func (w *window) show(e *editorTab) {
 	w.activeEditor = slices.Index(w.editors, e)
-	w.commitOpen = false
 	if e.ed != nil {
 		e.ed.Focus()
 	}
@@ -251,9 +228,7 @@ func (w *window) writeEditor(e *editorTab) error {
 	e.stamp, _ = stampOf(p)
 	e.disk, e.onDisk, e.keptDeleted = diskSame, "", false
 	w.didSave(e)
-	if w.source.kind == sourceWorkingTree {
-		w.load()
-	}
+	w.load()
 	return nil
 }
 
@@ -299,9 +274,6 @@ func (w *window) removeEditor(i int) {
 	switch {
 	case len(w.editors) == 0:
 		w.activeEditor = -1
-		if w.reviewOpen {
-			w.focusList = true
-		}
 	case w.activeEditor > i || w.activeEditor == len(w.editors):
 		w.activeEditor--
 	}
@@ -321,20 +293,27 @@ func (w *window) dirtyEditors() []string {
 	return names
 }
 
-// closeTab closes the editor shown, or the review, or the window when no
-// tab is open.
+// closeTab closes the editor shown, or the window when no tab is open.
 func (w *window) closeTab() {
 	switch {
 	case w.activeTab() != nil:
 		w.closeEditor(w.activeEditor)
-	case w.reviewOpen:
-		w.closeReview()
 	case w.win != nil:
 		w.win.Close()
 	}
 }
 
-// editorStyle is the look of the editors, as the review's code.
+// codeFont is the family of the code.
+func (w *window) codeFont() string {
+	if w.settings.CodeFontFamily != "" {
+		return w.settings.CodeFontFamily + ", monospace"
+	}
+	return "SF Mono, Menlo, monospace"
+}
+
+func (w *window) codeSize() float32 { return float32(w.settings.CodeFontSize) }
+
+// editorStyle is the look of the editors.
 func (w *window) editorStyle(t *ui.Theme, pal *palette) editor.Style {
 	s := editor.Style{
 		Font:        ui.Font{Family: w.codeFont(), Size: w.codeSize()},
@@ -350,7 +329,7 @@ func (w *window) editorStyle(t *ui.Theme, pal *palette) editor.Style {
 		Warning:     ui.Hex("#e0a100"),
 		Info:        t.Accent,
 		Link:        t.Accent,
-		// The find bar's matches, lit as the review's are.
+		// The find bar's matches.
 		Match:        pal.match,
 		CurrentMatch: pal.matchNow,
 		// Breakpoints, and the line the program debugged stopped on.
@@ -371,8 +350,7 @@ const (
 	tabBarRoom = 16
 )
 
-// editorTabs is the row of tabs above the main area while files are open:
-// the review, then the files.
+// editorTabs is the row of tabs above the main area while files are open.
 // The tabs show in the toolbar, its height, the one chosen on the code's
 // background under a line of the accent, a library's lighter.
 func (w *window) editorTabs(c *ui.Context, pal *palette) {
@@ -434,24 +412,6 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 					}
 					return b
 				}
-				if w.reviewOpen {
-					review := tab(w.activeTab() == nil, false).Label("Review")
-					review.ContextMenu(func(m *ui.Menu) {
-						if a := w.tabMenu(c, m, -1); a != nil {
-							menuAction = a
-						}
-					})
-					if review.Clicked() {
-						w.showReview()
-					}
-					review.Children(func() {
-						ui.Icon(c, iconFileDiff).FontSize(14)
-						ui.Text(c, "Review").FontSize(13).SingleLine()
-						if closeButton(c, "Close Review", w.activeTab() == nil || review.Hovered(), false).Clicked() {
-							closing = -2
-						}
-					})
-				}
 				for i, e := range w.editors {
 					b := tab(i == w.activeEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
 					if e.diff != nil {
@@ -504,8 +464,6 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 		})
 	})
 	switch {
-	case closing == -2:
-		w.closeReview()
 	case closing >= 0:
 		w.closeEditor(closing)
 	case menuAction != nil:
@@ -656,9 +614,8 @@ func (w *window) saveAll() {
 	}
 }
 
-// tabMenu is the context menu of tab i, -1 for the review's: closing it,
-// the others, those to its right, the saved or all; and for a file, its
-// path, and where it is.
+// tabMenu is the context menu of tab i: closing it, the others, those to
+// its right, the saved or all; and for a file, its path, and where it is.
 func (w *window) tabMenu(c *ui.Context, m *ui.Menu, i int) (action func()) {
 	var e *editorTab
 	if i >= 0 && i < len(w.editors) {
@@ -681,27 +638,20 @@ func (w *window) tabMenu(c *ui.Context, m *ui.Menu, i int) (action func()) {
 			w.show(e)
 		}
 	}
-	if m.Item("Close").Shortcut(ui.Cmd, ui.KeyW).Chosen() {
-		action = func() {
-			if e != nil {
-				w.closeEditor(slices.Index(w.editors, e))
-			} else {
-				w.closeReview()
-			}
-		}
+	if m.Item("Close").Shortcut(ui.Cmd, ui.KeyW).Chosen() && e != nil {
+		action = func() { w.closeEditor(slices.Index(w.editors, e)) }
 	}
-	reviewOther := e != nil && w.reviewOpen
-	if m.Item("Close Others").Disabled(len(others) == 0 && !reviewOther).Chosen() {
-		action = func() { w.closeTabs(others, reviewOther, keep) }
+	if m.Item("Close Others").Disabled(len(others) == 0).Chosen() {
+		action = func() { w.closeTabs(others, keep) }
 	}
 	if e != nil && m.Item("Close to the Right").Disabled(len(right) == 0).Chosen() {
-		action = func() { w.closeTabs(right, false, keep) }
+		action = func() { w.closeTabs(right, keep) }
 	}
 	if m.Item("Close Saved").Disabled(len(saved) == 0).Chosen() {
-		action = func() { w.closeTabs(saved, false, nil) }
+		action = func() { w.closeTabs(saved, nil) }
 	}
 	if m.Item("Close All").Chosen() {
-		action = func() { w.closeTabs(w.editors, w.reviewOpen, nil) }
+		action = func() { w.closeTabs(w.editors, nil) }
 	}
 	if e == nil || e.abs == "" {
 		return action
@@ -733,9 +683,9 @@ func (w *window) tabMenu(c *ui.Context, m *ui.Menu, i int) (action func()) {
 	return action
 }
 
-// closeTabs closes tabs, and the review's with review, asking once
-// whether to save those with unsaved changes; then does after, unless nil.
-func (w *window) closeTabs(tabs []*editorTab, review bool, after func()) {
+// closeTabs closes tabs, asking once whether to save those with unsaved
+// changes; then does after, unless nil.
+func (w *window) closeTabs(tabs []*editorTab, after func()) {
 	tabs = slices.Clone(tabs)
 	var dirty []string
 	for _, e := range tabs {
@@ -748,9 +698,6 @@ func (w *window) closeTabs(tabs []*editorTab, review bool, after func()) {
 			if j := slices.Index(w.editors, e); j >= 0 {
 				w.removeEditor(j)
 			}
-		}
-		if review {
-			w.closeReview()
 		}
 		if after != nil {
 			after()

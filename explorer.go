@@ -172,9 +172,7 @@ func (w *window) explorerView(c *ui.Context) {
 	// What git and the editors say of the files.
 	status := map[string]int{}
 	for i, f := range w.files {
-		if w.source.kind == sourceWorkingTree {
-			status[f.Path] = i
-		}
+		status[f.Path] = i
 	}
 	activate := func(p string) {
 		e.sel = p

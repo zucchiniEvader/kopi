@@ -47,20 +47,11 @@ func fuzzyMatch(s, query string) bool {
 	return i >= len(query)
 }
 
-// fileVisible reports whether a file shows: it passes the filter and,
-// while finding, holds a match.
+// fileVisible reports whether a file shows: it has something to show,
+// and passes the filter.
 func (w *window) fileVisible(i int) bool {
 	f := w.files[i]
-	if !w.hasContent(f) {
-		return false
-	}
-	if !fuzzyMatch(f.Path, strings.TrimSpace(w.filter)) {
-		return false
-	}
-	if w.finding && strings.TrimSpace(w.query) != "" {
-		return w.fileMatches[i]
-	}
-	return true
+	return w.hasContent(f) && fuzzyMatch(f.Path, strings.TrimSpace(w.filter))
 }
 
 // hasContent reports whether a file has something to show: files whose
@@ -68,29 +59,6 @@ func (w *window) fileVisible(i int) bool {
 func (w *window) hasContent(f *fileState) bool {
 	return len(f.Hunks) > 0 || f.Binary || f.Directory || f.TooLarge || f.Note != "" ||
 		f.Status != diff.Modified || f.OldPath != f.Path || f.ModeChange != ""
-}
-
-// fileNote returns why a file's lines do not show, "" when they do.
-func (w *window) fileNote(f *fileState) string {
-	switch {
-	case f.Note != "":
-		return f.Note
-	case f.Binary:
-		return "Binary file changed."
-	case f.TooLarge:
-		return "File is too large, so Kopi skipped rendering it."
-	case len(f.Hunks) == 0 && f.OldPath != f.Path:
-		return "File renamed without changes."
-	case len(f.Hunks) == 0 && f.ModeChange != "":
-		return "File mode changed: " + f.ModeChange + "."
-	case len(f.Hunks) == 0 && f.Status == diff.Added, len(f.Hunks) == 0 && f.Status == diff.Untracked:
-		return "Empty file added."
-	case len(f.Hunks) == 0 && f.Status == diff.Deleted:
-		return "Empty file deleted."
-	case len(f.Hunks) == 0:
-		return "No changes to show."
-	}
-	return ""
 }
 
 // buildTree lays out the tree of the files that show.
@@ -252,9 +220,7 @@ func (w *window) sidebar(c *ui.Context) {
 		// The views of the sidebar, atop its body, on lines of their own
 		// as more come than the width holds.
 		ui.Row(c).Shrink(0).Padding(0, 8).Children(func() {
-			if w.tabControl(c) {
-				w.commitOpen = false
-			}
+			w.tabControl(c)
 		})
 		ui.Box(c).Height(1).Shrink(0).FillWidth().Margin(0, 0, 4).Background(ui.RGBA(127, 127, 127, 0.22))
 		if w.noFolder() {
@@ -408,7 +374,7 @@ func (w *window) switchProject(dir string) {
 		if r, err := git.OpenFolder(dir); err == nil && r.Root == root {
 			return
 		}
-		if err := openWindow(dir, source{kind: sourceWorkingTree}); err != nil {
+		if err := openWindow(dir); err != nil {
 			mygo.Dialog.Error("Could not open "+filepath.Base(dir), errorText(err))
 			return
 		}
@@ -588,7 +554,6 @@ func (w *window) fileTree(c *ui.Context) {
 	choose := func(key string) {
 		w.treeSel = key
 		if n := w.treeItems[key]; n != nil && !n.dir {
-			w.commitOpen = false
 			w.openChange(n.file)
 		}
 	}
@@ -639,31 +604,24 @@ func (w *window) fileTree(c *ui.Context) {
 					}
 					ic.Rotate(ic.Animate("rot", target, 150*time.Millisecond))
 				})
+				w.commitCheck(c, pal, n.name, w.treeFiles(key))
 				first, _, _ := strings.Cut(n.name, "/")
 				w.fileIcon(c, first, true, !w.closedDirs[key], muted)
 				ui.Text(c, n.name).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 				return
 			}
 			f := w.files[n.file]
-			viewed := w.isViewed(f)
+			w.commitCheck(c, pal, n.name, []string{f.Path})
 			w.fileIcon(c, n.name, false, false, muted)
-			name := ui.Text(c, n.name).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
-			if viewed && !(selected && focused) {
-				name.TextColor(t.TextMuted)
-			}
+			ui.Text(c, n.name).FontSize(13).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 			if countable(f) && (f.Additions > 0 || f.Deletions > 0) {
 				ui.Textf(c, "+%s -%s", compact(f.Additions), compact(f.Deletions)).
 					Font(w.codeFont()).FontSize(10).FontWeight(600).TextColor(muted).Shrink(0).
 					Tooltip(lines(f.Additions, "added") + ", " + lines(f.Deletions, "removed"))
 			}
 			letter := statusColor(f.Status, pal, t)
-			switch {
-			case selected && focused:
+			if selected && focused {
 				letter = t.AccentText
-			case viewed:
-				letter = t.TextMuted
-			case w.reloaded[f.Path]:
-				letter = pal.ref
 			}
 			ui.Text(c, statusLetter(f)).Font(w.codeFont()).FontSize(11).FontWeight(700).TextColor(letter).
 				Width(12).TextAlign(ui.Center).Shrink(0).Tooltip(f.Status.Label())
@@ -727,41 +685,10 @@ func (w *window) fileTree(c *ui.Context) {
 	}
 }
 
-// selectTreeFile chooses a file's row in the tree, as the surface
-// scrolls to it.
-func (w *window) selectTreeFile(i int) {
-	key := "f:" + w.files[i].Path
-	if w.treeSel == key {
-		return
-	}
-	w.treeSel = key
-	// The directories holding it open.
-	for k, n := range w.treeItems {
-		if n.dir && w.closedDirs[k] && strings.HasPrefix(w.files[i].Path, strings.TrimPrefix(k, "d:")+"/") {
-			w.closedDirs[k] = false
-		}
-	}
-	for r, row := range w.visibleTree() {
-		if row.key == key {
-			w.treeList.ScrollIntoView(r)
-			return
-		}
-	}
-}
-
 // commitTime is how a commit's time shows, as of a minute.
 type commitTime struct {
 	at        time.Time
 	ago, full string
-}
-
-// launchWorkTree is the source of uncommitted changes: the work tree, or
-// its comparison with a branch when the window was opened on one.
-func (w *window) launchWorkTree() source {
-	if w.launch.kind == sourceBranch {
-		return w.launch
-	}
-	return source{kind: sourceWorkingTree}
 }
 
 // relativeTime writes how long ago t was: just now, 5m ago, 3d ago.
@@ -782,7 +709,7 @@ func relativeTime(now, t time.Time) string {
 	return fmt.Sprintf("%dy ago", int(d/(365*24*time.Hour)))
 }
 
-// sidebarFooter shows the total of the changes, and the Commit button.
+// sidebarFooter shows the total of the changes.
 func (w *window) sidebarFooter(c *ui.Context, pal *palette) {
 	t := c.Theme()
 	adds, dels, counted := 0, 0, false
@@ -793,33 +720,14 @@ func (w *window) sidebarFooter(c *ui.Context, pal *palette) {
 			counted = true
 		}
 	}
-	canCommit := w.source.kind == sourceWorkingTree && len(w.files) > 0
-	if !counted && !canCommit {
+	if !counted {
 		return
 	}
-	ui.Row(c).MinHeight(40).Padding(6, 10).Gap(8).BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Children(func() {
-		if counted {
-			ui.Row(c).Gap(6).Tooltip("Total change: " + lines(adds, "added") + ", " + lines(dels, "removed")).Children(func() {
-				ui.Text(c, "Total:").FontSize(11).FontWeight(600).TextColor(t.TextMuted)
-				ui.Text(c, "+"+thousands(adds)).Font(w.codeFont()).FontSize(11).FontWeight(600).TextColor(pal.addText)
-				ui.Text(c, "-"+thousands(dels)).Font(w.codeFont()).FontSize(11).FontWeight(600).TextColor(pal.delText)
-			})
-		}
-		ui.Spacer(c)
-		if canCommit {
-			label := "Commit"
-			if w.commitOpen {
-				label = "Review"
-			}
-			b := ui.Button(c, "").Children(func() {
-				ui.Icon(c, iconCommit).FontSize(14)
-				ui.Text(c, label).SingleLine()
-			})
-			if b.Clicked() {
-				w.showReview()
-				w.toggleCommit()
-			}
-		}
+	ui.Row(c).MinHeight(32).Padding(6, 10).Gap(6).BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).
+		Tooltip("Total change: " + lines(adds, "added") + ", " + lines(dels, "removed")).Children(func() {
+		ui.Text(c, "Total:").FontSize(11).FontWeight(600).TextColor(t.TextMuted)
+		ui.Text(c, "+"+thousands(adds)).Font(w.codeFont()).FontSize(11).FontWeight(600).TextColor(pal.addText)
+		ui.Text(c, "-"+thousands(dels)).Font(w.codeFont()).FontSize(11).FontWeight(600).TextColor(pal.delText)
 	})
 }
 

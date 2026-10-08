@@ -5,8 +5,8 @@ import (
 	"github.com/zucchiniEvader/kopi/internal/highlight"
 )
 
-// palette is the colors of the review, in the light or the dark: those
-// of codiff and of the diff renderer it uses.
+// palette is the colors of the app's code and changes, in the light or
+// the dark: codiff's, and those of the diff renderer it uses.
 type palette struct {
 	appBg      ui.Color // behind the cards
 	code       ui.Color // the code's own color

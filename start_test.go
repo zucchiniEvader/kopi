@@ -45,7 +45,7 @@ func TestStartScreens(t *testing.T) {
 		t.Errorf("no actions: %q", tt.Texts())
 	}
 
-	w = newWindow(&git.Repo{Plain: true}, source{})
+	w = newWindow(&git.Repo{Plain: true})
 	w.settings = defaultSettings()
 	w.settings.IconTheme = "none"
 	w.sidebarShown, w.sidebarWidth = true, sidebarDefault
@@ -71,8 +71,8 @@ func TestStartScreens(t *testing.T) {
 	if w.quick.open {
 		t.Error("Go to File opens with no folder")
 	}
-	if windowTitle("", source{}) != "Kopi" {
-		t.Errorf("title %q", windowTitle("", source{}))
+	if windowTitle("") != "Kopi" {
+		t.Errorf("title %q", windowTitle(""))
 	}
 }
 

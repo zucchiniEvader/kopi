@@ -28,13 +28,10 @@ type editorFind struct {
 	focus, focusWith bool
 }
 
-// find opens the search of the editor shown, with the replacement, or
-// of the review while it shows.
+// find opens the search of the editor shown, with the replacement.
 func (w *window) find(replace bool) {
 	e := w.activeTab()
 	if e == nil || e.ed == nil {
-		w.showReview()
-		w.finding = true
 		return
 	}
 	f := &w.edFind

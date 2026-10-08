@@ -6,67 +6,36 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/diff"
 	"github.com/zucchiniEvader/kopi/internal/git"
-	"github.com/zucchiniEvader/kopi/internal/highlight"
 )
-
-// sourceKind is what a window reviews.
-type sourceKind uint8
-
-const (
-	sourceWorkingTree sourceKind = iota // uncommitted changes
-	sourceCommit                        // a commit, against its first parent
-	sourceBranch                        // the work tree since it branched from a branch
-)
-
-type source struct {
-	kind sourceKind
-	ref  string // the commit, or the branch
-}
 
 // historyPage is how many commits the History tab loads at a time: git
 // lists hundreds in a few milliseconds, and the list builds only the rows
 // in view.
 const historyPage = 200
 
-// session is the review of one source, kept while the window shows
-// another.
-type session struct {
-	comments []*comment
-	viewed   map[string]string
-}
-
-// window is a window reviewing a repository.
+// window is a window of a folder, a repository's or not, or of none.
 type window struct {
 	win      *mygo.Window
 	repo     *git.Repo
-	launch   source // what the window was opened on
-	source   source
 	settings Settings
 
+	// The branch, and the changes of the work tree.
 	branch     string
 	files      []*fileState
-	commit     *git.Commit // the commit reviewed, for sourceCommit
-	base       string      // the merge base, for sourceBranch
 	loading    bool
 	loadedOnce bool
 	loadErr    error
 	gen        int // counts loads, to drop the results of older ones
-	genA       atomic.Int64
-	// loadStart is when the load started.
-	loadStart time.Time
-	viewed    map[string]string
 
 	// The sidebar.
 	sidebarShown bool
@@ -77,7 +46,6 @@ type window struct {
 	search                             searchState
 	explorer                           explorer
 	filter                             string
-	filterFocus                        bool
 	treeList                           ui.ListState
 	treeEl                             *ui.Element
 	treeSel                            string // the key of the row chosen
@@ -121,15 +89,11 @@ type window struct {
 	treeKeyboard, historyKeyboard bool
 	// deletingBranch is the branch asked about deleting.
 	deletingBranch string
-	// reloaded are the files that changed in the last refresh.
-	reloaded  map[string]bool
-	dragWidth float32
+	dragWidth      float32
 
-	// The files open in editors, and the one shown, -1 for the review,
-	// which shows while reviewOpen, the tab it has being open.
+	// The files open in editors, and the one shown, -1 for none.
 	editors      []*editorTab
 	activeEditor int
-	reviewOpen   bool
 	// closing is set once the window may close with unsaved changes.
 	closing bool
 
@@ -152,24 +116,7 @@ type window struct {
 	breakpoints map[string][]int
 	mains       mainScan
 
-	// The diff surface.
-	rows       []row
-	rowsDirty  bool
-	list       ui.ListState
-	current    int // the file shown at the top of the surface
-	hscroll    map[string]float32
-	diffListEl *ui.Element
-	revealedAt time.Time
-	now        time.Time
-	charW      float32
-	charKey    string
-	// The hunk chosen with j and k.
-	selFile, selHunk int
-	focusList        bool
-	focusedOnce      bool
-	focusHistory     bool
-	switchedAt       time.Time // when the source last changed, for KOPI_DEBUG
-	debugPressed     bool
+	focusHistory bool
 	// hold keeps the background work of tests in held, to run frames
 	// while it waits.
 	hold bool
@@ -177,34 +124,11 @@ type window struct {
 	// typing is set while a field has the focus, whose keys are its own.
 	typing bool
 
-	// Find in diffs.
-	finding     bool
-	query       string
-	matches     []match
-	match       int
-	matchesFor  string
-	fileMatches map[int]bool
-
-	// The reviews of the other sources.
-	sessions map[source]*session
-	// Review comments, the one asked about discarding, and the git user.
-	comments   []*comment
-	discarding *comment
-	user       string
-	copied     string
-	copiedAt   time.Time
-
-	// Committing.
-	commitOpen     bool
-	subject        string
-	body           string
-	commitPaths    map[string]bool
-	commitBusy     bool
-	commitErr      string
-	commitOutput   string
-	commitDone     string // the hash committed
-	committedFiles int
-	commitFocus    bool
+	// Committing: the message, the files chosen, by path, whether git
+	// commits them, and whether the message's field takes the keys.
+	message     string
+	commitPaths map[string]bool
+	commitFocus bool
 
 	// The command bar.
 	paletteOpen  bool
@@ -214,15 +138,14 @@ type window struct {
 	// palettePointer is where the pointer was over the list.
 	palettePointer [2]float32
 
-	// The dialog opening a commit or a branch.
+	// The dialog asking for a branch's name.
 	dialog      dialogKind
 	dialogOpen  bool
 	dialogValue string
 	dialogErr   string
 	dialogBusy  bool
 
-	// changed is set when the work tree changed since the last load.
-	changed   bool
+	// signature is the work tree's status as last loaded (StatusSignature).
 	signature string
 	help      bool
 
@@ -245,32 +168,20 @@ var (
 	windows   []*window
 )
 
-// openWindow opens a window on the repository holding dir, or, for "",
-// a window with no folder.
-func openWindow(dir string, src source) error {
-	open := git.Open
-	if src.kind == sourceWorkingTree {
-		// A folder outside any repository opens too, with no changes.
-		open = git.OpenFolder
-	}
-	if dir == "" {
-		open = func(string) (*git.Repo, error) { return &git.Repo{Plain: true}, nil }
-	}
-	repo, err := open(dir)
-	if err != nil {
-		return err
-	}
-	if src.kind == sourceCommit {
-		hash, err := repo.Resolve(src.ref)
-		if err != nil {
+// openWindow opens a window on the folder dir, a repository's or not,
+// or, for "", a window with no folder.
+func openWindow(dir string) error {
+	repo := &git.Repo{Plain: true}
+	if dir != "" {
+		var err error
+		if repo, err = git.OpenFolder(dir); err != nil {
 			return err
 		}
-		src.ref = hash
 	}
-	// A repository already open comes to the front.
+	// A folder already open comes to the front.
 	windowsMu.Lock()
 	for _, w := range windows {
-		if w.repo.Root == repo.Root && w.launch == src {
+		if w.repo.Root == repo.Root {
 			windowsMu.Unlock()
 			w.win.Show()
 			w.win.Focus()
@@ -279,11 +190,11 @@ func openWindow(dir string, src source) error {
 	}
 	windowsMu.Unlock()
 
-	w := newWindow(repo, src)
+	w := newWindow(repo)
 	w.javaLaunch = launchJava
 	w.goLaunch = launchGo
 	w.win = mygo.NewWindow(mygo.WindowOptions{
-		Title:          windowTitle(repo.Root, src),
+		Title:          windowTitle(repo.Root),
 		Width:          1280,
 		Height:         860,
 		MinWidth:       720,
@@ -305,10 +216,6 @@ func openWindow(dir string, src source) error {
 		if names := w.dirtyEditors(); len(names) > 0 && !w.closing {
 			ev.PreventDefault()
 			w.askToClose(names)
-			return
-		}
-		if w.settings.CopyCommentsOnClose && len(w.comments) > 0 {
-			mygo.Clipboard.WriteText(w.commentsMarkdown())
 		}
 	})
 	offSettings := cfg.OnChange(func(s Settings) { w.win.Update(func() { w.applySettings(s) }) })
@@ -342,80 +249,47 @@ func openWindow(dir string, src source) error {
 	}
 	w.load()
 	w.loadHistory()
-	w.loadUser()
 	go w.watch(stop)
 	w.captureIfAsked()
 	return nil
 }
 
-// newWindow makes the state of a window reviewing a source of a
-// repository.
-func newWindow(repo *git.Repo, src source) *window {
+// newWindow makes the state of a window of a folder.
+func newWindow(repo *git.Repo) *window {
 	width, shown := state.layout()
 	w := &window{
 		repo:         repo,
 		java:         langServer{lang: javaLang},
 		golang:       langServer{lang: goLang},
-		launch:       src,
-		source:       src,
 		settings:     cfg.Get(),
 		sidebarShown: shown,
 		sidebarWidth: width,
 		historyLimit: historyPage,
-		viewed:       state.viewed(repo.Root),
-		hscroll:      map[string]float32{},
 		closedDirs:   map[string]bool{},
 		commitTimes:  map[string]commitTime{},
-		reloaded:     map[string]bool{},
-		fileMatches:  map[int]bool{},
-		selFile:      -1,
-		selHunk:      -1,
 		tab:          tabExplorer,
 		activeEditor: -1,
 	}
-	// The window opens on the explorer, which takes the keys; the review
-	// opens when asked, or at once on a commit or a branch to compare.
+	// The window opens on the explorer, which takes the keys.
 	w.explorer.reset()
 	w.explorer.focus = true
-	if src.kind != sourceWorkingTree {
-		w.tab, w.reviewOpen = tabGit, true
-	}
 	w.gitShown = w.sidebarShown && w.tab == tabGit
 	w.dragWidth = w.sidebarWidth
-	w.list.Key = func(i int) any { return w.key(&w.rows[i]) }
-	w.list.Header = func(i int) bool { return w.rows[i].kind == rowHeader }
 	return w
 }
 
-// windowTitle is "<repository>[/<source>] · Kopi".
-func windowTitle(root string, src source) string {
+// windowTitle is "<folder> · Kopi".
+func windowTitle(root string) string {
 	if root == "" {
 		return "Kopi"
 	}
-	name := filepath.Base(root)
-	switch src.kind {
-	case sourceCommit:
-		name += "/" + shortHash(src.ref)
-	case sourceBranch:
-		name += "/" + src.ref
-	}
-	return name + " · Kopi"
-}
-
-func shortHash(h string) string {
-	if len(h) > 7 {
-		return h[:7]
-	}
-	return h
+	return filepath.Base(root) + " · Kopi"
 }
 
 // applySettings takes settings changed in the file or the menus.
 func (w *window) applySettings(s Settings) {
 	old := w.settings
 	w.settings = s
-	if old.ShowWhitespace != s.ShowWhitespace {
-		w.load()
-	}
 	if old.JavaHome != s.JavaHome || old.JdtlsPath != s.JdtlsPath {
 		// Start the server again with the Java or the jdtls chosen.
 		if w.java.state != serverIdle {
@@ -426,9 +300,6 @@ func (w *window) applySettings(s Settings) {
 				}
 			}
 		}
-	}
-	if old.DiffStyle != s.DiffStyle || old.WordWrap != s.WordWrap || old.CodeFontSize != s.CodeFontSize {
-		w.rowsDirty = true
 	}
 }
 
@@ -472,181 +343,23 @@ func (w *window) invalidate() {
 	}
 }
 
-func (w *window) split() bool { return w.settings.DiffStyle != "unified" }
-
-// splitFile reports whether a file shows side by side: files that are
-// all new or all gone show in one column.
-func (w *window) splitFile(f *fileState) bool {
-	if !w.split() {
-		return false
-	}
-	return !f.oneSided()
-}
-
-// setSource shows another source in the window: at once, with what is
-// known of it, as the commit's message from the history; its changes come
-// as they load.
-func (w *window) setSource(src source) {
-	if w.source == src {
-		return
-	}
-	if debugFrames {
-		w.switchedAt = time.Now()
-		log.Printf("switch to %+v", src)
-		go probeMainThread(time.Second)
-	}
-	w.commitOpen = false
-	w.showReview()
-	// The review takes the focus as the window opens only: the user, who
-	// chose this source, keeps the focus where they put it, as on the
-	// history.
-	w.focusedOnce = true
-	w.switchTo(src)
-	if src.kind == sourceCommit {
-		for i := range w.history {
-			if w.history[i].Hash == src.ref {
-				c := w.history[i]
-				w.commit = &c
-			}
-		}
-	}
-	w.load()
-}
-
-// switchTo makes a source the one shown, its review in place of the
-// other's.
-func (w *window) switchTo(src source) {
-	// Each source keeps its review: the comments, and what was viewed of a
-	// commit.
-	if w.sessions == nil {
-		w.sessions = map[source]*session{}
-	}
-	w.sessions[w.source] = &session{comments: w.comments, viewed: w.viewed}
-	w.comments, w.viewed = nil, nil
-	if s := w.sessions[src]; s != nil {
-		w.comments, w.viewed = s.comments, s.viewed
-	}
-	if w.viewed == nil {
-		w.viewed = map[string]string{}
-		if src.kind != sourceCommit {
-			w.viewed = state.viewed(w.repo.Root)
-		}
-	}
-	w.source = src
-	w.files, w.rows, w.commit = nil, nil, nil
-	// The tree refers to the files by their index: it goes with them.
-	w.buildTree()
-	w.loadErr = nil
-	w.list = ui.ListState{Key: w.list.Key, Header: w.list.Header}
-	w.selFile, w.selHunk = -1, -1
-	w.finding, w.query = false, ""
-	w.hscroll = map[string]float32{}
-	w.current = 0
-	if w.win != nil {
-		w.win.SetTitle(windowTitle(w.repo.Root, src))
-	}
-}
-
-// preloadBudget is how long after it starts a load may wait for the
-// contents of the first files, to show them colored at once rather than
-// as they come.
-const preloadBudget = 80 * time.Millisecond
-
-// load reads the changes of the source, the contents of the first files
-// within preloadBudget, then the contents of the others.
+// load reads the changes of the work tree, and the branch, off the main
+// thread.
 func (w *window) load() {
 	w.gen++
 	gen := w.gen
-	src := w.source
-	opts := git.Options{ShowWhitespace: w.settings.ShowWhitespace}
 	w.loading = true
-	w.loadStart = time.Now()
-	started := w.loadStart
 	w.loadErr = nil
-	w.changed = false
-	w.genA.Store(int64(gen))
 	if w.repo.Plain {
 		w.loading = false
 		w.loadedOnce = true
 		w.setFiles(nil)
 		return
 	}
-	// What is known already needs no git: the commit, from the history, and
-	// the branch, which showing a commit does not change.
-	known := w.commit
-	if known != nil && known.Hash != src.ref {
-		known = nil
-	}
-	branch := w.branch
-	needBranch := src.kind != sourceCommit || branch == ""
-	// Files unchanged since the last load keep their contents.
-	loadedFiles := map[string]bool{}
-	for _, f := range w.files {
-		if f.loaded {
-			loadedFiles[f.Path+"\x00"+f.Fingerprint] = true
-		}
-	}
 	w.background(func() {
-		var (
-			files  []*diff.File
-			commit = known
-			base   string
-			err    error
-			wg     sync.WaitGroup
-		)
-		if needBranch {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				branch = w.repo.Branch()
-			}()
-		}
-		sig := ""
-		switch src.kind {
-		case sourceWorkingTree:
-			sig = w.repo.StatusSignature()
-			files, err = w.repo.WorkingTree(opts)
-		case sourceCommit:
-			if commit == nil {
-				var c git.Commit
-				c, err = w.repo.CommitInfo(src.ref)
-				commit = &c
-			}
-			if err == nil {
-				files, err = w.repo.CommitDiff(*commit, opts)
-			}
-		case sourceBranch:
-			sig = w.repo.StatusSignature()
-			files, base, err = w.repo.Compare(src.ref, opts)
-		}
-		wg.Wait()
-		// The revisions of the old and the new side; "" is the work tree.
-		var oldRev, newRev string
-		switch src.kind {
-		case sourceWorkingTree:
-			if w.repo.HasHead() {
-				oldRev = "HEAD"
-			}
-		case sourceCommit:
-			if commit != nil && len(commit.Parents) > 0 {
-				oldRev = commit.Parents[0]
-			}
-			newRev = src.ref
-		case sourceBranch:
-			oldRev = base
-		}
-		var pre map[string]loaded
-		if err == nil && !w.stale(gen) {
-			var fresh []*diff.File
-			for _, f := range files {
-				if !loadedFiles[f.Path+"\x00"+f.Fingerprint] {
-					fresh = append(fresh, f)
-				}
-			}
-			if budget := preloadBudget - time.Since(started); budget > 0 {
-				pre = w.preload(fresh, oldRev, newRev, budget)
-			}
-		}
+		branch := w.repo.Branch()
+		sig := w.repo.StatusSignature()
+		files, err := w.repo.WorkingTree(git.Options{ShowWhitespace: true})
 		w.update(func() {
 			if gen != w.gen {
 				return
@@ -654,356 +367,27 @@ func (w *window) load() {
 			w.loading = false
 			w.loadErr = err
 			w.branch = branch
-			if err == nil {
-				w.commit = commit
-			}
-			w.base = base
-			if sig != "" {
-				w.signature = sig
-			}
+			w.signature = sig
 			w.setFiles(files)
-			if src.kind == sourceWorkingTree {
-				w.reloadWorkTreeDiffs()
-			}
-			for _, f := range w.files {
-				if l, ok := pre[f.Path]; ok && !f.loaded {
-					l.file = f
-					l.apply()
-				}
-			}
+			w.reloadWorkTreeDiffs()
 			w.loadedOnce = true
-			if err == nil {
-				var rest []*fileState
-				for _, f := range w.files {
-					if !f.loaded {
-						rest = append(rest, f)
-					}
-				}
-				if len(rest) > 0 {
-					w.background(func() { w.loadContents(gen, oldRev, newRev, rest) })
-				}
-			}
 		})
 	})
 }
 
-// preload reads and colors the contents of files, in order, until
-// budget runs out: the files it did not finish load later, as they come.
-func (w *window) preload(files []*diff.File, oldRev, newRev string, budget time.Duration) map[string]loaded {
-	if len(files) == 0 {
-		return nil
-	}
-	contents, err := w.repo.NewContents()
-	if err != nil {
-		return nil
-	}
-	defer boostGC()()
-	results := make(chan loaded)
-	var stop atomic.Bool
-	go func() {
-		defer close(results)
-		defer contents.Close()
-		for _, f := range files {
-			if stop.Load() {
-				return
-			}
-			l := w.read(contents, f, oldRev, newRev)
-			l.finish()
-			select {
-			case results <- l:
-			case <-time.After(budget):
-				return // nobody waits anymore
-			}
-		}
-	}()
-	out := map[string]loaded{}
-	deadline := time.NewTimer(budget)
-	defer deadline.Stop()
-	for {
-		select {
-		case l, ok := <-results:
-			if !ok {
-				return out
-			}
-			out[l.path] = l
-		case <-deadline.C:
-			stop.Store(true)
-			return out
-		}
-	}
+// fileState is a changed file of the work tree.
+type fileState struct {
+	*diff.File
 }
 
-// setFiles shows newly read files, keeping what the user did to those
-// that did not change.
+// setFiles shows newly read changes.
 func (w *window) setFiles(files []*diff.File) {
-	prev := map[string]*fileState{}
-	for _, f := range w.files {
-		prev[f.Path] = f
-	}
-	// A refresh marks the files that changed since, and opens them.
-	refresh := len(prev) > 0
-	w.reloaded = map[string]bool{}
-	next := make([]*fileState, 0, len(files))
+	w.files = make([]*fileState, 0, len(files))
 	for _, f := range files {
-		fs := &fileState{File: f}
-		switch p := prev[f.Path]; {
-		case p != nil && p.Fingerprint == f.Fingerprint:
-			fs.collapsed = p.collapsed
-			fs.expanded = p.expanded
-			// The contents stay until they load again.
-			fs.oldLines, fs.newLines, fs.oldHL, fs.newHL = p.oldLines, p.newLines, p.oldHL, p.newHL
-			fs.oldImage, fs.newImage, fs.oldSize, fs.newSize = p.oldImage, p.newImage, p.oldSize, p.newSize
-			fs.loaded = p.loaded
-		case refresh:
-			w.reloaded[f.Path] = true
-			fs.collapsed = f.Generated || f.Directory
-		default:
-			fs.collapsed = w.isViewed(fs) || f.Generated || f.Directory
-		}
-		next = append(next, fs)
+		w.files = append(w.files, &fileState{File: f})
 	}
-	w.files = next
-	w.matchesFor = "\x00" // find again
 	w.buildTree()
-	w.rowsDirty = true
-	w.pruneComments()
-}
-
-// isViewed reports whether the user marked the file viewed, as it is now.
-func (w *window) isViewed(f *fileState) bool {
-	return f.Fingerprint != "" && w.viewed[f.Path] == f.Fingerprint
-}
-
-func (w *window) setViewed(f *fileState, viewed bool) {
-	fp := ""
-	if viewed {
-		fp = f.Fingerprint
-		w.viewed[f.Path] = fp
-	} else {
-		delete(w.viewed, f.Path)
-	}
-	// Only the work tree's files are remembered: commits do not change.
-	if w.source.kind != sourceCommit {
-		go state.setViewed(w.repo.Root, f.Path, fp)
-	}
-	f.collapsed = viewed
-	w.rowsDirty = true
-}
-
-// maxContent is the size of the files whose contents are loaded.
-const maxContent = 2 << 20
-
-// loaded is a file's contents, read and tokenized, or decoded for
-// pictures.
-type loaded struct {
-	file               *fileState // where they go, once known
-	oldLines, newLines []string
-	oldHL, newHL       [][]highlight.Seg
-	oldData, newData   []byte // of pictures
-	oldImage, newImage *ui.Bitmap
-	path, oldPath      string
-}
-
-// read reads both sides of a file: lines of text, or the data of a
-// picture.
-func (w *window) read(contents *git.Contents, f *diff.File, oldRev, newRev string) loaded {
-	l := loaded{path: f.Path, oldPath: f.OldPath}
-	raw := func(rev, path string, limit int) []byte {
-		var data []byte
-		if rev == "" {
-			data = w.repo.ReadWorkTree(path)
-		} else {
-			data, _ = contents.Read(rev, path)
-		}
-		if len(data) > limit {
-			return nil
-		}
-		return data
-	}
-	hasOld := oldRev != "" && f.Status != diff.Added && f.Status != diff.Untracked
-	hasNew := f.Status != diff.Deleted
-	if f.Binary && isImage(f.Path) {
-		if hasOld {
-			l.oldData = raw(oldRev, f.OldPath, maxImage)
-		}
-		if hasNew {
-			l.newData = raw(newRev, f.Path, maxImage)
-		}
-		return l
-	}
-	if f.Binary || f.Directory || f.TooLarge {
-		return l
-	}
-	text := func(data []byte) []string {
-		if data == nil || diff.IsBinary(data) {
-			return nil
-		}
-		lines := diff.SplitLines(string(data))
-		if lines == nil {
-			lines = []string{}
-		}
-		return lines
-	}
-	if hasOld {
-		l.oldLines = text(raw(oldRev, f.OldPath, maxContent))
-	}
-	if hasNew {
-		l.newLines = text(raw(newRev, f.Path, maxContent))
-	}
-	return l
-}
-
-// finish colors the lines, and decodes the pictures.
-func (l *loaded) finish() {
-	l.oldHL = highlight.Lines(l.oldPath, l.oldLines)
-	l.newHL = highlight.Lines(l.path, l.newLines)
-	if l.oldData != nil {
-		l.oldImage, _ = ui.DecodeBitmap(l.oldData)
-	}
-	if l.newData != nil {
-		l.newImage, _ = ui.DecodeBitmap(l.newData)
-	}
-}
-
-// apply gives the contents to their file, on the main thread.
-func (l *loaded) apply() {
-	f := l.file
-	f.oldLines, f.newLines = l.oldLines, l.newLines
-	f.oldHL, f.newHL = l.oldHL, l.newHL
-	f.oldImage, f.newImage = l.oldImage, l.newImage
-	f.oldSize, f.newSize = len(l.oldData), len(l.newData)
-	f.loaded = true
-	f.metricsDone = false
-	f.spans = nil
-}
-
-// maxImage is the size of the pictures shown.
-const maxImage = 32 << 20
-
-// isImage reports whether a path is of a picture the app shows.
-func isImage(path string) bool {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico":
-		return true
-	}
-	return false
-}
-
-// loadContents reads both sides of the files, for their colors and their
-// unchanged lines, and shows them as they come.
-func (w *window) loadContents(gen int, oldRev, newRev string, files []*fileState) {
-	defer boostGC()()
-	contents, err := w.repo.NewContents()
-	if err != nil {
-		return
-	}
-	defer contents.Close()
-
-	jobs := make(chan loaded)
-	results := make(chan loaded)
-	var wg sync.WaitGroup
-	// A few workers: more would take the CPU, and the collector's pauses,
-	// from the main thread, which draws the window.
-	for range highlightWorkers() {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobs {
-				job.finish()
-				results <- job
-			}
-		}()
-	}
-	go func() {
-		defer close(jobs)
-		for _, f := range files {
-			if w.stale(gen) {
-				return
-			}
-			job := w.read(contents, f.File, oldRev, newRev)
-			job.file = f
-			jobs <- job
-		}
-	}()
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	var batch []loaded
-	flush := func() {
-		if len(batch) == 0 {
-			return
-		}
-		done := batch
-		batch = nil
-		w.update(func() {
-			if gen != w.gen {
-				return
-			}
-			for i := range done {
-				done[i].apply()
-			}
-			w.rowsDirty = true
-		})
-	}
-	tick := time.NewTicker(60 * time.Millisecond)
-	defer tick.Stop()
-	for {
-		select {
-		case l, ok := <-results:
-			if !ok {
-				flush()
-				return
-			}
-			batch = append(batch, l)
-		case <-tick.C:
-			flush()
-		}
-	}
-}
-
-// boostGC lets the heap grow further between collections while files load:
-// Chroma's lexers make much garbage, and every collection has the main
-// thread, which allocates as it draws, help with it. The function it
-// returns ends the boost.
-func boostGC() func() {
-	gcBoost.Lock()
-	if gcBoost.n == 0 {
-		gcBoost.old = debug.SetGCPercent(400)
-	}
-	gcBoost.n++
-	gcBoost.Unlock()
-	return func() {
-		gcBoost.Lock()
-		gcBoost.n--
-		if gcBoost.n == 0 {
-			debug.SetGCPercent(gcBoost.old)
-		}
-		gcBoost.Unlock()
-	}
-}
-
-var gcBoost struct {
-	sync.Mutex
-	n, old int
-}
-
-// highlightWorkers is how many files are highlighted at once.
-func highlightWorkers() int { return min(max(runtime.NumCPU()/4, 1), 2) }
-
-func (w *window) stale(gen int) bool { return w.genA.Load() != int64(gen) }
-
-// loadUser reads the name of the git user, which comments show, off the
-// main thread: running git takes a while.
-func (w *window) loadUser() {
-	w.background(func() {
-		name := strings.TrimSpace(w.repo.ConfigValue("user.name"))
-		if name == "" {
-			name = strings.TrimSpace(w.repo.ConfigValue("user.email"))
-		}
-		w.update(func() { w.user = name })
-	})
+	w.reconcileCommitPaths()
 }
 
 // loadHistory reads the commits of the History tab, with their graph,
@@ -1148,21 +532,21 @@ func (w *window) watch(stop chan struct{}) {
 	}
 }
 
-// checkChanges compares the work tree with what the window shows.
+// checkChanges reads the changes again when the work tree changed
+// since they were read.
 func (w *window) checkChanges() {
-	var src source
 	var sig string
 	var busy bool
-	mygo.RunOnMain(func() { src, sig, busy = w.source, w.signature, w.loading || w.changed })
-	if busy || sig == "" || src.kind == sourceCommit {
+	mygo.RunOnMain(func() { sig, busy = w.signature, w.loading })
+	if busy || sig == "" {
 		return
 	}
 	if now := w.repo.StatusSignature(); now != sig {
 		w.win.Update(func() {
 			// Files came or went: the explorer reads its folders again.
 			w.explorer.reset()
-			if w.source == src && !w.loading {
-				w.changed = true
+			if !w.loading {
+				w.load()
 			}
 			// Where the branch stands may have changed with a commit, a
 			// fetch or a push made outside.
@@ -1173,7 +557,7 @@ func (w *window) checkChanges() {
 	}
 }
 
-// refresh loads the source again, the history, and the files of the
+// refresh reads the changes again, the history, and the files of the
 // explorer.
 func (w *window) refresh() {
 	w.explorer.reset()
@@ -1187,7 +571,7 @@ func (w *window) noFolder() bool { return w.repo.Root == "" }
 // openEmptyWindow opens the window with no folder, or brings it to the
 // front, saying why a folder did not open when err is not nil.
 func openEmptyWindow(err error) {
-	if e := openWindow("", source{}); e != nil {
+	if e := openWindow(""); e != nil {
 		log.Printf("kopi: %v", e)
 		return
 	}
@@ -1215,17 +599,6 @@ func closeEmptyWindows() {
 	}
 }
 
-// openInEditor opens a file of the repository in an editor of the window,
-// at a line, or in the user's editor when it is gone from the work tree,
-// or the review is of a commit.
-func (w *window) openInEditor(path string, line int) {
-	if _, err := os.Stat(filepath.Join(w.repo.Root, filepath.FromSlash(path))); err == nil && w.source.kind != sourceCommit {
-		w.openFile(path, line)
-		return
-	}
-	w.openExternal(path, line)
-}
-
 // openExternal opens a file of the repository in the user's editor, at a
 // line.
 func (w *window) openExternal(path string, line int) {
@@ -1250,26 +623,6 @@ func abbreviateHome(p string) string {
 	return p
 }
 
-// shortPath abbreviates the directories of a path to their first letter,
-// as fish does: ~/P/fate.
-func shortPath(p string) string {
-	p = abbreviateHome(p)
-	parts := strings.Split(p, "/")
-	for i := 1; i < len(parts)-1; i++ {
-		part := parts[i]
-		if part == "" || part == "~" {
-			continue
-		}
-		n := 1
-		if strings.HasPrefix(part, ".") && len(part) > 1 {
-			n = 2
-		}
-		r := []rune(part)
-		parts[i] = string(r[:min(n, len(r))])
-	}
-	return strings.Join(parts, "/")
-}
-
 // errorText is the text of an error for the window.
 func errorText(err error) string {
 	var ge *git.Error
@@ -1277,25 +630,6 @@ func errorText(err error) string {
 		return strings.TrimSpace(ge.Stderr)
 	}
 	return fmt.Sprint(err)
-}
-
-// probeMainThread logs how long the main thread kept a function waiting,
-// at worst, over a while: how long the window could not respond.
-func probeMainThread(d time.Duration) {
-	var worst, total time.Duration
-	var slow, n int
-	for end := time.Now().Add(d); time.Now().Before(end); n++ {
-		start := time.Now()
-		mygo.RunOnMain(func() {})
-		wait := time.Since(start)
-		total += wait
-		worst = max(worst, wait)
-		if wait > 16*time.Millisecond {
-			slow++
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-	log.Printf("main thread: worst wait %v, average %v, %d of %d waits over 16ms", worst, total/time.Duration(max(n, 1)), slow, n)
 }
 
 // watchMainThread logs, for KOPI_DEBUG, whenever the main thread keeps

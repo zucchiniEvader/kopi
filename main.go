@@ -1,6 +1,6 @@
 // Kopi is a native, minimal code editor drawn by MyGo: it edits Java and
 // Go with their language servers, runs and debugs Java programs, and
-// reviews and commits the work tree's Git changes. It grew out of Godiff,
+// shows and commits the work tree's Git changes. It grew out of Godiff,
 // EGOIST's diff viewer after codiff.
 //
 //	kopi                 the folder here
@@ -97,12 +97,12 @@ func noWindows() bool {
 func open(req request, fromUser bool) {
 	var err error
 	if fromUser {
-		if err = openWindow(req.dir, source{}); err == nil {
+		if err = openWindow(req.dir); err == nil {
 			closeEmptyWindows()
 			return
 		}
 	} else if last := state.lastRepository(); last != "" {
-		if openWindow(last, source{}) == nil {
+		if openWindow(last) == nil {
 			return
 		}
 	}

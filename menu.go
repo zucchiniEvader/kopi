@@ -8,7 +8,7 @@ import (
 	"github.com/egoist/mygo/plugins/updater"
 )
 
-// focused returns the review window with the focus, nil for none.
+// focused returns the window with the focus, nil for none.
 func focused(win *mygo.Window) *window {
 	windowsMu.Lock()
 	defer windowsMu.Unlock()
@@ -20,7 +20,7 @@ func focused(win *mygo.Window) *window {
 	return nil
 }
 
-// inWindow returns a menu item's action on the focused review window.
+// inWindow returns a menu item's action on the focused window.
 func inWindow(fn func(w *window)) func(*mygo.MenuItem, *mygo.Window) {
 	return func(_ *mygo.MenuItem, win *mygo.Window) {
 		if w := focused(win); w != nil {
@@ -71,8 +71,6 @@ func buildMenu() *mygo.Menu {
 			{Label: "Save", Accelerator: "CmdOrCtrl+S", Click: inWindow(func(w *window) { w.saveEditor() })},
 			{Label: "Save All", Accelerator: "CmdOrCtrl+Alt+S", Click: inWindow(func(w *window) { w.saveAll() })},
 			mygo.Separator(),
-			{Label: "Open in External Editor", Click: inWindow(func(w *window) { w.openCurrentExternal() })},
-			mygo.Separator(),
 			{Label: "Close Tab", Accelerator: "CmdOrCtrl+W", Click: inWindow(func(w *window) { w.closeTab() })},
 			{Role: mygo.RoleClose, Accelerator: "CmdOrCtrl+Shift+W"},
 		}},
@@ -117,43 +115,17 @@ func buildMenu() *mygo.Menu {
 			{Role: mygo.RoleToggleFullScreen},
 		}},
 		{Label: "Git", Submenu: []*mygo.MenuItem{
-			{Label: "Review Changes", Accelerator: "CmdOrCtrl+Shift+R", Click: inWindow(func(w *window) { w.showReview() })},
 			{Label: "Refresh Changes", Accelerator: "CmdOrCtrl+R", Click: inWindow(func(w *window) { w.refresh() })},
 			{Label: "Next Change", Accelerator: "Alt+F5", Click: inWindow(func(w *window) { w.goToChange(1) })},
 			{Label: "Previous Change", Accelerator: "Shift+Alt+F5", Click: inWindow(func(w *window) { w.goToChange(-1) })},
-			{Label: "Commit…", Accelerator: "CmdOrCtrl+Shift+Enter", Click: inWindow(func(w *window) {
-				if w.source.kind == sourceWorkingTree && !w.commitOpen && len(w.files) > 0 {
-					w.showReview()
-					w.toggleCommit()
-				}
-			})},
 			mygo.Separator(),
-			{Label: "Open Commit…", Accelerator: "CmdOrCtrl+Shift+C", Click: inWindow(func(w *window) { w.openDialog(dialogCommit) })},
-			{Label: "Compare with Branch…", Click: inWindow(func(w *window) { w.openDialog(dialogBranch) })},
+			{Label: "Commit", Accelerator: "CmdOrCtrl+Shift+Enter", Click: inWindow(func(w *window) { w.commitOrAsk() })},
 			mygo.Separator(),
-			{Label: "Find in Diffs", Click: inWindow(func(w *window) { w.showReview(); w.finding = true })},
-			{Label: "Edit Reviewed File", Accelerator: "CmdOrCtrl+Shift+O", Click: inWindow(func(w *window) { w.openCurrent() })},
-			{Label: "Copy Review Comments", Accelerator: "CmdOrCtrl+Shift+M", Click: inWindow(func(w *window) { w.copyComments() })},
-			{ID: "copyOnClose", Label: "Copy Comments on Close", Type: mygo.MenuItemCheckbox, Checked: s.CopyCommentsOnClose, Click: func(*mygo.MenuItem, *mygo.Window) {
-				cfg.Update(func(s *Settings) { s.CopyCommentsOnClose = !s.CopyCommentsOnClose })
-			}},
+			{Label: "Fetch", Click: inWindow(func(w *window) { w.fetch() })},
+			{Label: "Pull", Click: inWindow(func(w *window) { w.pull() })},
+			{Label: "Push", Click: inWindow(func(w *window) { w.push() })},
 			mygo.Separator(),
-			{Label: "Diff", Submenu: []*mygo.MenuItem{
-				{ID: "split", Label: "Split", Type: mygo.MenuItemRadio, Checked: s.DiffStyle == "split", Click: func(*mygo.MenuItem, *mygo.Window) {
-					cfg.Update(func(s *Settings) { s.DiffStyle = "split" })
-				}},
-				{ID: "unified", Label: "Unified", Type: mygo.MenuItemRadio, Checked: s.DiffStyle == "unified", Click: func(*mygo.MenuItem, *mygo.Window) {
-					cfg.Update(func(s *Settings) { s.DiffStyle = "unified" })
-				}},
-				mygo.Separator(),
-				{ID: "wrap", Label: "Word Wrap", Type: mygo.MenuItemCheckbox, Checked: s.WordWrap, Click: func(*mygo.MenuItem, *mygo.Window) { toggleWrap() }},
-				{ID: "whitespace", Label: "Show Whitespace", Type: mygo.MenuItemCheckbox, Checked: s.ShowWhitespace, Click: func(*mygo.MenuItem, *mygo.Window) {
-					cfg.Update(func(s *Settings) { s.ShowWhitespace = !s.ShowWhitespace })
-				}},
-				mygo.Separator(),
-				{Label: "Collapse All Files", Click: inWindow(func(w *window) { w.setAllCollapsed(true) })},
-				{Label: "Expand All Files", Click: inWindow(func(w *window) { w.setAllCollapsed(false) })},
-			}},
+			{Label: "New Branch…", Click: inWindow(func(w *window) { w.openDialog(dialogNewBranch) })},
 		}},
 		{Label: "Run", Submenu: []*mygo.MenuItem{
 			{Label: "Start Debugging", Accelerator: "F5", Click: inWindow(func(w *window) { w.debugOrContinue() })},
@@ -195,11 +167,6 @@ func syncMenu(s Settings) {
 			it.SetChecked(on)
 		}
 	}
-	set("split", s.DiffStyle == "split")
-	set("unified", s.DiffStyle == "unified")
-	set("wrap", s.WordWrap)
-	set("whitespace", s.ShowWhitespace)
-	set("copyOnClose", s.CopyCommentsOnClose)
 	set("theme-system", s.Theme == "system")
 	set("theme-light", s.Theme == "light")
 	set("theme-dark", s.Theme == "dark")
@@ -224,7 +191,7 @@ func openFolder() {
 		if err != nil || len(paths) == 0 {
 			return
 		}
-		if err := openWindow(paths[0], source{kind: sourceWorkingTree}); err != nil {
+		if err := openWindow(paths[0]); err != nil {
 			mygo.Dialog.Error("Could not open the folder", errorText(err))
 			return
 		}
@@ -244,7 +211,7 @@ func refreshMenu() {
 // openRecent opens a repository opened before.
 func openRecent(dir string) {
 	go func() {
-		if err := openWindow(dir, source{kind: sourceWorkingTree}); err != nil {
+		if err := openWindow(dir); err != nil {
 			mygo.Dialog.Error("Could not open "+filepath.Base(dir), errorText(err))
 			return
 		}

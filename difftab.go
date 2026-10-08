@@ -293,7 +293,7 @@ func splitDocs(f *diff.File) (left string, lm []editor.LineMark, right string, r
 	return strings.Join(lt, "\n"), lm, strings.Join(rt, "\n"), rm
 }
 
-// diffColors are the colors of the lines of diff tabs, as the review's.
+// diffColors are the colors of the lines of diff tabs.
 func diffColors(pal *palette) editor.DiffColors {
 	return editor.DiffColors{
 		AddLine: pal.addBg, AddWord: pal.addWord, AddGutter: pal.addGutter, AddSign: pal.addBar,
@@ -390,18 +390,10 @@ func (w *window) diffStatus(c *ui.Context, pal *palette, e *editorTab) {
 	})
 }
 
-// openChange opens the change of a file the Git tab lists: in a diff tab
-// for the work tree's, and in the review for a commit's or a branch's,
-// which the command bar opened.
+// openChange opens the change of a file of the work tree in a diff tab;
+// an untracked folder, collapsed, has none.
 func (w *window) openChange(i int) {
-	f := w.files[i]
-	switch {
-	case w.source.kind != sourceWorkingTree:
-		w.showReview()
-		w.revealFile(i)
-	case f.Directory:
-		// An untracked folder, collapsed: its files are not listed.
-	default:
+	if f := w.files[i]; !f.Directory {
 		w.openWorkTreeDiff(f.File)
 	}
 }
