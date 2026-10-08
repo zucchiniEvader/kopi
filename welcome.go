@@ -14,10 +14,10 @@ type startAction struct {
 	run         func()
 }
 
-// startPanel is the welcome of an empty window or main area: the app's
-// name, what to start with and its keys, and the repositories opened
-// before, but current.
-func startPanel(c *ui.Context, pal *palette, subtitle string, actions []startAction, current string, extra func()) {
+// startPanel is the welcome of the main area with no tab open: the app's
+// name, what to start with and its keys, and, with recent, the folders
+// opened before.
+func startPanel(c *ui.Context, pal *palette, subtitle string, actions []startAction, recent bool, extra func()) {
 	t := c.Theme()
 	ui.Scroll(c).Grow(1).Children(func() {
 		ui.Column(c).Grow(1).Center().Padding(48, 24).Children(func() {
@@ -34,15 +34,9 @@ func startPanel(c *ui.Context, pal *palette, subtitle string, actions []startAct
 						startRow(c, pal, a)
 					}
 				})
-				var recent []string
-				for _, r := range state.recent() {
-					if r != current {
-						recent = append(recent, r)
-					}
-				}
-				if len(recent) > 0 {
+				if dirs := state.recent(); recent && len(dirs) > 0 {
 					startSection(c, "Recent", func() {
-						for i, r := range recent {
+						for i, r := range dirs {
 							if i == 6 {
 								break
 							}
@@ -127,5 +121,18 @@ func (w *window) nothingOpen(c *ui.Context, pal *palette) {
 			})
 		}
 	}
-	startPanel(c, pal, "A native code editor", actions, w.repo.Root, extra)
+	if w.noFolder() {
+		// A window with no folder: one to open, or one of before.
+		subtitle := "Open a folder to start"
+		if w.startErr != nil {
+			subtitle = "Unable to open the folder: " + errorText(w.startErr)
+		}
+		startPanel(c, pal, subtitle, []startAction{
+			{"Open Folder", "⌘O", openFolder},
+			{"New File", "⌘N", w.newFile},
+			{"Command Bar", "⌘K", func() { w.paletteOpen = true }},
+		}, true, nil)
+		return
+	}
+	startPanel(c, pal, "A native code editor", actions, false, extra)
 }

@@ -218,7 +218,7 @@ func applyTheme(s Settings) {
 // openFolder asks for a repository and opens it.
 func openFolder() {
 	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Title: "Open a Git Repository", Directory: true})
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Title: "Open a Folder", Directory: true})
 		if err != nil || len(paths) == 0 {
 			return
 		}
@@ -226,7 +226,7 @@ func openFolder() {
 			mygo.Dialog.Error("Could not open the folder", errorText(err))
 			return
 		}
-		closeWelcome()
+		closeEmptyWindows()
 	}()
 }
 
@@ -246,6 +246,6 @@ func openRecent(dir string) {
 			mygo.Dialog.Error("Could not open "+filepath.Base(dir), errorText(err))
 			return
 		}
-		closeWelcome()
+		closeEmptyWindows()
 	}()
 }

@@ -199,6 +199,9 @@ type window struct {
 
 	// gitShown is whether the last frame showed the Git tab.
 	gitShown bool
+	// startErr is why a folder did not open, which a window with no folder
+	// says.
+	startErr error
 	// tabScroll is how far the tabs scroll; tabShown the path of the tab
 	// last brought into view.
 	tabScroll ui.ScrollState
@@ -210,12 +213,16 @@ var (
 	windows   []*window
 )
 
-// openWindow opens a window on the repository holding dir.
+// openWindow opens a window on the repository holding dir, or, for "",
+// a window with no folder.
 func openWindow(dir string, src source) error {
 	open := git.Open
 	if src.kind == sourceWorkingTree {
 		// A folder outside any repository opens too, with no changes.
 		open = git.OpenFolder
+	}
+	if dir == "" {
+		open = func(string) (*git.Repo, error) { return &git.Repo{Plain: true}, nil }
 	}
 	repo, err := open(dir)
 	if err != nil {
@@ -298,7 +305,9 @@ func openWindow(dir string, src source) error {
 			w.explorer.reset()
 		})
 	})
-	go state.setLastRepository(repo.Root)
+	if repo.Root != "" {
+		go state.setLastRepository(repo.Root)
+	}
 	w.load()
 	w.loadHistory()
 	w.loadUser()
@@ -348,6 +357,9 @@ func newWindow(repo *git.Repo, src source) *window {
 
 // windowTitle is "<repository>[/<source>] · Kopi".
 func windowTitle(root string, src source) string {
+	if root == "" {
+		return "Kopi"
+	}
 	name := filepath.Base(root)
 	switch src.kind {
 	case sourceCommit:
@@ -1027,6 +1039,40 @@ func (w *window) refresh() {
 	w.explorer.reset()
 	w.load()
 	w.loadHistory()
+}
+
+// noFolder reports whether the window has no folder open.
+func (w *window) noFolder() bool { return w.repo.Root == "" }
+
+// openEmptyWindow opens the window with no folder, or brings it to the
+// front, saying why a folder did not open when err is not nil.
+func openEmptyWindow(err error) {
+	if e := openWindow("", source{}); e != nil {
+		log.Printf("kopi: %v", e)
+		return
+	}
+	windowsMu.Lock()
+	defer windowsMu.Unlock()
+	for _, w := range windows {
+		if w.noFolder() {
+			w.win.Update(func() { w.startErr = err })
+		}
+	}
+}
+
+// closeEmptyWindows closes the windows with no folder, once one opened.
+func closeEmptyWindows() {
+	windowsMu.Lock()
+	var empty []*window
+	for _, w := range windows {
+		if w.noFolder() {
+			empty = append(empty, w)
+		}
+	}
+	windowsMu.Unlock()
+	for _, w := range empty {
+		w.win.Close()
+	}
 }
 
 // openInEditor opens a file of the repository in an editor of the window,

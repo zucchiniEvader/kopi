@@ -234,6 +234,10 @@ func (w *window) sidebar(c *ui.Context) {
 				w.sidebarToggle(c)
 			}
 			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+				if w.noFolder() {
+					ui.Text(c, "No folder opened").FontSize(12).Bold().TextColor(t.TextMuted).SingleLine()
+					return
+				}
 				ui.Text(c, filepath.Base(w.repo.Root)).FontSize(12).Bold().SingleLine()
 				ui.Text(c, abbreviateHome(filepath.Dir(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine()
 			})
@@ -249,6 +253,16 @@ func (w *window) sidebar(c *ui.Context) {
 			}
 		})
 		ui.Box(c).Height(1).Shrink(0).FillWidth().Margin(0, 0, 4).Background(ui.RGBA(127, 127, 127, 0.22))
+		if w.noFolder() {
+			// Every view needs a folder.
+			ui.Column(c).Padding(10, 14).Gap(10).Children(func() {
+				ui.Text(c, "You have not opened a folder yet.").FontSize(12).TextColor(t.TextMuted)
+				if ui.Button(c, "Open Folder").FillWidth().Clicked() {
+					openFolder()
+				}
+			})
+			return
+		}
 		// The headers of the views that have one.
 		if w.tab == tabSearch || w.tab == tabRun {
 			ui.Column(c).Padding(2, 10, 8).Children(func() {

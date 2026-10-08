@@ -260,16 +260,13 @@ func TestRecent(t *testing.T) {
 	if len(state.data.Recent) != maxRecent {
 		t.Errorf("%d remembered", len(state.data.Recent))
 	}
-	// The welcome lists the others.
+	// A window with a folder lists no others: only one with no folder
+	// does (TestStartScreens).
 	state.data.Recent = []string{a, b}
 	w, tt := launchTestWindow(t, testRepo(t))
-	state.data.Recent = append([]string{w.repo.Root}, state.data.Recent...)
 	tt.Frame()
-	if !tt.HasText("Recent") || !tt.HasText(filepath.Base(a)) || !tt.HasText(filepath.Base(b)) {
-		t.Errorf("texts %q", tt.Texts())
-	}
-	if _, ok := tt.Find("Open " + filepath.Base(w.repo.Root)); ok {
-		t.Error("the repository open is listed")
+	if _, ok := tt.Find("Open " + filepath.Base(a)); ok {
+		t.Errorf("a window with a folder lists the recent ones: %q", tt.Texts())
 	}
 	// The start's actions act.
 	if err := tt.Click("Go to File"); err != nil {

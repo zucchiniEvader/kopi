@@ -30,6 +30,9 @@ const maxQuickResults = 200
 // openQuick opens the bar, and lists the files again.
 func (w *window) openQuick() {
 	q := &w.quick
+	if w.noFolder() {
+		return // no files to go to
+	}
 	q.open, q.query, q.row = true, "", 0
 	if q.loading {
 		return

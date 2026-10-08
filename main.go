@@ -18,13 +18,11 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/updater/native"
-	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/git"
 )
 
@@ -119,70 +117,33 @@ func resolve(dir, p string) string {
 	return filepath.Join(dir, p)
 }
 
-var (
-	welcomeMu  sync.Mutex
-	welcomeWin *mygo.Window
-	// launched is set once the windows of the launch are open.
-	launched atomic.Bool
-)
+// launched is set once the windows of the launch are open.
+var launched atomic.Bool
 
 // noWindows reports whether no window is open.
 func noWindows() bool {
 	windowsMu.Lock()
-	n := len(windows)
-	windowsMu.Unlock()
-	welcomeMu.Lock()
-	defer welcomeMu.Unlock()
-	return n == 0 && (welcomeWin == nil || welcomeWin.IsDestroyed())
+	defer windowsMu.Unlock()
+	return len(windows) == 0
 }
 
-// showWelcome shows the window that opens a repository, with why none
-// was.
-func showWelcome(err error) {
-	welcomeMu.Lock()
-	defer welcomeMu.Unlock()
-	if welcomeWin != nil && !welcomeWin.IsDestroyed() {
-		welcomeWin.Show()
-		welcomeWin.Focus()
-		return
-	}
-	v := &welcome{err: err}
-	welcomeWin = mygo.NewWindow(mygo.WindowOptions{
-		Title:         "Kopi",
-		Width:         640,
-		Height:        420,
-		MinWidth:      480,
-		MinHeight:     320,
-		TitleBarStyle: mygo.TitleBarHiddenInset,
-		Content:       ui.View(v.view),
-	})
-}
-
-func closeWelcome() {
-	welcomeMu.Lock()
-	defer welcomeMu.Unlock()
-	if welcomeWin != nil && !welcomeWin.IsDestroyed() {
-		welcomeWin.Close()
-	}
-	welcomeWin = nil
-}
-
-// open opens a window for a command line, or the welcome window when it
-// names no repository.
+// open opens a window for a command line, or a dropped folder. Opened from
+// the Finder or the Dock, the app has no folder of its own, but the
+// working directory, /: it opens the folder of last time, else a window
+// with no folder.
 func open(req request, fromUser bool) {
-	err := openWindow(req.dir, req.src)
-	if err == nil {
-		return
-	}
-	if !fromUser {
-		// Opened from Finder: the repository of last time.
-		if last := state.lastRepository(); last != "" {
-			if openWindow(last, source{}) == nil {
-				return
-			}
+	var err error
+	if fromUser {
+		if err = openWindow(req.dir, req.src); err == nil {
+			closeEmptyWindows()
+			return
+		}
+	} else if last := state.lastRepository(); last != "" {
+		if openWindow(last, source{}) == nil {
+			return
 		}
 	}
-	showWelcome(err)
+	openEmptyWindow(err)
 }
 
 func main() {

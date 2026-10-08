@@ -98,6 +98,9 @@ func (w *window) say(kind int, format string, args ...any) {
 
 // runConfigs reads launch.json again.
 func (w *window) runConfigs() error {
+	if w.noFolder() {
+		return fmt.Errorf("Open a folder to run its programs.")
+	}
 	configs, err := launch.Load(w.repo.Root)
 	w.run.configs = configs
 	return err

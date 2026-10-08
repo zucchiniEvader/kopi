@@ -1,14 +1,12 @@
 package main
 
 import (
-	"errors"
 	"log"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/zucchiniEvader/kopi/internal/git"
 )
 
 func (w *window) view(c *ui.Context) {
@@ -253,6 +251,8 @@ func (w *window) mainArea(c *ui.Context, pal *palette) {
 		w.commitMessage(c, pal).Margin(11, 12, 0)
 	}
 	switch {
+	case w.noFolder():
+		emptyPanel(c, pal, "No folder opened", "Open a folder to review its changes", nil)
 	case w.repo.Plain:
 		emptyPanel(c, pal, "Not a Git repository", abbreviateHome(w.repo.Root), nil)
 	case w.loadErr != nil:
@@ -376,25 +376,4 @@ func (w *window) shortcuts(c *ui.Context) {
 	if c.Shortcut(ui.Shift, ui.KeySlash) {
 		w.help = true
 	}
-}
-
-// welcome is the window shown without a repository.
-type welcome struct {
-	err error
-}
-
-func (v *welcome) view(c *ui.Context) {
-	t := c.Theme()
-	pal := paletteFor(t)
-	c.Root().Background(pal.appBg)
-	bar := c.TitleBar()
-	ui.Box(c).Height(max(bar.Height, 40)).DragWindow().FillWidth()
-	subtitle := "Open a folder to start"
-	if v.err != nil && !errors.Is(v.err, git.ErrNotRepository) {
-		subtitle = "Unable to read repository: " + errorText(v.err)
-	}
-	startPanel(c, pal, subtitle, []startAction{
-		{"Open Folder…", "⌘O", openFolder},
-		{"Or run kopi in a repository, in Terminal", "", nil},
-	}, "", nil)
 }
