@@ -91,9 +91,11 @@ type window struct {
 	deletingBranch string
 	dragWidth      float32
 
-	// The files open in editors, and the one shown, -1 for none.
+	// The files open in editors, and the one shown, -1 for none; the
+	// places the caret went, for Back and Forward.
 	editors      []*editorTab
 	activeEditor int
+	nav          navHistory
 	// closing is set once the window may close with unsaved changes.
 	closing bool
 

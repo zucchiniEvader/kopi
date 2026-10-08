@@ -124,6 +124,7 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 		// The tabs; the repository's name and place show in the explorer,
 		// its branch in the Git tab. What the tabs leave drags the window.
 		if len(w.editors) > 0 {
+			w.navButtons(c)
 			w.editorTabs(c, pal)
 		}
 		ui.Spacer(c)
@@ -136,6 +137,7 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 // mainArea shows the tab chosen: a file in an editor, or a change; else
 // what to do with no tab.
 func (w *window) mainArea(c *ui.Context, pal *palette) {
+	w.trackNav()
 	switch e := w.activeTab(); {
 	case e == nil:
 		w.nothingOpen(c, pal)

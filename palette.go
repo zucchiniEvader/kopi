@@ -19,6 +19,8 @@ type command struct {
 func (w *window) commands() []command {
 	return []command{
 		{title: "Go to File", keys: "⌘P", run: w.openQuick},
+		{title: "Go Back", hint: "Where the caret was", keys: backLabel, run: func() { w.navigate(-1) }},
+		{title: "Go Forward", keys: forwardLabel, run: func() { w.navigate(1) }},
 		{title: "Run", hint: "The launch configuration, or the Java file shown", keys: "⌃F5", run: w.runStart},
 		{title: "Start Debugging", keys: "F5", run: w.debugOrContinue},
 		{title: "Stop", keys: "⇧F5", run: w.stopAll},

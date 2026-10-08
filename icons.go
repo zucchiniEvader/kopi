@@ -23,6 +23,8 @@ var (
 	iconClose          = icon(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`)
 	iconRefresh        = icon(`<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>`)
 	iconCheck          = icon(`<path d="M20 6 9 17l-5-5"/>`)
+	iconArrowLeft      = icon(`<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>`)
+	iconArrowRight     = icon(`<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>`)
 	iconArrowUp        = icon(`<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>`)
 	iconArrowDown      = icon(`<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>`)
 	iconTrash          = icon(`<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>`)

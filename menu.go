@@ -88,6 +88,9 @@ func buildMenu() *mygo.Menu {
 			mygo.Separator(),
 			{Label: "Find in Files", Accelerator: "CmdOrCtrl+Shift+F", Click: inWindow(func(w *window) { w.focusSearch() })},
 			{Label: "Go to File…", Accelerator: "CmdOrCtrl+P", Click: inWindow(func(w *window) { w.openQuick() })},
+			mygo.Separator(),
+			{Label: "Go Back", Accelerator: backKey, Click: inWindow(func(w *window) { w.navigate(-1) })},
+			{Label: "Go Forward", Accelerator: forwardKey, Click: inWindow(func(w *window) { w.navigate(1) })},
 		}},
 		{Label: "View", Submenu: []*mygo.MenuItem{
 			{Label: "Command Bar…", Accelerator: "CmdOrCtrl+K", Click: inWindow(func(w *window) { w.paletteOpen = !w.paletteOpen })},

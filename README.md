@@ -75,6 +75,7 @@ Tool…** installs the `kopi` command.
 | Keys | |
 |---|---|
 | <kbd>⌘P</kbd> | Go to a file (`Main.java:42` goes to a line) |
+| <kbd>⌃-</kbd> / <kbd>⌃⇧-</kbd> | Back / forward, where the caret was (Alt+← / Alt+→ on Windows and Linux) |
 | <kbd>⌘F</kbd> / <kbd>⌥⌘F</kbd> | Find / replace in the file |
 | <kbd>⇧⌘F</kbd> | Search in files |
 | <kbd>⌘S</kbd> / <kbd>⌘W</kbd> | Save / close the tab |

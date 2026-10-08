@@ -13,6 +13,10 @@
   wordWrap.
 - The changes read themselves again as the work tree changes, rather than
   asking to be refreshed.
+- Back and Forward, at the left of the tabs, go through the places the
+  caret went: files opened, definitions, results, changes, and jumps far
+  in a file, opening again the files closed since. ⌃- and ⌃⇧- on macOS, as
+  in VS Code; Alt+← and Alt+→ elsewhere.
 
 ## 0.2.5
 
