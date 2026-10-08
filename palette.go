@@ -41,6 +41,7 @@ func (w *window) commands() []command {
 		{title: "Show Run and Debug", keys: "⇧⌘D", run: func() { w.tab, w.sidebarShown = tabRun, true }},
 		{title: "Toggle Run Panel", keys: "⌘J", run: func() { w.run.open = !w.run.open }},
 		{title: "Open launch.json", run: w.openLaunchConfig},
+		{title: "Java: Clean the Language Server Workspace", hint: "Build the project again", run: w.cleanJava},
 		{title: "Find", keys: "⌘F", run: func() { w.find(false) }},
 		{title: "Replace", keys: "⌥⌘F", run: func() { w.find(true) }},
 		{title: "Find in Files", keys: "⇧⌘F", run: w.focusSearch},

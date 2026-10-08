@@ -38,6 +38,7 @@ func TestRealJDTLS(t *testing.T) {
 	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
 	w.javaLaunch = launchJava
+	forgetJavaWorkspace(t, w)
 	defer w.stopServers()
 	wait := func(what string, d time.Duration, cond func() bool) {
 		t.Helper()
@@ -127,6 +128,7 @@ func TestRealJDTLSLombok(t *testing.T) {
 	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
 	w.javaLaunch = launchJava
+	forgetJavaWorkspace(t, w)
 	defer w.stopServers()
 	wait := func(what string, d time.Duration, cond func() bool) {
 		t.Helper()
@@ -197,6 +199,7 @@ func TestRealRun(t *testing.T) {
 	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
 	w.javaLaunch = launchJava
+	forgetJavaWorkspace(t, w)
 	defer w.stopServers()
 	wait := func(what string, d time.Duration, cond func() bool) {
 		t.Helper()
@@ -250,6 +253,7 @@ func TestRealDebug(t *testing.T) {
 	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
 	w.javaLaunch = launchJava
+	forgetJavaWorkspace(t, w)
 	defer w.stopServers()
 	wait := func(what string, d time.Duration, cond func() bool) {
 		t.Helper()
@@ -317,4 +321,17 @@ func TestRealDebug(t *testing.T) {
 	if !strings.Contains(w.runText(), "Ada 6") {
 		t.Error("no output")
 	}
+}
+
+// forgetJavaWorkspace removes, after a test, the workspace jdtls keeps of
+// its repository in the app's cache.
+func forgetJavaWorkspace(t *testing.T, w *window) {
+	data := javaWorkspace(cacheDir(), w.repo.Root)
+	t.Cleanup(func() {
+		w.stopServers()
+		time.Sleep(time.Second) // the server lets go of its files
+		for _, p := range []string{data, data + ".log", data + ".launch"} {
+			os.RemoveAll(p)
+		}
+	})
 }

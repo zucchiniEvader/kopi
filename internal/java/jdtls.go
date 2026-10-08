@@ -319,3 +319,35 @@ func configNames() []string {
 	}
 	return []string{"config_" + os}
 }
+
+// PrepareWorkspace readies the workspace of jdtls in dataDir for a launch
+// with what signature says of it, as its installation and the arguments
+// of its Java: a workspace built otherwise, or by a launch that said
+// nothing, starts over, as what it built stays until its files change: a
+// build without Lombok's agent leaves errors in every class using it. It
+// reports whether it started over.
+func PrepareWorkspace(dataDir, signature string) (bool, error) {
+	file := dataDir + ".launch"
+	old, err := os.ReadFile(file)
+	cleaned := false
+	if string(old) != signature || err != nil {
+		if _, statErr := os.Stat(dataDir); statErr == nil {
+			if err := os.RemoveAll(dataDir); err != nil {
+				return false, err
+			}
+			cleaned = true
+		}
+	}
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return cleaned, err
+	}
+	return cleaned, os.WriteFile(file, []byte(signature), 0o644)
+}
+
+// ForgetWorkspace makes the next PrepareWorkspace of dataDir start over.
+func ForgetWorkspace(dataDir string) error {
+	if err := os.Remove(dataDir + ".launch"); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}

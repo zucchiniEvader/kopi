@@ -83,6 +83,36 @@ func className(uri string) string {
 	return path.Base(s)
 }
 
+// javaWorkspace is the folder of jdtls's workspace of a repository.
+func javaWorkspace(cache, root string) string {
+	return filepath.Join(cache, "jdtls-workspaces", workspaceKey(root))
+}
+
+// cleanJava stops jdtls, and starts it again on a workspace started over:
+// what it built before, and the errors of then, are gone.
+func (w *window) cleanJava() {
+	s := &w.java
+	shutdown := s.stop
+	s.stop = nil
+	w.stop(s)
+	data := javaWorkspace(cacheDir(), w.repo.Root)
+	go func() {
+		if shutdown != nil {
+			shutdown()
+		}
+		if err := java.ForgetWorkspace(data); err != nil {
+			log.Printf("kopi: jdtls: %v", err)
+		}
+		w.post(func() {
+			for _, e := range w.editors {
+				if e.abs != "" && isJava(e.path) && e.ed != nil {
+					w.attach(e)
+				}
+			}
+		})
+	}()
+}
+
 // workspaceKey names a repository's folder of a server's workspaces: its
 // name, and a hash of where it is.
 func workspaceKey(root string) string {
@@ -138,7 +168,7 @@ func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, e
 	}
 	status("Starting")
 	root := w.repo.Root
-	data := filepath.Join(cache, "jdtls-workspaces", workspaceKey(root))
+	data := javaWorkspace(cache, root)
 	config := filepath.Join(cache, "jdtls-config", filepath.Base(home))
 	// Lombok's agent, whose generated methods the server knows only with
 	// it, for every project: one may get Lombok from a parent pom its own
@@ -154,7 +184,12 @@ func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, e
 	}
 	cmd.Dir = root
 	proc.HideConsole(cmd)
-	os.MkdirAll(data, 0o755)
+	signature := strings.Join(append([]string{home}, jvmArgs...), "\n") + "\n"
+	if cleaned, err := java.PrepareWorkspace(data, signature); err != nil {
+		return nil, nil, err
+	} else if cleaned {
+		log.Printf("kopi: jdtls: %s starts over, launched otherwise", data)
+	}
 	logFile, err := os.Create(data + ".log")
 	if err == nil {
 		cmd.Stderr = logFile
