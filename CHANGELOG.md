@@ -22,6 +22,9 @@
   which of them the caret is in, and opens on the first.
 - A change or a commit chosen with the pointer no longer flashes in the
   accent color as the focus moves: it shows gray, as in the explorer.
+- The tabs no longer jump as the sidebar ends sliding in or out: they
+  glide all the way, and the sidebar's toggle above them shows as the
+  sidebar's edge passes it.
 - The history is a graph: each line of descent in a color of its own, the
   branches and tags at their commits, the commits to pull above HEAD, and
   every branch, from the menu atop it.

@@ -230,14 +230,23 @@ func (w *window) sidebar(c *ui.Context) {
 		// window buttons are on the right.
 		mac := runtime.GOOS == "darwin"
 		ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(6).AlignItems(ui.Center).DragWindow().Children(func() {
+			// While the sidebar slides, the toggle is the bar's above the
+			// tabs: this one keeps its room, empty.
+			own := func() {
+				if w.sidebarOpen >= 1 {
+					w.sidebarToggle(c)
+				} else {
+					ui.Box(c).Size(28, 28).Shrink(0)
+				}
+			}
 			if !mac {
-				w.sidebarToggle(c)
+				own()
 			}
 			// What the toggle, the gaps and the padding leave.
 			w.projectSwitcher(c, w.sidebarWidth-left-right-28-2*6)
 			ui.Spacer(c)
 			if mac {
-				w.sidebarToggle(c)
+				own()
 			}
 		})
 		// The views of the sidebar, atop its body, on lines of their own
@@ -464,14 +473,16 @@ func (w *window) tabControl(c *ui.Context) bool {
 }
 
 // sidebarToggle shows and hides the sidebar.
-func (w *window) sidebarToggle(c *ui.Context) {
+func (w *window) sidebarToggle(c *ui.Context) *ui.Element {
 	tip := "Hide sidebar (⌘⇧B)"
 	if !w.sidebarShown {
 		tip = "Show sidebar (⌘⇧B)"
 	}
-	if iconButton(c, iconSidebar, tip).Clicked() {
+	b := iconButton(c, iconSidebar, tip)
+	if b.Clicked() {
 		w.toggleSidebar()
 	}
+	return b
 }
 
 func (w *window) toggleSidebar() {

@@ -110,14 +110,25 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 	t := c.Theme()
 	bar := c.TitleBar()
 	// The tabs start at the sidebar's edge, else after the window's
-	// buttons and the sidebar's toggle: as the sidebar slides, they keep
-	// clear of the buttons as much as its width does not.
+	// buttons and the sidebar's toggle, which keeps its place after the
+	// buttons: as the sidebar slides, the tabs keep clear of both as much
+	// as its width does not, and the toggle shows as its edge passes it,
+	// so that nothing jumps as the slide ends.
 	shown := w.sidebarWidth * w.sidebarOpen
-	left, right := bar.Left+8, 12+bar.Right
+	const toggleRoom = 28 + 8
+	at := bar.Left + 8
+	left, right := at+toggleRoom, 12+bar.Right
+	toggleX, toggleShown, toggleOpacity := at, w.sidebarOpen < 1, float32(1)
 	if w.settings.SidebarPosition == "right" {
+		// The sidebar slides on the other side: the toggle fades in, the
+		// tabs making room for it as it does.
 		right = 12 + max(0, bar.Right-shown)
+		left = at + toggleRoom*(1-w.sidebarOpen)
+		toggleOpacity = 1 - w.sidebarOpen
 	} else {
-		left = max(0, bar.Left+8-shown)
+		left = max(0, at+toggleRoom-shown)
+		toggleX = at - shown
+		toggleShown = shown <= at
 	}
 	row := ui.Row(c).Height(titleBarHeight).Padding(0, right, 0, left).Gap(8).Shrink(0).DragWindow()
 	if len(w.editors) > 0 || w.reviewOpen {
@@ -127,10 +138,12 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 		row.Background(pal.appBg)
 	}
 	row.Children(func() {
-		if w.sidebarOpen == 0 {
-			// Once the sidebar is gone, with its own.
-			w.sidebarToggle(c)
-		}
+		defer func() {
+			if toggleShown {
+				// The sidebar's own toggle hides as it slides.
+				w.sidebarToggle(c).Absolute().Left(toggleX).Top((titleBarHeight - 28) / 2).Opacity(toggleOpacity)
+			}
+		}()
 		// The tabs; the repository's name and place show in the explorer,
 		// its branch in the Git tab. What the tabs leave drags the window.
 		if len(w.editors) > 0 || w.reviewOpen {

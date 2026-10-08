@@ -199,3 +199,46 @@ func TestProjectSwitcherFits(t *testing.T) {
 		}
 	}
 }
+
+// TestTabsSlideWithTheSidebar keeps the tabs going one way as the sidebar
+// slides, with no jump as the slide ends: the toggle of the bar above the
+// tabs has its room all along, and shows as the sidebar's edge passes it,
+// while the sidebar's own toggle hides.
+func TestTabsSlideWithTheSidebar(t *testing.T) {
+	w, tt := launchTestWindow(t, testRepo(t))
+	tt.SetTitleBar(ui.TitleBar{Height: 40, Left: 76})
+	w.tab = tabExplorer
+	w.openFile("main.go", -1)
+	w.openFile("docs/long.txt", -1)
+	tt.Frame()
+	tabX := func() float32 {
+		b, ok := tt.Find("docs/long.txt")
+		if !ok {
+			t.Fatal("no tab")
+		}
+		return b.X
+	}
+	for _, collapse := range []bool{true, false} {
+		last := tabX()
+		w.toggleSidebar()
+		for range 14 {
+			time.Sleep(sidebarSlide / 10)
+			tt.Frame()
+			x := tabX()
+			if collapse && x > last || !collapse && x < last {
+				t.Errorf("collapse %v: the tab went from %v back to %v, at %.2f open", collapse, last, x, w.sidebarOpen)
+			}
+			last = x
+			_, hide := tt.Find("Hide sidebar (⌘⇧B)")
+			_, show := tt.Find("Show sidebar (⌘⇧B)")
+			if hide && show {
+				t.Errorf("two toggles, at %.2f open", w.sidebarOpen)
+			}
+		}
+		if collapse {
+			if b, ok := tt.Find("Show sidebar (⌘⇧B)"); !ok || b.X != 76+8 {
+				t.Errorf("the toggle at %+v, not after the window's buttons", b)
+			}
+		}
+	}
+}
