@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/git"
 )
@@ -207,6 +208,9 @@ func main() {
 	if !mygo.App.RequestSingleInstanceLock() {
 		return // the running instance opens the window
 	}
+	// New versions, from the releases on GitHub: checked once a day, and
+	// from the menu.
+	mygo.Use(native.Plugin)
 	if name == "Kopi" {
 		migrateFromGodiff()
 		cfg.load()

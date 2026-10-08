@@ -32,6 +32,9 @@ are Godiff's.
   tab with breakpoints, variables and the call stack, through Microsoft's
   java-debug; the program's input and output in a panel (<kbd>⌘J</kbd>),
   its stack traces linked to their sources.
+- **Updates**: a new version, from the releases here, checked once a day and
+  from Check for Updates…, installed in place with its notes from
+  `CHANGELOG.md`.
 - **Review** (from Godiff): staged, unstaged and untracked changes against
   `HEAD`, split and unified diffs with word-level highlighting, viewed files,
   review comments as Markdown, commits, history, and comparisons with a

@@ -5,6 +5,7 @@ import (
 	"runtime"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 )
 
 // focused returns the review window with the focus, nil for none.
@@ -49,6 +50,7 @@ func buildMenu() *mygo.Menu {
 	appMenu = mygo.NewMenu([]*mygo.MenuItem{
 		{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
 			{Role: mygo.RoleAbout},
+			updater.MenuItem(),
 			mygo.Separator(),
 			{Label: "Settings…", Accelerator: "CmdOrCtrl+,", Click: func(*mygo.MenuItem, *mygo.Window) { openConfig() }},
 			{Label: "Install Command Line Tool…", Hidden: runtime.GOOS == "windows", Click: func(*mygo.MenuItem, *mygo.Window) { installCLI() }},
@@ -167,9 +169,18 @@ func buildMenu() *mygo.Menu {
 		{Role: mygo.RoleWindowMenu},
 		{Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{
 			{Label: "Keyboard Shortcuts", Click: inWindow(func(w *window) { w.help = true })},
+			// Elsewhere than on macOS, where the app's menu has it.
+			checkForUpdatesItem(runtime.GOOS == "darwin"),
 		}},
 	})
 	return appMenu
+}
+
+// checkForUpdatesItem is the menu item checking for a new version.
+func checkForUpdatesItem(hidden bool) *mygo.MenuItem {
+	item := updater.MenuItem()
+	item.Hidden = hidden
+	return item
 }
 
 // syncMenu shows the settings in the menu's check marks.

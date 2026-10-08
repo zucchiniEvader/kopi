@@ -98,8 +98,16 @@ jobs:
             '.macos.signingIdentity = $identity | .macos.notarize = {keychainProfile: "kopi-notary", keychain: $keychain}' \
             mygo.json > "$RUNNER_TEMP/mygo.json"
           mv "$RUNNER_TEMP/mygo.json" mygo.json
+      # The key that signs the updates, which the app installs: without
+      # it, mygo builds no updates.
       - name: Build
-        run: go tool mygo build -platform "${{ matrix.platform }}"
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: |
+          if [ -z "$MYGO_UPDATER_PRIVATE_KEY" ]; then
+            echo "::warning::No MYGO_UPDATER_PRIVATE_KEY secret: the release has no updates"
+          fi
+          go tool mygo build -platform "${{ matrix.platform }}"
       - name: Check the signature and the notarization
         if: matrix.name == 'macOS'
         env:
@@ -124,7 +132,8 @@ jobs:
             target="$(basename "$dir")" # as windows-amd64
             for f in "$dir"*.dmg; do cp "$f" "dist/Kopi-$version-macos-${target#darwin-}.dmg"; done
             for f in "$dir"*Setup*.exe; do cp "$f" "dist/Kopi-$version-$target-setup.exe"; done
-            for f in "$dir"*.deb "$dir"*.tar.gz; do cp "$f" dist/; done
+            # The updates keep their names, which their manifests give.
+            for f in "$dir"*.deb "$dir"*.tar.gz "$dir"*.delta "$dir"update-*.json "$dir"install.sh; do cp "$f" dist/; done
           done
           files=(dist/*)
           if [ ${#files[@]} -eq 0 ]; then
