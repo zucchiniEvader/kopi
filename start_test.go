@@ -191,8 +191,13 @@ func TestProjectSwitcherFits(t *testing.T) {
 		tt.Frame()
 		text, _ := tt.Find(name)
 		toggle, _ := tt.Find("Hide sidebar (⌘⇧B)")
-		if text.X+text.W > toggle.X {
-			t.Errorf("width %v: the name reaches %v, past the toggle at %v", tc.width, text.X+text.W, toggle.X)
+		// The toggle is right of the name on macOS, left of it elsewhere:
+		// they must not overlap, and the name must end within the sidebar.
+		if text.X < toggle.X+toggle.W && toggle.X < text.X+text.W {
+			t.Errorf("width %v: the name, %v to %v, runs under the toggle, %v to %v", tc.width, text.X, text.X+text.W, toggle.X, toggle.X+toggle.W)
+		}
+		if text.X+text.W > tc.width {
+			t.Errorf("width %v: the name reaches %v, out of the sidebar", tc.width, text.X+text.W)
 		}
 		if tt.HasText(where) != tc.where {
 			t.Errorf("width %v: where it is shows %v", tc.width, !tc.where)
