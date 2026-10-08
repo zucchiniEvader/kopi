@@ -219,7 +219,7 @@ func (w *window) sidebar(c *ui.Context) {
 	pal := paletteFor(t)
 	bar := c.TitleBar()
 	sidebarRight := w.settings.SidebarPosition == "right"
-	left, right := max(bar.Left+6, 10), float32(10)
+	left, right := max(bar.Left+10, 10), float32(10)
 	if sidebarRight {
 		left, right = 10, max(bar.Right+6, 10)
 	}
@@ -289,22 +289,21 @@ func (w *window) projectSwitcher(c *ui.Context) {
 	if !w.noFolder() {
 		label = filepath.Base(w.repo.Root) + ", switch project"
 	}
-	b := ui.ButtonBase(c).Shrink(1).MinWidth(0).Padding(3, 6).Margin(0, 0, 0, -6).Gap(6).Radius(6).AlignItems(ui.Center).
-		Label(label).Tooltip(w.repo.Root)
+	// One line, as high as the traffic lights' row is calm: the name, where
+	// it is, muted, and the chevron of the menu.
+	b := ui.ButtonBase(c).Height(26).Shrink(1).MinWidth(0).Padding(0, 6, 0, 8).Gap(6).Radius(6).AlignItems(ui.Center).Label(label)
 	if b.Hovered() || b.Pressed() {
 		b.Background(ui.RGBA(127, 127, 127, 0.13))
 	}
 	b.Menu(w.projectMenu)
 	b.Children(func() {
-		ui.Column(c).Shrink(1).MinWidth(0).Gap(1).Children(func() {
-			if w.noFolder() {
-				ui.Text(c, "No folder opened").FontSize(12).Bold().TextColor(t.TextMuted).SingleLine()
-				return
-			}
-			ui.Text(c, filepath.Base(w.repo.Root)).FontSize(12).Bold().SingleLine()
-			ui.Text(c, abbreviateHome(filepath.Dir(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine()
-		})
-		ui.Icon(c, iconChevronDown).FontSize(11).TextColor(t.TextMuted).Shrink(0)
+		if w.noFolder() {
+			ui.Text(c, "No folder opened").FontSize(13).FontWeight(600).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+		} else {
+			ui.Text(c, filepath.Base(w.repo.Root)).FontSize(13).FontWeight(600).SingleLine().Shrink(0).MaxWidth(160)
+			ui.Text(c, abbreviateHome(filepath.Dir(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+		}
+		ui.Icon(c, iconChevronDown).FontSize(10).TextColor(t.TextMuted).Shrink(0)
 	})
 }
 
