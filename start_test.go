@@ -171,3 +171,31 @@ func TestSettingsInATab(t *testing.T) {
 		t.Errorf("font size %d after saving:\n%s", got, e.ed.Text())
 	}
 }
+
+// TestProjectSwitcherFits keeps a long project's name clear of the
+// sidebar's toggle, after the traffic lights: where it is shows only with
+// room for it, and the name ends in "…" without.
+func TestProjectSwitcherFits(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ngari-health-management-service-core")
+	writeFile(t, dir, "a.txt", "a\n")
+	w, tt := launchTestWindow(t, dir)
+	tt.SetTitleBar(ui.TitleBar{Height: 40, Left: 76})
+	name := filepath.Base(dir)
+	where := abbreviateHome(filepath.Dir(dir))
+	for _, tc := range []struct {
+		width float32
+		where bool
+	}{{sidebarMin, false}, {520, true}} {
+		w.sidebarWidth = tc.width
+		tt.Frame()
+		tt.Frame()
+		text, _ := tt.Find(name)
+		toggle, _ := tt.Find("Hide sidebar (⌘⇧B)")
+		if text.X+text.W > toggle.X {
+			t.Errorf("width %v: the name reaches %v, past the toggle at %v", tc.width, text.X+text.W, toggle.X)
+		}
+		if tt.HasText(where) != tc.where {
+			t.Errorf("width %v: where it is shows %v", tc.width, !tc.where)
+		}
+	}
+}

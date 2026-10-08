@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.5
+
+- A long project name atop the sidebar no longer runs under the sidebar's
+  toggle: it ends in "…", and where the project is shows only with room
+  for it.
+
 ## 0.2.4
 
 - Settings… (⌘,) opens the settings in a tab of Kopi, not in another

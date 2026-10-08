@@ -234,7 +234,8 @@ func (w *window) sidebar(c *ui.Context) {
 			if !mac {
 				w.sidebarToggle(c)
 			}
-			w.projectSwitcher(c)
+			// What the toggle, the gaps and the padding leave.
+			w.projectSwitcher(c, w.sidebarWidth-left-right-28-2*6)
 			ui.Spacer(c)
 			if mac {
 				w.sidebarToggle(c)
@@ -305,8 +306,10 @@ func (w *window) slidingSidebar(c *ui.Context, open float32, right bool) {
 }
 
 // projectSwitcher is the project of the window, its name and where it
-// is, as a button whose menu switches the window to another project.
-func (w *window) projectSwitcher(c *ui.Context) {
+// is, as a button whose menu switches the window to another project, in
+// room DIPs: where it is shows if it has room left by the name, and the
+// name ends in "…" if it has not.
+func (w *window) projectSwitcher(c *ui.Context, room float32) {
 	t := c.Theme()
 	label := "Switch Project"
 	if !w.noFolder() {
@@ -323,8 +326,13 @@ func (w *window) projectSwitcher(c *ui.Context) {
 		if w.noFolder() {
 			ui.Text(c, "No folder opened").FontSize(13).FontWeight(600).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
 		} else {
-			ui.Text(c, filepath.Base(w.repo.Root)).FontSize(13).FontWeight(600).SingleLine().Shrink(0).MaxWidth(160)
-			ui.Text(c, abbreviateHome(filepath.Dir(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+			name := filepath.Base(w.repo.Root)
+			ui.Text(c, name).FontSize(13).FontWeight(600).SingleLine().Shrink(1).MinWidth(0)
+			// The padding, the chevron and the gaps take 36.
+			nameW, _ := c.MeasureText(0, ui.Span{Text: name, Size: 13, Weight: 600})
+			if room-36-nameW >= 40 {
+				ui.Text(c, abbreviateHome(filepath.Dir(w.repo.Root))).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+			}
 		}
 		ui.Icon(c, iconChevronDown).FontSize(10).TextColor(t.TextMuted).Shrink(0)
 	})
