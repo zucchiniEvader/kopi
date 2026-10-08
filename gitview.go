@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/diff"
 	"github.com/zucchiniEvader/kopi/internal/git"
 )
 
@@ -300,29 +300,104 @@ func (w *window) historyScope(c *ui.Context) {
 	})
 }
 
-// historyRow is the height of a commit in the history: the graph's
-// lines go from row to row, which have no gap between them.
-const historyRow = 40
+// historyRow is the height of a commit in the history, and historyFileRow
+// of a file of a commit open: the graph's lines go from row to row, which
+// have no gap between them.
+const (
+	historyRow     = 40
+	historyFileRow = 26
+)
+
+// historyItem is a row of the history: a commit, or a file of a commit
+// open (file ≥ 0), or the word that its files load (file -2).
+type historyItem struct {
+	commit, file int
+}
+
+// historyKey is the key of a row of the history: the commit's hash, and
+// the file's path.
+func (w *window) historyKey(it historyItem) string {
+	h := w.history[it.commit].Hash
+	if it.file < 0 {
+		return h
+	}
+	return h + "\x00" + w.historyFiles[h][it.file].Path
+}
+
+// historyItems lists the rows of the history: each commit, and the files
+// of those open.
+func (w *window) historyItems() []historyItem {
+	items := make([]historyItem, 0, len(w.history))
+	for i := range w.history {
+		items = append(items, historyItem{i, -1})
+		h := w.history[i].Hash
+		if !w.historyOpen[h] {
+			continue
+		}
+		files, ok := w.historyFiles[h]
+		if !ok {
+			items = append(items, historyItem{i, -2})
+			continue
+		}
+		for j := range files {
+			items = append(items, historyItem{i, j})
+		}
+	}
+	return items
+}
+
+// toggleHistoryCommit opens a commit of the history, which lists its
+// files, read the first time, or closes it.
+func (w *window) toggleHistoryCommit(c *git.Commit) {
+	if w.historyOpen == nil {
+		w.historyOpen, w.historyFiles = map[string]bool{}, map[string][]*diff.File{}
+	}
+	open := !w.historyOpen[c.Hash]
+	w.historyOpen[c.Hash] = open
+	if !open {
+		return
+	}
+	if _, ok := w.historyFiles[c.Hash]; ok {
+		return
+	}
+	commit := *c
+	w.background(func() {
+		files, err := w.repo.CommitFiles(commit)
+		w.update(func() {
+			if err != nil {
+				w.gitErr = errorText(err)
+				delete(w.historyOpen, commit.Hash)
+				return
+			}
+			w.historyFiles[commit.Hash] = files
+		})
+	})
+}
 
 // historyView lists the commits of the History tab, along the graph of
-// their descent, with the branches and tags pointing at them.
+// their descent, with the branches and tags pointing at them. A commit
+// chosen opens, listing its files, whose changes open in diff tabs.
 func (w *window) historyView(c *ui.Context) {
 	t := c.Theme()
 	pal := paletteFor(t)
 	commits := w.history
-	current := -1
-	for i := range commits {
-		if w.source.kind == sourceCommit && w.source.ref == commits[i].Hash {
-			current = i
+	items := w.historyItems()
+	at := -1
+	for i, it := range items {
+		if w.historyKey(it) == w.historySel {
+			at = i
 		}
 	}
-	open := func(i int) {
-		if i < 0 || i >= len(commits) {
-			return
+	activate := func(i int) {
+		it := items[i]
+		w.historySel = w.historyKey(it)
+		cm := &commits[it.commit]
+		switch {
+		case it.file == -1:
+			w.toggleHistoryCommit(cm)
+		case it.file >= 0:
+			w.openCommitDiff(cm, w.historyFiles[cm.Hash][it.file])
 		}
-		w.commitOpen = false
-		w.historyList.ScrollIntoView(i)
-		w.setSource(source{kind: sourceCommit, ref: commits[i].Hash})
 	}
 	// The graph takes the columns of the widest row, up to a bound.
 	lanes := 1
@@ -330,36 +405,89 @@ func (w *window) historyView(c *ui.Context) {
 		lanes = max(lanes, g.lanes)
 	}
 	graphW := float32(min(lanes, graphMaxLanes))*graphLane + 2
-	w.historyList.Key = func(i int) any { return commits[i].Hash }
-	w.historyList.Label = func(i int) string { return commits[i].Subject }
+	w.historyList.Key = func(i int) any { return w.historyKey(items[i]) }
+	w.historyList.Label = func(i int) string {
+		if it := items[i]; it.file >= 0 {
+			cm := &commits[it.commit]
+			return w.historyFiles[cm.Hash][it.file].Path + " in " + cm.Short
+		}
+		return commits[items[i].commit].Subject
+	}
 	focused := w.focusHistory || w.historyEl != nil && w.historyEl.FocusWithin()
 	now := time.Now()
-	list := ui.List(c, &w.historyList, len(commits), func(i int) {
-		cm := &commits[i]
-		row := ui.Row(c).Height(historyRow).Padding(0, 8, 0, 2).Gap(6).Radius(6).AlignItems(ui.Stretch).
-			Role(ui.RoleButton).Label(cm.Subject)
+	list := ui.List(c, &w.historyList, len(items), func(i int) {
+		it := items[i]
+		cm := &commits[it.commit]
+		var g graphRow
+		if it.commit < len(w.graph) {
+			g = w.graph[it.commit]
+		}
+		height := float32(historyRow)
+		if it.file != -1 {
+			height = historyFileRow
+		}
+		chosen := i == at
+		row := ui.Row(c).Height(height).Padding(0, 8, 0, 2).Gap(6).Radius(6).AlignItems(ui.Stretch).Role(ui.RoleButton)
 		muted, ref := t.TextMuted, pal.ref
-		accent := i == current && focused
+		accent := chosen && focused
 		switch {
 		case accent:
 			row.Background(t.Accent).TextColor(t.AccentText)
 			muted, ref = t.AccentText.Alpha(0.75), t.AccentText
-		case i == current:
+		case chosen:
 			row.Background(ui.RGBA(127, 127, 127, 0.2))
 		case row.Hovered():
 			row.Background(ui.RGBA(127, 127, 127, 0.08))
 		}
 		if row.Clicked() {
-			if debugFrames {
-				log.Printf("history row %d clicked", i)
-			}
-			open(i)
+			activate(i)
 		}
-		row.Children(func() {
-			var g graphRow
-			if i < len(w.graph) {
-				g = w.graph[i]
+		if it.file != -1 {
+			// A file of the commit open: the lines of descent go on by it.
+			row.Children(func() {
+				ui.Box(c).Width(graphW).Shrink(0).ClipX().Draw(func(p *ui.Painter, r ui.Rect) {
+					drawGraphThrough(p, r, g)
+				})
+				if it.file == -2 {
+					ui.Text(c, "Loading…").FontSize(11).TextColor(muted).AlignSelf(ui.Center)
+					return
+				}
+				f := w.historyFiles[cm.Hash][it.file]
+				row.Label(f.Path + " in " + cm.Short)
+				ui.Row(c).Grow(1).MinWidth(0).Gap(5).AlignItems(ui.Center).Children(func() {
+					w.fileIcon(c, f.Name(), false, false, muted)
+					ui.RichText(c,
+						ui.Span{Text: f.Name()},
+						ui.Span{Text: "  " + strings.TrimSuffix(f.Dir(), "/"), Color: muted, Size: 10},
+					).FontSize(12).SingleLine().Grow(1).Shrink(1).MinWidth(0).Tooltip(f.Path)
+					if !f.Binary && (f.Additions > 0 || f.Deletions > 0) {
+						ui.Textf(c, "+%s -%s", compact(f.Additions), compact(f.Deletions)).
+							Font(w.codeFont()).FontSize(10).FontWeight(600).TextColor(muted).Shrink(0)
+					}
+					letter := statusColor(f.Status, pal, t)
+					if accent {
+						letter = t.AccentText
+					}
+					ui.Text(c, string(f.Status)).Font(w.codeFont()).FontSize(11).FontWeight(700).TextColor(letter).
+						Width(12).TextAlign(ui.Center).Shrink(0).Tooltip(f.Status.Label())
+				})
+			})
+			return
+		}
+		row.Label(cm.Subject)
+		row.ContextMenu(func(m *ui.Menu) {
+			if m.Item("Copy Commit Hash").Chosen() {
+				c.WriteClipboard(cm.Hash)
 			}
+			if m.Item("Copy Commit Message").Chosen() {
+				msg := cm.Subject
+				if cm.Body != "" {
+					msg += "\n\n" + cm.Body
+				}
+				c.WriteClipboard(msg)
+			}
+		})
+		row.Children(func() {
 			head := cm.Refs == "HEAD" || strings.HasPrefix(cm.Refs, "HEAD ->") || strings.HasPrefix(cm.Refs, "HEAD,")
 			merge := len(cm.Parents) > 1
 			ui.Box(c).Width(graphW).Shrink(0).ClipX().Draw(func(p *ui.Painter, r ui.Rect) {
@@ -395,16 +523,41 @@ func (w *window) historyView(c *ui.Context) {
 			ui.Text(c, "No commits yet").FontSize(12).TextColor(t.TextMuted).Padding(12)
 		}
 	})
+	// The keys move the choice; Enter, Right and Left open and close a
+	// commit, and Enter opens a file's change.
+	move := func(i int) {
+		if i >= 0 && i < len(items) {
+			w.historySel = w.historyKey(items[i])
+			w.historyList.ScrollIntoView(i)
+		}
+	}
 	if list.Shortcut(0, ui.KeyDown) {
-		open(current + 1)
+		move(at + 1)
 	}
 	if list.Shortcut(0, ui.KeyUp) {
-		open(max(current-1, 0))
+		move(max(at-1, 0))
+	}
+	if at >= 0 {
+		it := items[at]
+		cm := &commits[it.commit]
+		open := w.historyOpen[cm.Hash]
+		switch {
+		case list.Shortcut(0, ui.KeyEnter):
+			activate(at)
+		case list.Shortcut(0, ui.KeyRight) && it.file == -1 && !open:
+			w.toggleHistoryCommit(cm)
+		case list.Shortcut(0, ui.KeyLeft):
+			if it.file == -1 && open {
+				w.toggleHistoryCommit(cm)
+			} else if it.file != -1 {
+				w.historySel = cm.Hash
+			}
+		}
 	}
 	// More commits load well before the end comes into view, so that
 	// scrolling does not stop there.
 	if w.historyMore && !w.historyLoading {
-		if _, last := w.historyList.Visible(); last >= len(commits)-historyPage/2 {
+		if _, last := w.historyList.Visible(); last >= len(items)-historyPage/2 {
 			w.historyLimit += historyPage
 			w.loadHistory()
 		}

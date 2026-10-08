@@ -24,6 +24,7 @@ const maxEditSize = 10 << 20
 // slashes, else its absolute path, or the URI of a document of the
 // language server, as a class of a library, which abs lacks.
 type editorTab struct {
+	// path is the file's, or a diff tab's key (diffKey).
 	path string
 	abs  string
 	uri  string
@@ -44,6 +45,8 @@ type editorTab struct {
 	// lensVersion is the text's version the lenses were found in.
 	lensVersion int
 	lensDone    bool
+	// diff is the change a diff tab shows, nil for a file's tab.
+	diff *diffSpec
 }
 
 // origin says where a library's document comes from: the module or jar
@@ -200,6 +203,9 @@ func (w *window) show(e *editorTab) {
 
 // title is the name of a tab's document.
 func (e *editorTab) title() string {
+	if e.diff != nil {
+		return e.diff.title()
+	}
 	if e.abs == "" {
 		return className(e.path)
 	}
@@ -444,6 +450,9 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 				}
 				for i, e := range w.editors {
 					b := tab(i == w.activeEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
+					if e.diff != nil {
+						b.Label(e.title()).Tooltip(e.diff.path + " (" + e.diff.label + ")")
+					}
 					if i == w.activeEditor && w.tabShown != e.path {
 						// A tab chosen, or opened, comes into view.
 						w.tabShown = e.path
@@ -467,7 +476,12 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 						}
 					}
 					b.Children(func() {
-						if e.library {
+						if e.diff != nil {
+							// The file's name, and the change's, muted.
+							w.fileIcon(c, path.Base(e.diff.path), false, false, t.TextMuted)
+							ui.Text(c, path.Base(e.diff.path)).FontSize(13).SingleLine()
+							ui.Text(c, e.diff.label).FontSize(11).TextColor(t.TextMuted).SingleLine()
+						} else if e.library {
 							ui.Icon(c, iconPackage).FontSize(14)
 							ui.Text(c, e.title()).FontSize(13).Italic().SingleLine()
 						} else {

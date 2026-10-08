@@ -215,7 +215,11 @@ func (w *window) mainArea(c *ui.Context, pal *palette) {
 		// The review's keys are not the editor's.
 		w.diffListEl = nil
 		if e := w.activeTab(); e != nil {
-			w.editorArea(c, pal, e)
+			if e.diff != nil {
+				w.diffArea(c, pal, e)
+			} else {
+				w.editorArea(c, pal, e)
+			}
 		} else {
 			w.nothingOpen(c, pal)
 		}

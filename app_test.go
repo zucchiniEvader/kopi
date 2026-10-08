@@ -283,22 +283,44 @@ func TestHistory(t *testing.T) {
 	if _, ok := tt.Find("Filter history"); ok {
 		t.Error("a filter of the history")
 	}
+	// A commit chosen opens in place, listing its files; the changes stay
+	// the work tree's.
 	if err := tt.Click("First commit"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	tt.Frame()
-	if w.source.kind != sourceCommit || len(w.files) != 3 {
-		t.Fatalf("source %+v, %d files", w.source, len(w.files))
+	short := w.history[0].Short
+	for _, f := range []string{"docs/long.txt", "main.go", "old.txt"} {
+		if _, ok := tt.Find(f + " in " + short); !ok {
+			t.Errorf("no %s in the commit open: %q", f, tt.Texts())
+		}
 	}
-	snapshot(t, tt, "history")
-	// Back to the local changes.
-	if err := tt.Click("Back to Local Changes"); err != nil {
+	if w.source.kind != sourceWorkingTree || len(w.files) != 4 {
+		t.Errorf("the changes became the commit's: %+v, %d files", w.source, len(w.files))
+	}
+	if _, ok := tt.Find("Back to Local Changes"); ok {
+		t.Error("the Git tab changed, with the commit chosen")
+	}
+	// A file of the commit opens its change in a diff tab.
+	if err := tt.Click("main.go in " + short); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if w.source.kind != sourceWorkingTree || len(w.files) != 4 {
-		t.Errorf("source %+v, %d files", w.source, len(w.files))
+	e := w.activeTab()
+	if e == nil || e.diff == nil || e.diff.target != w.history[0].Hash || e.title() != "main.go ("+short+")" {
+		t.Fatalf("tab %+v", e)
+	}
+	if e.ed == nil || !strings.Contains(e.ed.Text(), "func greet") || !e.ed.ReadOnly {
+		t.Errorf("the diff tab's text: %v", e.ed)
+	}
+	snapshot(t, tt, "history")
+	// Chosen again, the commit closes.
+	if err := tt.Click("First commit"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if _, ok := tt.Find("main.go in " + short); ok {
+		t.Error("the commit stays open")
 	}
 }
 
@@ -316,23 +338,32 @@ func TestHistoryTakesFocus(t *testing.T) {
 	if w.tab != tabGit || w.historyEl == nil || !w.historyEl.FocusWithin() {
 		t.Fatalf("tab %d: the history did not take the focus", w.tab)
 	}
-	// Down goes to the commit under the uncommitted changes.
+	// Down chooses the first commit, Right opens it, Down goes to its
+	// first file, Enter opens the file's change.
 	tt.Key(0, ui.KeyDown)
 	tt.Frame()
-	if w.source.kind != sourceCommit || w.commit == nil || w.commit.Subject != "Second commit" {
-		t.Fatalf("after Down: source %+v", w.source)
+	second := w.history[0]
+	if w.historySel != second.Hash {
+		t.Fatalf("after Down: %q", w.historySel)
 	}
-	if err := tt.Click("First commit"); err != nil {
-		t.Fatal(err)
-	}
+	tt.Key(0, ui.KeyRight)
 	tt.Frame()
+	tt.Key(0, ui.KeyDown)
 	tt.Frame()
-	if w.source.kind != sourceCommit || len(w.rows) == 0 {
-		t.Fatalf("source %+v, %d rows", w.source, len(w.rows))
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if e := w.activeTab(); e == nil || e.diff == nil || e.diff.target != second.Hash {
+		t.Fatalf("no change of the second commit open: %+v", e)
 	}
-	// The commit's rows came, but the history keeps the focus it took.
-	if w.historyEl == nil || !w.historyEl.FocusWithin() {
-		t.Error("the history lost the focus")
+	// Left goes back to the commit, and closes it.
+	w.historyEl.Focus()
+	tt.Frame()
+	tt.Key(0, ui.KeyLeft)
+	tt.Frame()
+	tt.Key(0, ui.KeyLeft)
+	tt.Frame()
+	if w.historySel != second.Hash || w.historyOpen[second.Hash] {
+		t.Errorf("chosen %q, open %v", w.historySel, w.historyOpen[second.Hash])
 	}
 }
 
@@ -354,27 +385,34 @@ func TestPalette(t *testing.T) {
 
 func TestTree(t *testing.T) {
 	w, tt := newTestWindow(t, testRepo(t))
-	// Clicking a file in the tree scrolls the review to it.
+	// Clicking a file in the changes opens its change in a diff tab.
 	box, ok := tt.Find("old.txt")
 	if !ok {
 		t.Fatal("no old.txt")
 	}
 	tt.ClickAt(box.X+4, box.Y+box.H/2)
 	tt.Frame()
-	if w.files[w.current].Path != "old.txt" || w.treeSel != "f:old.txt" {
-		t.Fatalf("current %s, chosen %q", w.files[w.current].Path, w.treeSel)
+	e := w.activeTab()
+	if e == nil || e.diff == nil || e.title() != "old.txt (Working Tree)" || w.treeSel != "f:old.txt" {
+		t.Fatalf("tab %+v, chosen %q", e, w.treeSel)
 	}
 	if w.treeEl == nil || !w.treeEl.FocusWithin() {
 		t.Error("the tree did not take the focus")
 	}
-	// Up goes to the file above.
+	// Up chooses the file above, which Enter opens.
 	tt.Key(0, ui.KeyUp)
 	tt.Frame()
-	if w.files[w.current].Path != "main.go" {
-		t.Errorf("after Up: %s", w.files[w.current].Path)
+	if w.treeSel != "f:main.go" || w.activeTab() != e {
+		t.Errorf("after Up: %q, tab %s", w.treeSel, w.activeTab().title())
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if e := w.activeTab(); e == nil || e.title() != "main.go (Working Tree)" {
+		t.Fatalf("after Enter: %+v", e)
 	}
 	snapshot(t, tt, "tree")
 	// Left on a directory closes it.
+	w.treeEl.Focus()
 	w.treeSel = "d:docs"
 	tt.Key(0, ui.KeyLeft)
 	tt.Frame()

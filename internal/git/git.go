@@ -616,3 +616,79 @@ func (r *Repo) ReadWorkTree(path string) []byte {
 	}
 	return data
 }
+
+// FileDiff returns the change of one file, from base to target, "" for
+// the work tree, with the whole file as context: as an editor shows it.
+// oldPath is its path in base, as before a rename. An untracked file is
+// all added.
+func (r *Repo) FileDiff(base, target, oldPath, path string) (*diff.File, error) {
+	if base == "" {
+		base = EmptyTree
+	}
+	args := append(diffArgs(Options{ShowWhitespace: true}), "--unified=100000000", base)
+	if target != "" {
+		args = append(args, target)
+	}
+	args = append(args, "--", path)
+	if oldPath != "" && oldPath != path {
+		args = append(args, oldPath)
+	}
+	out, err := r.Git(args...)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range diff.Parse(out) {
+		if f.Path == path || f.OldPath == path {
+			return f, nil
+		}
+	}
+	if target == "" {
+		// Untracked, as git diff leaves it out; or unchanged.
+		if data := r.ReadWorkTree(path); data != nil {
+			if untracked, _ := r.Git("ls-files", "--others", "--exclude-standard", "--", path); len(untracked) > 0 {
+				return diff.NewFileFromContent(path, data, diff.Untracked), nil
+			}
+		}
+	}
+	// Unchanged: the file as it is, all context.
+	data, err := r.readAt(target, path)
+	if err != nil {
+		return nil, err
+	}
+	f := &diff.File{Path: path, OldPath: path, Status: diff.Modified}
+	if diff.IsBinary(data) {
+		f.Binary = true
+		return f, nil
+	}
+	lines := diff.SplitLines(string(data))
+	if len(lines) > 0 {
+		h := diff.Hunk{OldStart: 1, OldLines: len(lines), NewStart: 1, NewLines: len(lines)}
+		for i, l := range lines {
+			h.Lines = append(h.Lines, diff.Line{Kind: diff.Context, Old: i + 1, New: i + 1, Text: l})
+		}
+		f.Hunks = []diff.Hunk{h}
+	}
+	return f, nil
+}
+
+// readAt reads a file at a revision, "" for the work tree.
+func (r *Repo) readAt(rev, path string) ([]byte, error) {
+	if rev == "" {
+		data, err := os.ReadFile(filepath.Join(r.Root, filepath.FromSlash(path)))
+		return data, err
+	}
+	return r.Git("show", rev+":"+path)
+}
+
+// CommitFiles returns the files a commit changed, against its first
+// parent, with their counts but without their lines.
+func (r *Repo) CommitFiles(c Commit) ([]*diff.File, error) {
+	files, err := r.CommitDiff(c, Options{ShowWhitespace: true})
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range files {
+		f.Hunks = nil
+	}
+	return files, nil
+}

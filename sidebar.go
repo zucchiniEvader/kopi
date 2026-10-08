@@ -573,8 +573,7 @@ func (w *window) fileTree(c *ui.Context) {
 		w.treeSel = key
 		if n := w.treeItems[key]; n != nil && !n.dir {
 			w.commitOpen = false
-			w.showReview()
-			w.revealFile(n.file)
+			w.openChange(n.file)
 		}
 	}
 	w.treeList.Key = func(i int) any { return rows[i].key }
@@ -662,9 +661,10 @@ func (w *window) fileTree(c *ui.Context) {
 			at = i
 		}
 	}
+	// The keys move the choice; Enter opens it.
 	move := func(i int) {
 		if i >= 0 && i < len(rows) {
-			choose(rows[i].key)
+			w.treeSel = rows[i].key
 			w.treeList.ScrollIntoView(i)
 		}
 	}
@@ -679,6 +679,9 @@ func (w *window) fileTree(c *ui.Context) {
 	}
 	if list.Shortcut(0, ui.KeyEnd) {
 		move(len(rows) - 1)
+	}
+	if at >= 0 && list.Shortcut(0, ui.KeyEnter) {
+		choose(rows[at].key)
 	}
 	if at >= 0 {
 		n := w.treeItems[rows[at].key]

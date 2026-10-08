@@ -11,6 +11,12 @@
   failed; the branch's menu still opens meanwhile.
 - The spinner of a fetch, a pull or a push keeps turning when the pointer
   moves over the window.
+- A change opens in a tab of its own, as the editor shows code: the whole
+  file, its lines deleted and added marked, with their words that changed,
+  in one column or side by side. A file of the changes opens it; the tab
+  of a change of the work tree follows the file.
+- A commit chosen in the history opens in place, listing its files, whose
+  changes open in tabs: the Git tab no longer turns into the commit's.
 - The history is a graph: each line of descent in a color of its own, the
   branches and tags at their commits, the commits to pull above HEAD, and
   every branch, from the menu atop it.

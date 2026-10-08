@@ -232,15 +232,15 @@ func TestLaunch(t *testing.T) {
 	if e := w.activeTab(); e == nil || e.path != "main.go" || w.reviewOpen {
 		t.Errorf("after ⌘W on the review: %+v, review %v", e, w.reviewOpen)
 	}
-	// A changed file chosen in the changes opens the review.
+	// A changed file chosen in the changes opens its change.
 	if err := tt.Click("Git (⌃⇧G)"); err != nil {
 		t.Fatal(err)
 	}
 	if err := tt.Click("new.go"); err != nil {
 		t.Fatal(err)
 	}
-	if !w.reviewVisible() {
-		t.Error("choosing a change does not show the review")
+	if e := w.activeTab(); e == nil || e.title() != "new.go (Working Tree)" {
+		t.Errorf("choosing a change opens %+v", e)
 	}
 }
 

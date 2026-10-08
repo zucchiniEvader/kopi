@@ -143,8 +143,14 @@ type Editor struct {
 
 	breakpoints map[int]bool
 	execLine    int
-	lenses      []Lens
-	lensHover   [2]int
+	// The marks of a diff's lines (SetLineMarks): whether the gutter shows
+	// both sides' numbers, and their most digits; and their colors.
+	marks      []LineMark
+	marksBoth  bool
+	markDigits int
+	diffColors DiffColors
+	lenses     []Lens
+	lensHover  [2]int
 }
 
 // dragState is a selection the pointer makes: by runes, words (2) or lines
@@ -379,6 +385,9 @@ func (ed *Editor) xOf(p Pos) float32 { return ed.shape(ed.buf.Line(p.Line)).xs[p
 
 // gutterWidth is the width of the line numbers' column.
 func (ed *Editor) gutterWidth() float32 {
+	if ed.marks != nil {
+		return ed.markGutterWidth()
+	}
 	digits := max(len(strconv.Itoa(ed.buf.Lines())), 3)
 	return float32(digits)*ed.charW + 2*gutterPad
 }
@@ -479,6 +488,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 				p.Fill(ui.Rect{X: text.X, Y: y, W: text.W, H: ed.lineH}, st.ExecLine, 0)
 			}
 			sl := ed.shape(line)
+			ed.paintMarkLine(p, i, sl, text, textX, y)
 			ed.maxW = max(ed.maxW, sl.width)
 			ed.paintMatches(p, i, sl, textX, y)
 			if !ed.sel.Empty() && i >= a.Line && i <= z.Line {
@@ -521,6 +531,10 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 		// The numbers of lines with problems take their colors.
 		if sev := ed.lineSeverity(i); sev != 0 && sev <= SeverityWarning {
 			color = ed.severityColor(sev)
+		}
+		if ed.marks != nil {
+			ed.paintMarkGutter(p, i, r, lineY(i), color)
+			continue
 		}
 		sl := ed.shape(strconv.Itoa(i + 1))
 		p.Glyphs(sl.glyphs, r.X+gw-gutterPad-sl.width, lineY(i)+ed.baseline, color)

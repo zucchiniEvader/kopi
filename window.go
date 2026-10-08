@@ -108,6 +108,13 @@ type window struct {
 	// after gitNoteAt.
 	gitNote   string
 	gitNoteAt time.Time
+	// diffSplit shows the diff tabs opened next side by side.
+	diffSplit bool
+	// historyOpen are the commits of the history open, which list their
+	// files, loaded in historyFiles; historySel is the row chosen.
+	historyOpen  map[string]bool
+	historyFiles map[string][]*diff.File
+	historySel   string
 	// deletingBranch is the branch asked about deleting.
 	deletingBranch string
 	// reloaded are the files that changed in the last refresh.
@@ -651,6 +658,9 @@ func (w *window) load() {
 				w.signature = sig
 			}
 			w.setFiles(files)
+			if src.kind == sourceWorkingTree {
+				w.reloadWorkTreeDiffs()
+			}
 			for _, f := range w.files {
 				if l, ok := pre[f.Path]; ok && !f.loaded {
 					l.file = f

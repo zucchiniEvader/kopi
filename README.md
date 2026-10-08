@@ -38,7 +38,8 @@ are Godiff's.
 - **Git**: the branch, switched, made, compared with and deleted from its
   menu; fetch, pull and push, with the commits to pull and to push; the
   history as a graph, of the branch or of every one, with its branches
-  and tags.
+  and tags, each commit opening in place to list its files; the changes
+  of a file in a tab, inline or side by side.
 - **Review** (from Godiff): staged, unstaged and untracked changes against
   `HEAD`, split and unified diffs with word-level highlighting, viewed files,
   review comments as Markdown, commits, history, and comparisons with a

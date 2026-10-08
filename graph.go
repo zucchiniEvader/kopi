@@ -167,6 +167,20 @@ func drawGraph(p *ui.Painter, r ui.Rect, g graphRow, head, merge bool) {
 	p.FillPath(&dot, color)
 }
 
+// drawGraphThrough draws the lines of descent going on below a commit's
+// row, by the rows of its files, open.
+func drawGraphThrough(p *ui.Painter, r ui.Rect, g graphRow) {
+	seen := map[int]bool{}
+	for _, e := range g.down {
+		if seen[e.to] {
+			continue
+		}
+		seen[e.to] = true
+		x := r.X + graphLane/2 + float32(e.to)*graphLane
+		p.Line(x, r.Y, x, r.Y+r.H, 1.6, graphColor(e.color))
+	}
+}
+
 // commitRef is a name pointing at a commit: a branch, local or of a
 // remote, or a tag; head is the branch checked out, or a detached HEAD.
 type commitRef struct {
