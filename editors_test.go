@@ -283,3 +283,54 @@ func TestRecent(t *testing.T) {
 		t.Error("not cleared")
 	}
 }
+
+// TestExplorerSelectionNoFlash clicks files in the explorer: the choice
+// shows gray in every frame, not in the accent color as the tree takes
+// the focus and gives it to the editor; the keys show it in the accent.
+func TestExplorerSelectionNoFlash(t *testing.T) {
+	dir := testRepo(t)
+	writeFile(t, dir, "notes.txt", "notes\n")
+	w, tt := newTestWindow(t, dir)
+	w.tab = tabExplorer
+	tt.Frame()
+	// Whether the row of the file chosen shows in the accent color, which
+	// is blue: as the mouse goes down on another, the tree takes the focus
+	// with the old file still chosen.
+	accent := func() bool {
+		r, ok := tt.Find(w.explorer.sel)
+		if !ok {
+			return false
+		}
+		c := tt.Image().RGBAAt(int(r.X+r.W*0.6), int(r.Y+r.H/2))
+		return int(c.B) > int(c.R)+60
+	}
+	for _, name := range []string{"main.go", "notes.txt", "main.go"} {
+		r, _ := tt.Find(name)
+		tt.Press(r.X+4, r.Y+r.H/2)
+		for range 2 {
+			tt.Frame()
+			if accent() {
+				t.Errorf("%s flashes in the accent color as %s is pressed", w.explorer.sel, name)
+			}
+		}
+		tt.Release(r.X+4, r.Y+r.H/2)
+		for range 3 {
+			tt.Frame()
+			if accent() {
+				t.Errorf("%s flashes in the accent color as it opens", name)
+			}
+		}
+	}
+	if e := w.activeTab(); e == nil || e.path != "main.go" {
+		t.Fatalf("editor %+v", e)
+	}
+	// With the keys, the choice shows in the accent.
+	w.explorer.focus = true
+	tt.Frame()
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	tt.Frame()
+	if !accent() {
+		t.Errorf("%s, chosen with the keys, is not in the accent color", w.explorer.sel)
+	}
+}

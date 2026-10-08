@@ -35,6 +35,11 @@ type explorer struct {
 	// focus gives the tree the keys in the next frame; scroll shows the
 	// row chosen.
 	focus, scroll bool
+	// keyboard tells that the keys move the choice, which then shows in
+	// the accent color; chosen with the pointer, it shows gray, as when
+	// the tree has not the focus, and does not flash as the focus comes
+	// and goes.
+	keyboard bool
 }
 
 // reset forgets what was read, to read it again, keeping the directories
@@ -142,7 +147,10 @@ func (w *window) explorerView(c *ui.Context) {
 	e := &w.explorer
 	root := w.repo.Root
 	rows := e.rows(root)
-	focused := e.el != nil && e.el.FocusWithin()
+	if e.el == nil || !e.el.FocusWithin() {
+		e.keyboard = false
+	}
+	focused := e.el != nil && e.el.FocusWithin() && e.keyboard
 	// What git and the editors say of the files.
 	status := map[string]int{}
 	for i, f := range w.files {
@@ -176,6 +184,7 @@ func (w *window) explorerView(c *ui.Context) {
 			row.Background(ui.RGBA(127, 127, 127, 0.08))
 		}
 		if row.Clicked() {
+			e.keyboard = false
 			activate(p)
 		}
 		row.TextColor(textColor).Children(func() {
@@ -230,6 +239,7 @@ func (w *window) explorerView(c *ui.Context) {
 	if e.focus {
 		list.Focus()
 		e.focus = false
+		e.keyboard = true
 	}
 
 	// The keys move the choice, open and close directories, and open files.
@@ -239,6 +249,7 @@ func (w *window) explorerView(c *ui.Context) {
 		e.scroll = false
 	}
 	move := func(i int) {
+		e.keyboard = true
 		if i >= 0 && i < len(rows) {
 			e.sel = rows[i].key
 			e.list.ScrollIntoView(i)
@@ -261,6 +272,7 @@ func (w *window) explorerView(c *ui.Context) {
 	}
 	p := rows[at].key
 	if list.Shortcut(0, ui.KeyEnter) {
+		e.keyboard = true
 		activate(p)
 	}
 	if list.Shortcut(0, ui.KeyRight) && e.dirs[p] {
