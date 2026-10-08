@@ -414,27 +414,22 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 		})
 		tabs.Children(func() {
 			ui.Row(c).Height(titleBarHeight).Gap(2).AlignItems(ui.Center).Children(func() {
-				// Each tab is a rounded block inset in the bar, touching
-				// none of its edges: the one shown is filled, as a raised
-				// key, the others clear until hovered.
+				// Each tab is a block inset in the bar, touching none of its
+				// edges, as the rows of the sidebar's lists: the one shown
+				// filled gray, the others clear until hovered. Nothing but
+				// their fill differs, so that none moves as another is
+				// chosen.
 				tab := func(active, library bool) *ui.Element {
-					b := ui.ButtonBase(c).Height(28).Padding(0, 5, 0, 10).Gap(6).Shrink(0).Radius(7).TextColor(t.TextMuted)
+					b := ui.ButtonBase(c).Height(28).Padding(0, 4, 0, 10).Gap(6).Shrink(0).Radius(6).TextColor(t.TextMuted)
 					switch {
+					case active && library:
+						// A library's document is no source of the
+						// repository: its tab is lighter.
+						b.Background(ui.RGBA(127, 127, 127, 0.1)).TextColor(t.Text)
 					case active:
-						bg := pal.codeBg
-						if library {
-							// A library's document is no source of the
-							// repository: its tab is gray.
-							bg = libraryBg(pal)
-						}
-						if t.Dark {
-							bg = ui.RGBA(255, 255, 255, 0.09)
-						} else {
-							b.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.08))
-						}
-						b.Background(bg).Border(1, ui.RGBA(127, 127, 127, 0.16)).TextColor(t.Text)
+						b.Background(ui.RGBA(127, 127, 127, 0.16)).TextColor(t.Text)
 					case b.Hovered():
-						b.Background(ui.RGBA(127, 127, 127, 0.1))
+						b.Background(ui.RGBA(127, 127, 127, 0.08))
 					}
 					return b
 				}

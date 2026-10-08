@@ -134,3 +134,33 @@ func TestTabsScroll(t *testing.T) {
 		t.Errorf("the click below the tabs missed the editor: caret %v", e.ed.Selection().Caret)
 	}
 }
+
+// TestTabsStayAsChosen keeps every tab where it is as another is chosen:
+// the tab shown differs from the others by its fill alone.
+func TestTabsStayAsChosen(t *testing.T) {
+	w, tt := launchTestWindow(t, testRepo(t))
+	paths := []string{"main.go", "docs/long.txt", "src/new.go"}
+	for _, p := range paths {
+		w.openFile(p, -1)
+	}
+	boxes := func() []string {
+		var out []string
+		for _, p := range paths {
+			b, ok := tt.Find(p)
+			if !ok {
+				t.Fatalf("no tab %s", p)
+			}
+			out = append(out, fmt.Sprintf("%s %.1f+%.1f", p, b.X, b.W))
+		}
+		return out
+	}
+	tt.Frame()
+	before := boxes()
+	for i := range paths {
+		w.show(w.editors[i])
+		tt.Frame()
+		if now := boxes(); !slices.Equal(now, before) {
+			t.Errorf("with tab %d shown: %q,\nwas %q", i, now, before)
+		}
+	}
+}
