@@ -132,8 +132,9 @@ jobs:
             target="$(basename "$dir")" # as windows-amd64
             for f in "$dir"*.dmg; do cp "$f" "dist/Kopi-$version-macos-${target#darwin-}.dmg"; done
             for f in "$dir"*Setup*.exe; do cp "$f" "dist/Kopi-$version-$target-setup.exe"; done
-            # The updates keep their names, which their manifests give.
-            for f in "$dir"*.deb "$dir"*.tar.gz "$dir"*.delta "$dir"update-*.json "$dir"install.sh; do cp "$f" dist/; done
+            # The updates keep their names, which their manifests give;
+            # install.s[h], a pattern, is skipped where there is none.
+            for f in "$dir"*.deb "$dir"*.tar.gz "$dir"*.delta "$dir"update-*.json "$dir"install.s[h]; do cp "$f" dist/; done
           done
           files=(dist/*)
           if [ ${#files[@]} -eq 0 ]; then
