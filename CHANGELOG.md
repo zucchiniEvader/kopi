@@ -2,11 +2,15 @@
 
 ## 0.2.6
 
+- Back and Forward, at the left of the tabs, go through the places the
+  caret went: files opened, definitions, results, changes, and jumps far
+  in a file, opening again the files closed since. ⌃- and ⌃⇧- on macOS, as
+  in VS Code; Alt+← and Alt+→ elsewhere.
 - The review is gone, its tab and ⇧⌘R with it: changes show in diff tabs.
 - A commit is made from the Git tab: its message, on one line atop the
-  changes, ↩ in it or the button below it, of the files checked in the changes, a
-  folder's box choosing all its files. ⇧⌘↩ commits from anywhere, or
-  shows the message's field when it is empty.
+  changes, ↩ in it or the button below it, of the files checked in the
+  changes, a folder's box choosing all its files. ⇧⌘↩ commits from
+  anywhere, or shows the message's field when it is empty.
 - Open Commit, Open Branch and Compare with Branch, the review's comments,
   its files viewed and its find are gone, with their settings:
   copyCommentsOnClose, diffStyle, reviewCommentsPrefix, showWhitespace and
@@ -15,10 +19,6 @@
   asking to be refreshed.
 - The About window credits Kopi alone, and the first launch no longer
   copies the settings of the app Kopi grew out of.
-- Back and Forward, at the left of the tabs, go through the places the
-  caret went: files opened, definitions, results, changes, and jumps far
-  in a file, opening again the files closed since. ⌃- and ⌃⇧- on macOS, as
-  in VS Code; Alt+← and Alt+→ elsewhere.
 
 ## 0.2.5
 
