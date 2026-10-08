@@ -1,12 +1,13 @@
-// Kopi is a native, minimal code editor drawn by MyGo: it edits Java with
-// its language server, runs and debugs Java programs, and reviews and
-// commits the work tree's Git changes. It grew out of Godiff, EGOIST's diff
-// viewer after codiff.
+// Kopi is a native, minimal code editor drawn by MyGo: it edits Java and
+// Go with their language servers, runs and debugs Java programs, and
+// reviews and commits the work tree's Git changes. It grew out of Godiff,
+// EGOIST's diff viewer after codiff.
 //
-//	kopi                 the uncommitted changes of the repository here
-//	kopi <path>          those of another repository
-//	kopi <commit>        a commit, as HEAD~1 or a1b2c3d
-//	kopi <branch>        the work tree's changes since it branched off
+//	kopi                 the folder here
+//	kopi <path>          another folder
+//	kopi <commit>        the review of a commit, as HEAD~1 or a1b2c3d
+//	kopi <branch>        the review of the work tree's changes since it
+//	                     branched off
 package main
 
 import (
@@ -26,15 +27,15 @@ import (
 	"github.com/zucchiniEvader/kopi/internal/git"
 )
 
-const usage = `Usage: kopi [<commit> | <branch>] [<path>]
+const usage = `Usage: kopi [<path>] [<commit> | <branch>]
 
-Review the uncommitted changes of the Git repository at <path> (default:
-the current directory), a commit, or the work tree's changes since it
-branched off <branch>.
+Open the folder at <path> (default: the current directory) in Kopi, a code
+editor. In a Git repository, <commit> opens the review of a commit, and
+<branch> that of the work tree's changes since it branched off <branch>.
 
 Options:
-  --commit <ref>   review a commit
-  --branch <ref>   compare the work tree with a branch
+  --commit <ref>   open the review of a commit
+  --branch <ref>   open the review of the changes since a branch
   --cwd <dir>      the directory relative paths start from
   -h, --help       show this help
 `

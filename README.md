@@ -3,9 +3,9 @@
 A native, minimal code editor, drawn by
 [MyGo](https://mygo.egoist.dev/)'s native UI on the GPU: no webview, no
 JavaScript, with the system's fonts, accent color, dark mode, menus and
-vibrancy. It edits Java with its language server, runs and debugs Java
-programs with VS Code's launch configurations, and reviews and commits the
-work tree's Git changes.
+vibrancy. It edits Java and Go with their language servers, runs and
+debugs Java programs with VS Code's launch configurations, and reviews and
+commits the work tree's Git changes.
 
 Kopi grew out of [Godiff](https://github.com/egoist/godiff), EGOIST's diff
 viewer, itself a reimplementation of
@@ -47,14 +47,10 @@ Download the app of your system from the
 on macOS (Apple silicon and Intel), the `Setup` installer on Windows, the
 `.deb` package or the `.tar.gz` archive, with its `install.sh`, on Linux.
 
-The apps are not signed yet. On macOS, move Kopi to Applications, then let
-it open once:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/Kopi.app
-```
-
-On Windows, SmartScreen asks first: **More info → Run anyway**.
+The macOS app is signed and notarized: move Kopi to Applications and open
+it. The Windows installers are not signed yet: SmartScreen asks first,
+**More info → Run anyway**. Kopi then updates itself (**Kopi → Check for
+Updates…**).
 
 Java's language server needs Java 21 or later on the machine (see
 `javaHome` below); Kopi downloads the server itself.
@@ -62,18 +58,18 @@ Java's language server needs Java 21 or later on the machine (see
 ## Usage
 
 ```sh
-go run . [<commit> | <branch>] [<path>]
+kopi [<path>] [<commit> | <branch>]
 ```
 
-- `kopi` opens the repository you are in.
-- `kopi HEAD~1` reviews a commit, against its first parent.
-- `kopi main` compares the work tree, committed or not, with where it
+- `kopi` opens the folder you are in, a Git repository or not.
+- `kopi ../other-project` opens another folder.
+- `kopi HEAD~1` opens the review of a commit, against its first parent.
+- `kopi main` opens the review of the work tree, committed or not, since it
   branched off `main`.
-- `kopi ../other-repo` opens another repository.
 
-Every repository opens in a window of its own. **Kopi → Install Command Line
-Tool…** installs a `kopi` command that opens the app on the repository it
-runs in.
+Every folder opens in a window of its own; the project's name atop the
+sidebar switches the window to another. **Kopi → Install Command Line
+Tool…** installs the `kopi` command.
 
 ### Keyboard
 

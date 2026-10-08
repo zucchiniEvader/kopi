@@ -74,7 +74,7 @@ func installCLI() {
 			mygo.Dialog.Message(mygo.MessageOptions{
 				Type:    mygo.MessageInfo,
 				Message: "The kopi command is installed",
-				Detail:  "It is at " + path + ". Run kopi in a Git repository to review its changes, or kopi <commit> and kopi <branch>.",
+				Detail:  "It is at " + path + ". Run kopi in a folder to open it, or kopi <path> to open another; in a Git repository, kopi <commit> and kopi <branch> review a commit, or the changes since a branch.",
 			})
 			return
 		}
