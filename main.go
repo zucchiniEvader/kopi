@@ -1,7 +1,6 @@
 // Kopi is a native, minimal code editor drawn by MyGo: it edits Java and
 // Go with their language servers, runs and debugs Java programs, and
-// shows and commits the work tree's Git changes. It grew out of Godiff,
-// EGOIST's diff viewer after codiff.
+// shows and commits the work tree's Git changes.
 //
 //	kopi                 the folder here
 //	kopi <path>          another folder
@@ -135,10 +134,6 @@ func main() {
 	// New versions, from the releases on GitHub: checked once a day, and
 	// from the menu.
 	mygo.Use(native.Plugin)
-	if name == "Kopi" {
-		migrateFromGodiff()
-		cfg.load()
-	}
 	mygo.App.OnSecondInstance(func(args []string, workingDir string) {
 		if len(args) > 0 {
 			args = args[1:]

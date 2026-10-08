@@ -1,15 +1,10 @@
 # Kopi
 
-A native, minimal code editor, drawn by
-[MyGo](https://mygo.egoist.dev/)'s native UI on the GPU: no webview, no
-JavaScript, with the system's fonts, accent color, dark mode, menus and
-vibrancy. It edits Java and Go with their language servers, runs and
+A native, minimal code editor, drawn by MyGo's native UI on the GPU: no
+webview, no JavaScript, with the system's fonts, accent color, dark mode,
+menus and vibrancy. It edits Java and Go with their language servers, runs and
 debugs Java programs with VS Code's launch configurations, and shows,
 commits, pulls and pushes the work tree's Git changes.
-
-Kopi grew out of [Godiff](https://github.com/egoist/godiff), EGOIST's diff
-viewer, itself a reimplementation of
-[codiff](https://github.com/nkzw-tech/codiff).
 
 ## Features
 
@@ -95,8 +90,7 @@ Tool…** installs the `kopi` command.
 ## Configuration
 
 Settings live in `~/.kopi/kopi.jsonc` (**Kopi → Settings…**, <kbd>⌘,</kbd>), and
-apply to open windows as the file changes; the first run takes Godiff's,
-from `~/.godiff/godiff.jsonc`:
+apply to open windows as the file changes:
 
 ```jsonc
 {
