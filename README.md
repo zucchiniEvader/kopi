@@ -133,7 +133,7 @@ opens them with.
 go tool mygo dev          # the app, rebuilt as you edit
 go test ./...             # including the views, run without a window
 go tool mygo build        # Kopi.app and a disk image in build/
-go run ./tools/genicon    # copy resources/kopi-fox-angle-icon.png to the app icon
+go run ./tools/genicon    # copy resources/kopi-flat-cat-icon.png to the app icon
 ```
 
 Pushing a tag of the version in `mygo.json`, as `v0.2.0`, builds the apps of

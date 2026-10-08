@@ -1,4 +1,4 @@
-// Genicon copies the fox artwork to resources/icon.png, the app icon.
+// Genicon copies the flat cat artwork to resources/icon.png, the app icon.
 //
 //	go run ./tools/genicon
 package main
@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	data, err := os.ReadFile("resources/kopi-fox-angle-icon.png")
+	data, err := os.ReadFile("resources/kopi-flat-cat-icon.png")
 	if err != nil {
 		log.Fatal(err)
 	}
