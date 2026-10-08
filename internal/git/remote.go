@@ -101,6 +101,22 @@ func (r *Repo) Branches() ([]Branch, error) {
 	return append(local, remote...), nil
 }
 
+// Head returns the hash of HEAD, "" before the first commit.
+func (r *Repo) Head() string {
+	return r.gitString("rev-parse", "-q", "--verify", "HEAD")
+}
+
+// CountBetween counts the commits of to that from has not; from "" is
+// before the first commit.
+func (r *Repo) CountBetween(from, to string) int {
+	rng := to
+	if from != "" {
+		rng = from + ".." + to
+	}
+	n, _ := strconv.Atoi(r.gitString("rev-list", "--count", rng))
+	return n
+}
+
 // Remotes returns the names of the remotes.
 func (r *Repo) Remotes() []string {
 	return strings.Fields(r.gitString("remote"))

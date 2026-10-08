@@ -79,7 +79,7 @@ func (w *window) view(c *ui.Context) {
 		if choice := ui.AlertDialog(c, &open, "Delete the branch "+name+"?",
 			"Git refuses to delete a branch with commits merged nowhere else.", "Cancel", "Delete"); choice == 1 {
 			w.deletingBranch = ""
-			w.runGit("Deleting", func() error { return w.repo.DeleteBranch(name) })
+			w.runGit("Deleting "+name, func() (string, error) { return "Deleted " + name, w.repo.DeleteBranch(name) })
 		} else if !open {
 			w.deletingBranch = ""
 		}

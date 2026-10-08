@@ -104,6 +104,10 @@ type window struct {
 	remotes  []string
 	gitOp    string
 	gitErr   string
+	// gitNote is what the last operation did, which shows for a while
+	// after gitNoteAt.
+	gitNote   string
+	gitNoteAt time.Time
 	// deletingBranch is the branch asked about deleting.
 	deletingBranch string
 	// reloaded are the files that changed in the last refresh.
@@ -1015,19 +1019,24 @@ func (w *window) loadHistory() {
 }
 
 // runGit runs an operation of git off the main thread, one at a time,
-// as busy says, as "Pulling"; then reads everything again, and says why
-// it failed.
-func (w *window) runGit(busy string, fn func() error) {
+// as busy says, as "Pulling from origin/main"; then reads everything
+// again, and says what it did, for a while, or why it failed.
+func (w *window) runGit(busy string, fn func() (string, error)) {
 	if w.gitOp != "" || w.repo.Plain {
 		return
 	}
-	w.gitOp, w.gitErr = busy, ""
+	w.gitOp, w.gitErr, w.gitNote = busy, "", ""
 	w.background(func() {
-		err := fn()
+		note, err := fn()
 		w.update(func() {
 			w.gitOp = ""
 			if err != nil {
 				w.gitErr = errorText(err)
+			} else {
+				w.gitNote, w.gitNoteAt = note, time.Now()
+				if w.win != nil {
+					time.AfterFunc(gitNoteFor, w.invalidate)
+				}
 			}
 			// The files may have changed: the branch's, or those pulled.
 			w.explorer.reset()
@@ -1038,9 +1047,53 @@ func (w *window) runGit(busy string, fn func() error) {
 	})
 }
 
-func (w *window) fetch() { w.runGit("Fetching", w.repo.Fetch) }
-func (w *window) pull()  { w.runGit("Pulling", w.repo.Pull) }
-func (w *window) push()  { w.runGit("Pushing", w.repo.Push) }
+// gitNoteFor is how long what an operation did shows.
+const gitNoteFor = 4 * time.Second
+
+func (w *window) fetch() {
+	w.runGit("Fetching", func() (string, error) {
+		if err := w.repo.Fetch(); err != nil {
+			return "", err
+		}
+		if s := w.repo.Sync(); s.Behind > 0 {
+			return "Fetched: " + plural(s.Behind, "commit") + " to pull", nil
+		}
+		return "Fetched: up to date", nil
+	})
+}
+
+func (w *window) pull() {
+	w.runGit("Pulling from "+w.sync.Upstream, func() (string, error) {
+		before := w.repo.Head()
+		if err := w.repo.Pull(); err != nil {
+			return "", err
+		}
+		if n := w.repo.CountBetween(before, "HEAD"); n > 0 {
+			return "Pulled " + plural(n, "commit"), nil
+		}
+		return "Already up to date", nil
+	})
+}
+
+func (w *window) push() {
+	busy := "Pushing to " + w.sync.Upstream
+	if w.sync.Upstream == "" || w.sync.Gone {
+		busy = "Publishing " + w.sync.Branch
+	}
+	w.runGit(busy, func() (string, error) {
+		before := w.repo.Sync()
+		if err := w.repo.Push(); err != nil {
+			return "", err
+		}
+		switch after := w.repo.Sync(); {
+		case before.Upstream == "" || before.Gone:
+			return "Published to " + after.Upstream, nil
+		case before.Ahead > 0:
+			return "Pushed " + plural(before.Ahead, "commit"), nil
+		}
+		return "Nothing to push", nil
+	})
+}
 
 // switchBranch checks out a branch: a local one, or a remote's, through
 // the local branch of its name.
@@ -1048,11 +1101,14 @@ func (w *window) switchBranch(b git.Branch) {
 	if b.Current {
 		return
 	}
-	w.runGit("Switching", func() error {
+	w.runGit("Switching to "+b.Name, func() (string, error) {
+		var err error
 		if b.Remote {
-			return w.repo.TrackBranch(b.Name)
+			err = w.repo.TrackBranch(b.Name)
+		} else {
+			err = w.repo.SwitchBranch(b.Name)
 		}
-		return w.repo.SwitchBranch(b.Name)
+		return "Switched to " + w.repo.Branch(), err
 	})
 }
 

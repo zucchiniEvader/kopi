@@ -52,6 +52,19 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 			ui.Spacer(c)
 			w.syncButtons(c)
 		})
+		// What runs, or what it did, a while.
+		switch {
+		case w.gitOp != "":
+			ui.Row(c).Shrink(0).Padding(0, 14, 6).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Spinner(c).Size(11, 11)
+				ui.Text(c, w.gitOp+"…").FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+			})
+		case w.gitNote != "" && time.Since(w.gitNoteAt) < gitNoteFor:
+			ui.Row(c).Shrink(0).Padding(0, 14, 6).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Icon(c, iconCheck).FontSize(11).TextColor(pal.viewed)
+				ui.Text(c, w.gitNote).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+			})
+		}
 		if w.gitErr != "" {
 			ui.Row(c).Shrink(0).Margin(0, 8, 6).Padding(6, 4, 6, 8).Gap(6).Radius(8).AlignItems(ui.Start).
 				Background(t.Danger.Alpha(0.1)).Children(func() {
@@ -111,7 +124,7 @@ func (w *window) branchSwitcher(c *ui.Context) {
 		name = w.branch
 	}
 	b := ui.ButtonBase(c).Height(28).Shrink(1).MinWidth(0).Padding(0, 6).Gap(6).Radius(6).AlignItems(ui.Center).
-		Label("Branch " + name + ", switch branch").Disabled(w.gitOp != "")
+		Label("Branch " + name + ", switch branch")
 	if b.Hovered() || b.Pressed() {
 		b.Background(ui.RGBA(127, 127, 127, 0.13))
 	}
@@ -196,7 +209,7 @@ func (w *window) syncButtons(c *ui.Context) {
 	s := w.sync
 	button := func(svg *ui.SVG, count int, tip, busy string, disabled bool) bool {
 		b := ui.ButtonBase(c).Height(26).MinWidth(26).Padding(0, 5).Gap(3).Radius(6).Center().Shrink(0).
-			Label(tip).Tooltip(tip).TextColor(t.TextMuted).Disabled(disabled || w.gitOp != "")
+			Label(tip).Tooltip(tip).TextColor(t.TextMuted).Disabled(disabled)
 		switch {
 		case b.Pressed():
 			b.Background(ui.RGBA(127, 127, 127, 0.22))
@@ -207,7 +220,7 @@ func (w *window) syncButtons(c *ui.Context) {
 			b.TextColor(t.Text)
 		}
 		b.Children(func() {
-			if w.gitOp == busy {
+			if strings.HasPrefix(w.gitOp, busy) {
 				ui.Spinner(c).Size(13, 13).Label(busy)
 			} else {
 				ui.Icon(c, svg).FontSize(14)
@@ -226,7 +239,7 @@ func (w *window) syncButtons(c *ui.Context) {
 		if len(w.remotes) == 0 {
 			tip = "No remote to publish the branch to"
 		}
-		if button(iconCloudUpload, 0, tip, "Pushing", s.Branch == "" || len(w.remotes) == 0) {
+		if button(iconCloudUpload, 0, tip, "Publishing", s.Branch == "" || len(w.remotes) == 0) {
 			w.push()
 		}
 		return
@@ -408,8 +421,9 @@ func (w *window) refChips(c *ui.Context, refs []commitRef, line ui.Color, onAcce
 				Shrink(0).Tooltip(strings.Join(names, ", "))
 			break
 		}
+		// The subject gives way before the names do.
 		chip := ui.Text(c, r.name).FontSize(10).FontWeight(600).Padding(1, 5).Radius(4).SingleLine().
-			Shrink(1).MinWidth(0).MaxWidth(120)
+			Shrink(0).MaxWidth(120)
 		tip := "Branch " + r.name
 		switch {
 		case onAccent:

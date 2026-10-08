@@ -6,7 +6,9 @@
   local or a remote's, makes one, compares the work tree with one, or
   deletes one, after asking.
 - Fetch, pull and push beside it, with the commits to pull and to push; a
-  branch with no upstream is published. Why one failed shows under them.
+  branch with no upstream is published. What runs shows under them, then
+  what it did, as "Pulled 3 commits" or "Already up to date", or why it
+  failed; the branch's menu still opens meanwhile.
 - The history is a graph: each line of descent in a color of its own, the
   branches and tags at their commits, the commits to pull above HEAD, and
   every branch, from the menu atop it.

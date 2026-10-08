@@ -51,12 +51,27 @@ func TestGitBranchAndSync(t *testing.T) {
 	if !tt.HasText("Their change") || !tt.HasText("origin/main") {
 		t.Errorf("no commit to pull in the history: %q", tt.Texts())
 	}
+	// While it pulls, it says so, and the branch's menu still opens.
+	w.hold = true
 	if err := tt.Click("Pull 1 commit from origin/main"); err != nil {
 		t.Fatalf("%v: %q", err, tt.Texts())
 	}
 	tt.Frame()
+	if !tt.HasText("Pulling from origin/main…") || len(w.held) != 1 {
+		t.Fatalf("no word of pulling: %q", tt.Texts())
+	}
+	if err := tt.Click("Branch main, switch branch"); err != nil || len(tt.Menu()) == 0 {
+		t.Errorf("the branch's button is disabled while pulling: %v", err)
+	}
+	w.hold = false
+	w.held[0]()
+	w.held = nil
+	tt.Frame()
 	if w.gitErr != "" || w.sync.Behind != 0 {
 		t.Fatalf("pulled: %q, %+v", w.gitErr, w.sync)
+	}
+	if !tt.HasText("Pulled 1 commit") {
+		t.Errorf("no word of what it pulled: %q", tt.Texts())
 	}
 
 	// The branch's menu: the local branches, the remotes', and the rest.
@@ -97,6 +112,9 @@ func TestGitBranchAndSync(t *testing.T) {
 	tt.Frame()
 	if w.gitErr != "" || w.sync.Upstream != "origin/topic" {
 		t.Fatalf("published: %q, %+v", w.gitErr, w.sync)
+	}
+	if w.gitNote != "Published to origin/topic" {
+		t.Errorf("note %q", w.gitNote)
 	}
 
 	// Every branch in the graph, with their names.
