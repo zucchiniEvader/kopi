@@ -99,6 +99,7 @@ type window struct {
 	// trashing are the files asked about moving to the Trash, by path;
 	// trash moves one (the system's, but in tests).
 	trashing  []string
+	fileOp    fileOp
 	trash     func(string) error
 	dragWidth float32
 

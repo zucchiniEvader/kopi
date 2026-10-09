@@ -16,8 +16,12 @@
 - The explorer chooses several rows: ⌘-click adds or takes one out,
   ⇧-click chooses those between, ⇧↑ and ⇧↓ extend, ⌘A chooses all.
 - The explorer has a context menu: Copy Path, Copy Relative Path, Reveal in
-  Finder, Open in External Editor and Delete…; a row right-clicked outside
-  the choice becomes the choice. Delete, from the menu or with ⌘⌫ (Delete
+  Finder, Open in External Editor, New File…, New Folder… and Rename… (F2);
+  the space below the rows makes files and folders in the root. A name such
+  as src/App.java makes the folders it goes down; a file renamed closes its
+  tab and opens again, and a rename waits while a tab of it has unsaved
+  changes. A row right-clicked outside the choice becomes the choice.
+  Delete…, from the menu or with ⌘⌫ (Delete
   elsewhere), asks, then moves the rows chosen to the Trash; a file open in
   a tab stays there, saying it was deleted.
 - Java: .project, .classpath and .settings/ go to the language server's

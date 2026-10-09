@@ -379,6 +379,15 @@ func (w *window) explorerView(c *ui.Context) {
 			})
 		}).Grow(1).Shrink(0).FillHeight().MinWidth(max(need, w.sidebarWidth)).Padding(2, 8).Gap(1).Focusable().FocusRing(false).Label("Files")
 	})
+	// The empty space below the rows makes files and folders in the root.
+	list.ContextMenu(func(m *ui.Menu) {
+		if m.Item("New File…").Chosen() {
+			menuAction = func() { w.askFileName(fileOpNewFile, "") }
+		}
+		if m.Item("New Folder…").Chosen() {
+			menuAction = func() { w.askFileName(fileOpNewFolder, "") }
+		}
+	})
 	e.el = list
 	if e.focus {
 		list.Focus()
@@ -419,6 +428,9 @@ func (w *window) explorerView(c *ui.Context) {
 		for _, r := range rows {
 			e.chosen[r.key] = true
 		}
+	}
+	if list.Shortcut(0, ui.KeyF2) && e.sel != "" && len(e.selection(rows)) == 1 {
+		w.askFileName(fileOpRename, e.sel)
 	}
 	if list.Shortcut(ui.Cmd, ui.KeyBackspace) || list.Shortcut(0, ui.KeyDelete) {
 		w.askToTrash(e.selection(rows))
