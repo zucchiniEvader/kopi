@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.7
 
 - A folder outside any repository that holds some, as ~/work with a/ and b/,
   has a Git tab: a menu atop it switches between the repositories found
@@ -26,6 +26,7 @@
   a tab stays there, saying it was deleted.
 - The fields of the dialogs asking a name, a new file's or a branch's, look
   as the search field does.
+- Built on MyGo 0.3.6.
 - Java: .project, .classpath and .settings/ go to the language server's
   workspace, no more into the project.
 
