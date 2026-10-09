@@ -319,7 +319,7 @@ func (s *diffSpec) title() string { return path.Base(s.path) + " (" + s.label + 
 func (w *window) diffArea(c *ui.Context, pal *palette, e *editorTab) {
 	t := c.Theme()
 	spec := e.diff
-	ui.Column(c).Key("diff:" + e.path).Grow(1).MinHeight(0).Background(pal.codeBg).Children(func() {
+	ui.Column(c.Key("diff:" + e.path)).Grow(1).MinHeight(0).Background(pal.codeBg).Children(func() {
 		f := spec.file
 		switch {
 		case spec.errMessage != "":
@@ -374,7 +374,7 @@ func (w *window) diffStatus(c *ui.Context, pal *palette, e *editorTab) {
 	spec := e.diff
 	ui.Row(c).Height(26).Padding(0, 6, 0, 12).Gap(12).AlignItems(ui.Center).Shrink(0).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Background(pal.headerBg).Children(func() {
-		small := func(s string) *ui.Element { return ui.Text(c, s).FontSize(11).TextColor(t.TextMuted).SingleLine() }
+		small := func(s string) ui.Element { return ui.Text(c, s).FontSize(11).TextColor(t.TextMuted).SingleLine() }
 		what := spec.path
 		if spec.oldPath != "" && spec.oldPath != spec.path {
 			what = spec.oldPath + " → " + spec.path
@@ -444,6 +444,8 @@ func (w *window) diffControls(c *ui.Context, pal *palette, e *editorTab) {
 			s.Children(func() { ui.Icon(c, it.icon).FontSize(15) })
 		}
 	})
+	// The choice is read once the control has taken the click.
+	seg.Track.Changed()
 	if split := choice == 1; split != spec.split {
 		spec.split = split
 		w.layoutDiff(e)

@@ -435,6 +435,8 @@ func (w *window) tabControl(c *ui.Context) bool {
 			s.Children(func() { ui.Icon(c, it.icon).FontSize(17) })
 		}
 	})
+	// The choice is read once the control has taken the click.
+	seg.Track.Changed()
 	if tab != w.tab {
 		w.tab = tab
 		return true
@@ -443,7 +445,7 @@ func (w *window) tabControl(c *ui.Context) bool {
 }
 
 // sidebarToggle shows and hides the sidebar.
-func (w *window) sidebarToggle(c *ui.Context) *ui.Element {
+func (w *window) sidebarToggle(c *ui.Context) ui.Element {
 	tip := "Hide sidebar (⌘⇧B)"
 	if !w.sidebarShown {
 		tip = "Show sidebar (⌘⇧B)"
@@ -522,7 +524,7 @@ func nameInput(c *ui.Context, value *string, placeholder string, icon *ui.SVG, e
 }
 
 // iconButton is a button showing an icon alone, as in a toolbar.
-func iconButton(c *ui.Context, svg *ui.SVG, tip string) *ui.Element {
+func iconButton(c *ui.Context, svg *ui.SVG, tip string) ui.Element {
 	t := c.Theme()
 	b := ui.ButtonBase(c).Size(28, 28).Radius(7).Center().Label(tip).Tooltip(tip).TextColor(t.TextMuted)
 	if b.Pressed() {
@@ -576,10 +578,10 @@ func (w *window) fileTree(c *ui.Context) {
 	w.treeRows = rows
 	// The choice shows in the accent color only while the keys move it:
 	// chosen with the pointer, it stays gray as the focus comes and goes.
-	if w.treeEl == nil || !w.treeEl.FocusWithin() {
+	if !w.treeEl.FocusWithin(c) {
 		w.treeKeyboard = false
 	}
-	focused := w.treeEl != nil && w.treeEl.FocusWithin() && w.treeKeyboard
+	focused := w.treeEl.FocusWithin(c) && w.treeKeyboard
 	choose := func(key string) {
 		w.treeSel = key
 		if n := w.treeItems[key]; n != nil && !n.dir {
@@ -656,7 +658,7 @@ func (w *window) fileTree(c *ui.Context) {
 				Width(12).TextAlign(ui.Center).Shrink(0).Tooltip(f.Status.Label())
 		})
 	}).Grow(1).Padding(2, 8).Gap(1).Focusable().FocusRing(false).Label("Changed files")
-	w.treeEl = list
+	list.Bind(&w.treeEl)
 
 	// The keys move the choice, open and close directories.
 	at := -1

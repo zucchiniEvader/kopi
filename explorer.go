@@ -38,7 +38,7 @@ type explorer struct {
 	// widths are the widths of the names, by name.
 	widths map[string]float32
 	list   ui.ListState
-	el     *ui.Element
+	el     ui.Handle
 	// focus gives the tree the keys in the next frame; scroll shows the
 	// row chosen.
 	focus, scroll bool
@@ -261,10 +261,10 @@ func (w *window) explorerView(c *ui.Context) {
 	e := &w.explorer
 	root := w.repo.Root
 	rows := e.rows(root)
-	if e.el == nil || !e.el.FocusWithin() {
+	if !e.el.FocusWithin(c) {
 		e.keyboard = false
 	}
-	focused := e.el != nil && e.el.FocusWithin() && e.keyboard
+	focused := e.el.FocusWithin(c) && e.keyboard
 	// What git and the editors say of the files.
 	status := map[string]int{}
 	prefix := w.gitPrefix()
@@ -285,7 +285,7 @@ func (w *window) explorerView(c *ui.Context) {
 	// The rows are as wide as their names ask, when the sidebar is not: the
 	// tree scrolls sideways then.
 	need := e.contentWidth(c, rows)
-	var list *ui.Element
+	var list ui.Element
 	ui.ScrollHorizontal(c).Grow(1).MinHeight(0).Children(func() {
 		list = ui.List(c, &e.list, len(rows), func(i int) {
 			p := rows[i].key
@@ -388,7 +388,7 @@ func (w *window) explorerView(c *ui.Context) {
 			menuAction = func() { w.askFileName(fileOpNewFolder, "") }
 		}
 	})
-	e.el = list
+	list.Bind(&e.el)
 	if e.focus {
 		list.Focus()
 		e.focus = false

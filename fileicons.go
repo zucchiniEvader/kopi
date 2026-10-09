@@ -115,7 +115,7 @@ func redrawWindows() {
 
 // fileIcon shows the icon of a file or a folder, open or not, as the
 // theme gives it in its colors, else the app's own in muted.
-func (w *window) fileIcon(c *ui.Context, name string, dir, open bool, muted ui.Color) *ui.Element {
+func (w *window) fileIcon(c *ui.Context, name string, dir, open bool, muted ui.Color) ui.Element {
 	name = path.Base(name)
 	if t := iconThemes.themeFor(w.settings.IconTheme); t != nil {
 		light := !c.Theme().Dark

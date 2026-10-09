@@ -187,7 +187,7 @@ func (w *window) quickBar(c *ui.Context) {
 		q.open = false
 		w.openFile(results[i], line)
 	}
-	ui.DialogBase(c, &q.open, func(backdrop, panel *ui.Element) {
+	ui.DialogBase(c, &q.open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(0, 0, 0, 0.12)).Justify(ui.Start).Padding(120, 0, 0, 0)
 		panel.Width(600).MaxHeight(460).Radius(16).Background(pal.headerBg).Border(1, pal.cardBorder).
 			Shadow(0, 20, 60, 0, ui.RGBA(0, 0, 0, 0.28)).Clip().Label("Go to File")

@@ -104,7 +104,7 @@ type Editor struct {
 	w, h, maxW float32
 	shaped     map[string]*shapedLine
 
-	c         *ui.Context
+	svc       ui.Services
 	theme     *ui.Theme
 	focused   bool
 	wantFocus bool
@@ -220,7 +220,7 @@ func (ed *Editor) Focus() { ed.wantFocus = true }
 
 // View shows the editor, which takes the keyboard once it has the focus,
 // which a click gives it. Size it like any element, as with Grow.
-func View(c *ui.Context, ed *Editor) *ui.Element {
+func View(c *ui.Context, ed *Editor) ui.Element {
 	e := ui.Box(c).Focusable().FocusRing(false).Clip().Label("Editor")
 	ed.build(c, e)
 	if ed.link.active || ed.lensHover[0] >= 0 {
@@ -235,8 +235,8 @@ func View(c *ui.Context, ed *Editor) *ui.Element {
 	return e
 }
 
-func (ed *Editor) build(c *ui.Context, e *ui.Element) {
-	ed.c, ed.theme = c, c.Theme()
+func (ed *Editor) build(c *ui.Context, e ui.Element) {
+	ed.svc, ed.theme = c.Services(), c.Theme()
 	ed.buildHover(c, e)
 	if !ed.styled {
 		ed.style = defaultStyle(ed.theme)
@@ -963,15 +963,12 @@ func (ed *Editor) lineRange(i int) (Pos, Pos) {
 
 // copy copies the selection, or the caret's line without one.
 func (ed *Editor) copy() {
-	if ed.c == nil {
-		return
-	}
 	if ed.sel.Empty() {
-		ed.c.WriteClipboard(ed.buf.Line(ed.sel.Caret.Line) + "\n")
+		ed.svc.WriteClipboard(ed.buf.Line(ed.sel.Caret.Line) + "\n")
 		return
 	}
 	a, z := ed.sel.Range()
-	ed.c.WriteClipboard(ed.buf.Slice(a, z))
+	ed.svc.WriteClipboard(ed.buf.Slice(a, z))
 }
 
 // cut cuts the selection, or the caret's line without one.
@@ -986,10 +983,7 @@ func (ed *Editor) cut() {
 }
 
 func (ed *Editor) paste() {
-	if ed.c == nil {
-		return
-	}
-	if s := ed.c.ReadClipboard(); s != "" {
+	if s := ed.svc.ReadClipboard(); s != "" {
 		ed.insert(s, editOther)
 	}
 }

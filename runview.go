@@ -95,7 +95,7 @@ func (w *window) runHeader(c *ui.Context) {
 
 // configButton chooses the launch configuration, as a pop-up button of
 // macOS: the one chosen, and the system's menu of them, it checked.
-func (w *window) configButton(c *ui.Context) *ui.Element {
+func (w *window) configButton(c *ui.Context) ui.Element {
 	r := &w.run
 	t := c.Theme()
 	name := w.chosenConfig().Name
@@ -239,7 +239,7 @@ func (w *window) varRow(c *ui.Context, pal *palette, name, value, typ string, re
 	t := c.Theme()
 	d := &w.debug
 	open := d.open[key]
-	row := ui.Row(c).Key("var:"+key).MinHeight(22).Padding(1, 4, 1, 4+float32(depth)*12).Gap(4).Radius(5).AlignItems(ui.Center).MinWidth(0)
+	row := ui.Row(c.Key("var:"+key)).MinHeight(22).Padding(1, 4, 1, 4+float32(depth)*12).Gap(4).Radius(5).AlignItems(ui.Center).MinWidth(0)
 	if row.Hovered() {
 		row.Background(ui.RGBA(127, 127, 127, 0.08))
 	}
@@ -296,7 +296,7 @@ func (w *window) callStackView(c *ui.Context, pal *palette) {
 		}
 	}
 	for i, f := range d.frames {
-		row := ui.Row(c).Key("frame:"+strconv.Itoa(f.ID)).MinHeight(22).Padding(1, 6).Gap(6).Radius(5).AlignItems(ui.Center).MinWidth(0)
+		row := ui.Row(c.Key("frame:"+strconv.Itoa(f.ID))).MinHeight(22).Padding(1, 6).Gap(6).Radius(5).AlignItems(ui.Center).MinWidth(0)
 		if i == d.frame {
 			row.Background(t.Accent.Alpha(0.15))
 		} else if row.Hovered() {
@@ -338,7 +338,7 @@ func (w *window) mainsView(c *ui.Context, pal *palette) {
 		return
 	}
 	for _, e := range m.list {
-		row := ui.Row(c).Key("main:"+e.path).MinHeight(26).Padding(3, 2, 3, 6).Gap(4).Radius(5).AlignItems(ui.Center).MinWidth(0).Tooltip(e.class)
+		row := ui.Row(c.Key("main:"+e.path)).MinHeight(26).Padding(3, 2, 3, 6).Gap(4).Radius(5).AlignItems(ui.Center).MinWidth(0).Tooltip(e.class)
 		if row.Hovered() {
 			row.Background(ui.RGBA(127, 127, 127, 0.08))
 		}
@@ -385,7 +385,7 @@ func (w *window) breakpointsView(c *ui.Context, pal *palette) {
 	}
 	for _, f := range files {
 		for _, line := range w.breakpoints[f] {
-			row := ui.Row(c).Key(fmt.Sprintf("bp:%s:%d", f, line)).MinHeight(24).Padding(1, 2, 1, 6).Gap(6).Radius(5).AlignItems(ui.Center).MinWidth(0)
+			row := ui.Row(c.Key(fmt.Sprintf("bp:%s:%d", f, line))).MinHeight(24).Padding(1, 2, 1, 6).Gap(6).Radius(5).AlignItems(ui.Center).MinWidth(0)
 			if row.Hovered() {
 				row.Background(ui.RGBA(127, 127, 127, 0.08))
 			}

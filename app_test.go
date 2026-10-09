@@ -243,7 +243,7 @@ func TestHistoryTakesFocus(t *testing.T) {
 	}
 	w.historyEl.Focus()
 	tt.Frame()
-	if w.tab != tabGit || w.historyEl == nil || !w.historyEl.FocusWithin() {
+	if w.tab != tabGit || !tt.Focused("History") {
 		t.Fatalf("tab %d: the history did not take the focus", w.tab)
 	}
 	// Down chooses the first commit, Right opens it, Down goes to its
@@ -302,7 +302,7 @@ func TestTree(t *testing.T) {
 	if e == nil || e.diff == nil || e.title() != "old.txt (Working Tree)" || w.treeSel != "f:old.txt" {
 		t.Fatalf("tab %+v, chosen %q", e, w.treeSel)
 	}
-	if w.treeEl == nil || !w.treeEl.FocusWithin() {
+	if !tt.Focused("Changed files") {
 		t.Error("the tree did not take the focus")
 	}
 	// Up chooses the file above, which Enter opens.

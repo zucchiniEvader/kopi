@@ -95,7 +95,7 @@ func (w *window) commitBox(c *ui.Context) {
 }
 
 // checkMark draws a check box: checked, mixed or empty.
-func checkMark(c *ui.Context, pal *palette, on, mixed bool) *ui.Element {
+func checkMark(c *ui.Context, pal *palette, on, mixed bool) ui.Element {
 	t := c.Theme()
 	box := ui.Box(c).Size(14, 14).Radius(4).Center().Shrink(0)
 	switch {

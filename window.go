@@ -54,7 +54,7 @@ type window struct {
 	explorer                           explorer
 	filter                             string
 	treeList                           ui.ListState
-	treeEl                             *ui.Element
+	treeEl                             ui.Handle
 	treeSel                            string // the key of the row chosen
 	treeRows                           []treeRow
 	closedDirs                         map[string]bool
@@ -64,7 +64,7 @@ type window struct {
 	historyLimit                       int
 	historyMore                        bool
 	historyList                        ui.ListState
-	historyEl                          *ui.Element
+	historyEl                          ui.Handle
 	commitTimes                        map[string]commitTime
 	historyLoading                     bool
 	// historyAll shows every branch in the graph, else HEAD's, and its

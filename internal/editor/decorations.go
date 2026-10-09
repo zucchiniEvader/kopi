@@ -181,7 +181,7 @@ func (ed *Editor) textAt(x, y float32) (Pos, bool) {
 
 // buildHover asks OnHover once the pointer has rested long enough, and
 // forgets the hover once the pointer leaves.
-func (ed *Editor) buildHover(c *ui.Context, e *ui.Element) {
+func (ed *Editor) buildHover(c *ui.Context, e ui.Element) {
 	h := &ed.hover
 	if !h.active {
 		return

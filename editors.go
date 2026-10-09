@@ -440,7 +440,7 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 				// The tab shown joins the editor below, marked by a short
 				// rounded line along its top, inset from its sides and the
 				// window's edge rather than drawn to them.
-				tab := func(active, library bool) *ui.Element {
+				tab := func(active, library bool) ui.Element {
 					b := ui.ButtonBase(c).FillHeight().Padding(0, 6, 0, 12).Gap(6).Shrink(0).BorderWidth(0, 1, 0, 0).BorderColor(pal.cardBorder).TextColor(t.TextMuted)
 					mark := func(color ui.Color) func(p *ui.Painter, r ui.Rect) {
 						return func(p *ui.Painter, r ui.Rect) {
@@ -533,7 +533,7 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 	if e.library {
 		bg = libraryBg(pal)
 	}
-	ui.Column(c).Key("editor:" + e.path).Grow(1).MinHeight(0).Background(bg).Children(func() {
+	ui.Column(c.Key("editor:" + e.path)).Grow(1).MinHeight(0).Background(bg).Children(func() {
 		if e.ed == nil {
 			emptyPanel(c, pal, "Unable to open "+e.title(), e.err, nil)
 			return
@@ -549,7 +549,7 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 		editor.View(c, e.ed).Grow(1).FillWidth()
 		ui.Row(c).Height(26).Padding(0, 12).Gap(16).AlignItems(ui.Center).Shrink(0).
 			BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Background(pal.headerBg).Children(func() {
-			small := func(s string) *ui.Element { return ui.Text(c, s).FontSize(11).TextColor(t.TextMuted).SingleLine() }
+			small := func(s string) ui.Element { return ui.Text(c, s).FontSize(11).TextColor(t.TextMuted).SingleLine() }
 			name := e.path
 			if e.abs == "" {
 				name = e.origin() + " · " + e.title() + " (read-only)"
@@ -616,7 +616,7 @@ func libraryBg(pal *palette) ui.Color { return pal.gapBg }
 // closeButton is the button closing a tab, shown while the tab is chosen
 // or hovered; a dot for unsaved changes, which turns into the button under
 // the pointer.
-func closeButton(c *ui.Context, label string, shown, dirty bool) *ui.Element {
+func closeButton(c *ui.Context, label string, shown, dirty bool) ui.Element {
 	x := ui.ButtonBase(c).Size(20, 20).Center().Radius(5).Label(label).Tooltip("Close (⌘W)")
 	mark := iconClose
 	switch {

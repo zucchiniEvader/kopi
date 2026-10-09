@@ -163,8 +163,8 @@ func (w *window) findBar(c *ui.Context, pal *palette, e *editorTab) {
 		w.closeFind()
 		return
 	}
-	field := func(value *string, placeholder string, focus *bool) *ui.Element {
-		var in *ui.Element
+	field := func(value *string, placeholder string, focus *bool) ui.Element {
+		var in ui.Element
 		ui.Row(c).Width(280).Height(26).Padding(0, 8).Radius(6).Background(pal.codeBg).Border(1, pal.cardBorder).AlignItems(ui.Center).Children(func() {
 			in = ui.TextInputBase(c, value).Placeholder(placeholder).Label(placeholder).FontSize(13).Grow(1)
 		})

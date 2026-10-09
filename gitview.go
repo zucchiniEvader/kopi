@@ -10,9 +10,6 @@ import (
 	"github.com/zucchiniEvader/kopi/internal/git"
 )
 
-// spinnerStep is how often a spinner steps: a twelfth of 0.9 s.
-const spinnerStep = 75 * time.Millisecond
-
 // gitView is the Git tab: the branch, with its switcher and its sync
 // with the upstream; the next commit's message; the changes, chosen for
 // the commit or not; and the history, as a graph, each of these under a title that closes and opens
@@ -64,10 +61,6 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 		// What runs, or what it did, a while.
 		switch {
 		case w.gitOp != "":
-			// The spinners' own repaints can stop after the pointer moves
-			// over the window (MyGo 0.2.12): the view is built again at
-			// their pace while git runs, which keeps them turning.
-			c.After(spinnerStep)
 			ui.Row(c).Shrink(0).Padding(0, 14, 6).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c).Size(11, 11)
 				ui.Text(c, w.gitOp+"…").FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
@@ -400,10 +393,10 @@ func (w *window) historyView(c *ui.Context) {
 	// as the explorer's.
 	if w.focusHistory {
 		w.historyKeyboard = true
-	} else if w.historyEl == nil || !w.historyEl.FocusWithin() {
+	} else if !w.historyEl.FocusWithin(c) {
 		w.historyKeyboard = false
 	}
-	focused := w.historyKeyboard && (w.focusHistory || w.historyEl != nil && w.historyEl.FocusWithin())
+	focused := w.historyKeyboard && (w.focusHistory || w.historyEl.FocusWithin(c))
 	now := time.Now()
 	list := ui.List(c, &w.historyList, len(items), func(i int) {
 		it := items[i]
@@ -504,7 +497,7 @@ func (w *window) historyView(c *ui.Context) {
 			})
 		})
 	}).Grow(1).Padding(2, 8).Focusable().FocusRing(false).Label("History")
-	w.historyEl = list
+	list.Bind(&w.historyEl)
 	if w.focusHistory {
 		list.Focus()
 		w.focusHistory = false
