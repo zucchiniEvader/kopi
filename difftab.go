@@ -14,6 +14,10 @@ import (
 // diffSpec is what a diff tab shows: the change of a file, at path, from
 // base to target, "" for the work tree; oldPath is its path in base.
 type diffSpec struct {
+	// repo is the repository the change is of, which stays when the Git
+	// tab shows another; prefix is its path under the folder.
+	repo          *git.Repo
+	prefix        string
 	path, oldPath string
 	base, target  string
 	// label tells the change: "Working Tree", or the commit's short hash;
@@ -38,11 +42,15 @@ type diffSpec struct {
 // it, so that no language server nor debugger takes it for one.
 func diffKey(p, target string) string { return "diff:" + p + "@" + target }
 
+// key is the path of the diff tab of spec: the file's under the folder, so
+// that two repositories' README.md have a tab each.
+func (s *diffSpec) key() string { return diffKey(s.prefix+s.path, s.target) }
+
 // openWorkTreeDiff opens the change of a file of the work tree against
 // HEAD in a diff tab.
 func (w *window) openWorkTreeDiff(f *diff.File) {
 	base := "HEAD"
-	if !w.repo.HasHead() {
+	if !w.git.HasHead() {
 		base = ""
 	}
 	w.openDiff(&diffSpec{path: f.Path, oldPath: f.OldPath, base: base, label: "Working Tree"})
@@ -60,7 +68,8 @@ func (w *window) openCommitDiff(c *git.Commit, f *diff.File) {
 // openDiff shows the tab of a change, opened if it is not: it shows the
 // whole file, its lines changed marked, as the editor shows code.
 func (w *window) openDiff(spec *diffSpec) {
-	key := diffKey(spec.path, spec.target)
+	spec.repo, spec.prefix = w.git, w.gitPrefix()
+	key := spec.key()
 	if e := w.editorOf(key); e != nil {
 		w.show(e)
 		return
@@ -78,7 +87,7 @@ func (w *window) loadDiff(e *editorTab) {
 	spec := e.diff
 	spec.loading = e.ed == nil
 	w.background(func() {
-		f, err := w.repo.FileDiff(spec.base, spec.target, spec.oldPath, spec.path)
+		f, err := spec.repo.FileDiff(spec.base, spec.target, spec.oldPath, spec.path)
 		w.update(func() {
 			spec.loading = false
 			spec.errMessage = ""

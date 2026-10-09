@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- A folder outside any repository that holds some, as ~/work with a/ and b/,
+  has a Git tab: a menu atop it switches between the repositories found
+  below the folder, to two levels, each with its own changes, history,
+  branches, commit and sync. The explorer still shows the whole folder, and
+  the one chosen is remembered for the folder.
+- Tabs of files of the same name show the folder above each, muted, after
+  the name: as many folders as tell them apart.
+- The Explorer button, clicked again while the explorer shows, reveals the
+  file of the tab shown: its folders open, its row chosen and in view;
+  with no tab, nothing changes.
+- The explorer scrolls sideways when a name is wider than the sidebar.
+- The explorer chooses several rows: ⌘-click adds or takes one out,
+  ⇧-click chooses those between, ⇧↑ and ⇧↓ extend, ⌘A chooses all.
+- The explorer has a context menu: Copy Path, Copy Relative Path, Reveal in
+  Finder, Open in External Editor and Delete…; a row right-clicked outside
+  the choice becomes the choice. Delete, from the menu or with ⌘⌫ (Delete
+  elsewhere), asks, then moves the rows chosen to the Trash; a file open in
+  a tab stays there, saying it was deleted.
+- Java: .project, .classpath and .settings/ go to the language server's
+  workspace, no more into the project.
+
 ## 0.2.6
 
 - Back and Forward, at the left of the tabs, go through the places the

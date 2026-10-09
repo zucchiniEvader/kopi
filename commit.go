@@ -148,7 +148,7 @@ func (w *window) makeCommit() {
 	message := w.message
 	msg := strings.TrimSpace(message) + "\n"
 	w.runGit("Committing", func() (string, error) {
-		hash, err := w.repo.CommitChanges(msg, paths)
+		hash, err := w.git.CommitChanges(msg, paths)
 		if err != nil {
 			return "", err
 		}

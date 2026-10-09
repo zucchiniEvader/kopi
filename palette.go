@@ -242,7 +242,7 @@ func (w *window) branchDialog(c *ui.Context) {
 		// git answers off the main thread.
 		w.dialogBusy = true
 		w.background(func() {
-			err := w.repo.CreateBranch(v)
+			err := w.git.CreateBranch(v)
 			w.update(func() {
 				w.dialogBusy = false
 				if err != nil {

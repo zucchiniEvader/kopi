@@ -273,6 +273,9 @@ type storeData struct {
 	// Recent are the repositories opened, the latest first, which File >
 	// Open Recent and the welcome lists.
 	Recent []string `json:"recent"`
+	// ActiveRepo maps a folder holding several repositories to the one
+	// its Git tab showed last.
+	ActiveRepo map[string]string `json:"activeRepo"`
 }
 
 // maxRecent bounds the repositories remembered.
@@ -333,6 +336,24 @@ func (s *store) setLastRepository(root string) {
 	s.mu.Unlock()
 	s.save()
 	refreshMenu()
+}
+
+// activeRepo returns the repository the Git tab of a folder showed last,
+// "" for none.
+func (s *store) activeRepo(folder string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.ActiveRepo[folder]
+}
+
+func (s *store) setActiveRepo(folder, repo string) {
+	s.mu.Lock()
+	if s.data.ActiveRepo == nil {
+		s.data.ActiveRepo = map[string]string{}
+	}
+	s.data.ActiveRepo[folder] = repo
+	s.mu.Unlock()
+	s.save()
 }
 
 // recent returns the repositories opened, the latest first, but those

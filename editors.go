@@ -189,6 +189,53 @@ func (e *editorTab) title() string {
 	return path.Base(filepath.ToSlash(e.path))
 }
 
+// tabHints tells the tabs of files of the same name apart: for each tab
+// of a name another has, the folders above the file, as few as tell them
+// apart, as "util" or "b/util"; "" for the others. Libraries' documents,
+// which have no path in the repository, have none.
+func tabHints(tabs []*editorTab) []string {
+	dirs := make([][]string, len(tabs))
+	groups := map[string][]int{}
+	for i, e := range tabs {
+		p := ""
+		switch {
+		case e.library:
+			continue
+		case e.diff != nil:
+			p = e.diff.prefix + e.diff.path
+		default:
+			p = filepath.ToSlash(e.path)
+		}
+		parts := strings.Split(p, "/")
+		dirs[i] = parts[:len(parts)-1]
+		name := parts[len(parts)-1]
+		groups[name] = append(groups[name], i)
+	}
+	hints := make([]string, len(tabs))
+	for _, group := range groups {
+		if len(group) < 2 {
+			continue
+		}
+		// The suffixes of the folders, one more folder each round, till
+		// all differ or none has more.
+		for depth := 1; ; depth++ {
+			seen := map[string]int{}
+			more := false
+			for _, i := range group {
+				d := dirs[i]
+				n := min(depth, len(d))
+				more = more || len(d) > depth
+				hints[i] = strings.Join(d[len(d)-n:], "/")
+				seen[hints[i]]++
+			}
+			if len(seen) == len(group) || !more {
+				break
+			}
+		}
+	}
+	return hints
+}
+
 func readEditable(p string) ([]byte, error) {
 	fi, err := os.Stat(p)
 	if err != nil {
@@ -412,6 +459,7 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 					}
 					return b
 				}
+				hints := tabHints(w.editors)
 				for i, e := range w.editors {
 					b := tab(i == w.activeEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
 					if e.diff != nil {
@@ -444,6 +492,9 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 							// The file's name, and the change's, muted.
 							w.fileIcon(c, path.Base(e.diff.path), false, false, t.TextMuted)
 							ui.Text(c, path.Base(e.diff.path)).FontSize(13).SingleLine()
+							if hints[i] != "" {
+								ui.Text(c, hints[i]).FontSize(11).TextColor(t.TextMuted).SingleLine()
+							}
 							ui.Text(c, e.diff.label).FontSize(11).TextColor(t.TextMuted).SingleLine()
 						} else if e.library {
 							ui.Icon(c, iconPackage).FontSize(14)
@@ -453,6 +504,9 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 							title := ui.Text(c, e.title()).FontSize(13).SingleLine()
 							if isTestPath(e.path) {
 								title.TextColor(pal.testText)
+							}
+							if hints[i] != "" {
+								ui.Text(c, hints[i]).FontSize(11).TextColor(t.TextMuted).SingleLine()
 							}
 						}
 						if closeButton(c, "Close "+e.title(), i == w.activeEditor || b.Hovered(), e.ed != nil && e.ed.Dirty()).Clicked() {
@@ -666,9 +720,7 @@ func (w *window) tabMenu(c *ui.Context, m *ui.Menu, i int) (action func()) {
 	}
 	m.Separator()
 	if inRepo && m.Item("Reveal in Explorer").Chosen() {
-		w.tab, w.sidebarShown = tabExplorer, true
-		w.explorer.reveal(rel)
-		w.explorer.scroll = true
+		w.revealTab(e)
 	}
 	if m.Item("Reveal in Finder").Chosen() {
 		mygo.Shell.ShowItemInFolder(e.abs)
@@ -681,6 +733,30 @@ func (w *window) tabMenu(c *ui.Context, m *ui.Menu, i int) (action func()) {
 		w.openExternal(e.path, line)
 	}
 	return action
+}
+
+// revealTab shows the file of a tab in the explorer: the folders holding
+// it open, its row chosen and in view. A tab of no file of the folder, or
+// none, changes nothing.
+func (w *window) revealTab(e *editorTab) {
+	if e == nil {
+		return
+	}
+	var rel string
+	switch {
+	case e.diff != nil:
+		rel = e.diff.prefix + e.diff.path
+	case e.library || e.abs == "":
+		return
+	default:
+		var ok bool
+		if rel, ok = w.repoPath(e.abs); !ok {
+			return
+		}
+	}
+	w.tab, w.sidebarShown = tabExplorer, true
+	w.explorer.reveal(rel)
+	w.explorer.scroll = true
 }
 
 // closeTabs closes tabs, asking once whether to save those with unsaved

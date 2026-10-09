@@ -423,6 +423,10 @@ func (w *window) tabControl(c *ui.Context) bool {
 			name string
 		}{{iconFiles, "Explorer (⌘1)"}, {iconSearch, "Search (⇧⌘F)"}, {iconBranch, "Git (⌃⇧G)"}, {iconBugPlay, "Run and Debug (⇧⌘D)"}} {
 			s := seg.Segment(i).Size(36, 34).Center().Label(it.name).Tooltip(it.name).TextColor(t.TextMuted)
+			// The Explorer clicked again shows where the tab shown is.
+			if i == tabExplorer && w.tab == tabExplorer && s.Clicked() {
+				w.revealTab(w.activeTab())
+			}
 			if i == tab {
 				s.BorderWidth(0, 0, 2, 0).BorderColor(t.Text).TextColor(t.Text)
 			} else if s.Hovered() {

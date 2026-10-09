@@ -41,7 +41,7 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 			}
 		})
 	}
-	if w.repo.Plain {
+	if w.git == nil {
 		ui.Column(c).Padding(4, 14).Gap(2).Children(func() {
 			ui.Text(c, "Not a Git repository").FontSize(12).Bold()
 			ui.Text(c, abbreviateHome(w.repo.Root)).FontSize(11).TextColor(t.TextMuted)
@@ -49,6 +49,12 @@ func (w *window) gitView(c *ui.Context, pal *palette) {
 		return
 	}
 	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
+		// The repository, for a folder holding several.
+		if len(w.repos) > 1 {
+			ui.Row(c).Shrink(0).Padding(0, 8, 2).AlignItems(ui.Center).Children(func() {
+				w.repoSwitcher(c)
+			})
+		}
 		// The branch, and its sync with the upstream.
 		ui.Row(c).Shrink(0).Padding(0, 8, 6).Gap(2).AlignItems(ui.Center).Children(func() {
 			w.branchSwitcher(c)
@@ -334,10 +340,13 @@ func (w *window) toggleHistoryCommit(c *git.Commit) {
 	if _, ok := w.historyFiles[c.Hash]; ok {
 		return
 	}
-	commit := *c
+	commit, g, gen := *c, w.git, w.histGen
 	w.background(func() {
-		files, err := w.repo.CommitFiles(commit)
+		files, err := g.CommitFiles(commit)
 		w.update(func() {
+			if gen != w.histGen {
+				return
+			}
 			if err != nil {
 				w.gitErr = errorText(err)
 				delete(w.historyOpen, commit.Hash)

@@ -28,6 +28,13 @@ type window struct {
 	win      *mygo.Window
 	repo     *git.Repo
 	settings Settings
+	// git is the repository the Git tab reads and acts on: repo itself,
+	// or, for a folder outside any repository, the one chosen among the
+	// repos found below it; nil for none. histGen counts the switches, to
+	// drop the history of another repository.
+	git     *git.Repo
+	repos   []*git.Repo
+	histGen int
 
 	// The branch, and the changes of the work tree.
 	branch     string
@@ -89,7 +96,11 @@ type window struct {
 	treeKeyboard, historyKeyboard bool
 	// deletingBranch is the branch asked about deleting.
 	deletingBranch string
-	dragWidth      float32
+	// trashing are the files asked about moving to the Trash, by path;
+	// trash moves one (the system's, but in tests).
+	trashing  []string
+	trash     func(string) error
+	dragWidth float32
 
 	// The files open in editors, and the one shown, -1 for none; the
 	// places the caret went, for Back and Forward.
@@ -251,6 +262,7 @@ func openWindow(dir string) error {
 	}
 	w.load()
 	w.loadHistory()
+	w.loadRepos()
 	go w.watch(stop)
 	w.captureIfAsked()
 	return nil
@@ -275,6 +287,9 @@ func newWindow(repo *git.Repo) *window {
 	// The window opens on the explorer, which takes the keys.
 	w.explorer.reset()
 	w.explorer.focus = true
+	if !repo.Plain {
+		w.git = repo
+	}
 	w.gitShown = w.sidebarShown && w.tab == tabGit
 	w.dragWidth = w.sidebarWidth
 	return w
@@ -352,16 +367,17 @@ func (w *window) load() {
 	gen := w.gen
 	w.loading = true
 	w.loadErr = nil
-	if w.repo.Plain {
+	if w.git == nil {
 		w.loading = false
 		w.loadedOnce = true
 		w.setFiles(nil)
 		return
 	}
+	g := w.git
 	w.background(func() {
-		branch := w.repo.Branch()
-		sig := w.repo.StatusSignature()
-		files, err := w.repo.WorkingTree(git.Options{ShowWhitespace: true})
+		branch := g.Branch()
+		sig := g.StatusSignature()
+		files, err := g.WorkingTree(git.Options{ShowWhitespace: true})
 		w.update(func() {
 			if gen != w.gen {
 				return
@@ -395,21 +411,25 @@ func (w *window) setFiles(files []*diff.File) {
 // loadHistory reads the commits of the History tab, with their graph,
 // and where the branch stands: the branches, and its upstream.
 func (w *window) loadHistory() {
-	if w.repo.Plain {
+	if w.git == nil {
 		return
 	}
 	limit, all := w.historyLimit, w.historyAll
+	g, gen := w.git, w.histGen
 	w.historyLoading = true
 	w.background(func() {
-		sync := w.repo.Sync()
-		branches, _ := w.repo.Branches()
-		remotes := w.repo.Remotes()
-		commits, err := w.repo.Graph(limit, all, sync.Upstream)
+		sync := g.Sync()
+		branches, _ := g.Branches()
+		remotes := g.Remotes()
+		commits, err := g.Graph(limit, all, sync.Upstream)
 		if err != nil {
 			commits = nil
 		}
 		graph := layoutGraph(commits)
 		w.update(func() {
+			if gen != w.histGen {
+				return
+			}
 			w.sync, w.branches, w.remotes = sync, branches, remotes
 			w.history, w.graph = commits, graph
 			w.historyMore = len(commits) >= limit
@@ -422,7 +442,7 @@ func (w *window) loadHistory() {
 // as busy says, as "Pulling from origin/main"; then reads everything
 // again, and says what it did, for a while, or why it failed.
 func (w *window) runGit(busy string, fn func() (string, error)) {
-	if w.gitOp != "" || w.repo.Plain {
+	if w.gitOp != "" || w.git == nil {
 		return
 	}
 	w.gitOp, w.gitErr, w.gitNote = busy, "", ""
@@ -452,10 +472,10 @@ const gitNoteFor = 4 * time.Second
 
 func (w *window) fetch() {
 	w.runGit("Fetching", func() (string, error) {
-		if err := w.repo.Fetch(); err != nil {
+		if err := w.git.Fetch(); err != nil {
 			return "", err
 		}
-		if s := w.repo.Sync(); s.Behind > 0 {
+		if s := w.git.Sync(); s.Behind > 0 {
 			return "Fetched: " + plural(s.Behind, "commit") + " to pull", nil
 		}
 		return "Fetched: up to date", nil
@@ -464,11 +484,11 @@ func (w *window) fetch() {
 
 func (w *window) pull() {
 	w.runGit("Pulling from "+w.sync.Upstream, func() (string, error) {
-		before := w.repo.Head()
-		if err := w.repo.Pull(); err != nil {
+		before := w.git.Head()
+		if err := w.git.Pull(); err != nil {
 			return "", err
 		}
-		if n := w.repo.CountBetween(before, "HEAD"); n > 0 {
+		if n := w.git.CountBetween(before, "HEAD"); n > 0 {
 			return "Pulled " + plural(n, "commit"), nil
 		}
 		return "Already up to date", nil
@@ -481,11 +501,11 @@ func (w *window) push() {
 		busy = "Publishing " + w.sync.Branch
 	}
 	w.runGit(busy, func() (string, error) {
-		before := w.repo.Sync()
-		if err := w.repo.Push(); err != nil {
+		before := w.git.Sync()
+		if err := w.git.Push(); err != nil {
 			return "", err
 		}
-		switch after := w.repo.Sync(); {
+		switch after := w.git.Sync(); {
 		case before.Upstream == "" || before.Gone:
 			return "Published to " + after.Upstream, nil
 		case before.Ahead > 0:
@@ -504,11 +524,11 @@ func (w *window) switchBranch(b git.Branch) {
 	w.runGit("Switching to "+b.Name, func() (string, error) {
 		var err error
 		if b.Remote {
-			err = w.repo.TrackBranch(b.Name)
+			err = w.git.TrackBranch(b.Name)
 		} else {
-			err = w.repo.SwitchBranch(b.Name)
+			err = w.git.SwitchBranch(b.Name)
 		}
-		return "Switched to " + w.repo.Branch(), err
+		return "Switched to " + w.git.Branch(), err
 	})
 }
 
@@ -539,11 +559,12 @@ func (w *window) watch(stop chan struct{}) {
 func (w *window) checkChanges() {
 	var sig string
 	var busy bool
-	mygo.RunOnMain(func() { sig, busy = w.signature, w.loading })
-	if busy || sig == "" {
+	var g *git.Repo
+	mygo.RunOnMain(func() { sig, busy, g = w.signature, w.loading, w.git })
+	if busy || sig == "" || g == nil {
 		return
 	}
-	if now := w.repo.StatusSignature(); now != sig {
+	if now := g.StatusSignature(); now != sig {
 		w.win.Update(func() {
 			// Files came or went: the explorer reads its folders again.
 			w.explorer.reset()
@@ -565,6 +586,7 @@ func (w *window) refresh() {
 	w.explorer.reset()
 	w.load()
 	w.loadHistory()
+	w.loadRepos()
 }
 
 // noFolder reports whether the window has no folder open.
