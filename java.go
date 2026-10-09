@@ -43,6 +43,9 @@ var javaLang = &language{
 					"import": map[string]any{
 						"maven":  map[string]any{"enabled": true},
 						"gradle": map[string]any{"enabled": true},
+						// .project, .classpath and .settings go to the
+						// workspace, not into the repository.
+						"generatesMetadataFilesAtProjectRoot": false,
 					},
 				},
 			},
