@@ -496,6 +496,31 @@ func searchInput(c *ui.Context, query *string, placeholder string, focus *bool, 
 	return changed
 }
 
+// nameInput is the field of a dialog asking a name, in the style of the
+// search field: a rounded gray box, an icon, the text, and a ring around
+// it while it has the focus. It reports Enter; err, when not empty, shows
+// under it.
+func nameInput(c *ui.Context, value *string, placeholder string, icon *ui.SVG, err string) (submitted bool) {
+	t := c.Theme()
+	ui.Column(c).Gap(6).Children(func() {
+		box := ui.Row(c).Height(32).Padding(0, 10, 0, 10).Gap(8).Radius(7).Background(ui.RGBA(127, 127, 127, 0.12))
+		box.Children(func() {
+			ui.Icon(c, icon).FontSize(14).TextColor(t.TextMuted)
+			in := ui.TextInputBase(c, value).Placeholder(placeholder).Label(placeholder).FontSize(13).Grow(1).MinWidth(0).AutoFocus()
+			if in.Focused() {
+				box.Shadow(0, 0, 0, 3, t.Focus.Alpha(0.45))
+			}
+			if in.Submitted() {
+				submitted = true
+			}
+		})
+		if err != "" {
+			ui.Text(c, err).FontSize(12).TextColor(t.Danger).MaxLines(3).Selectable()
+		}
+	})
+	return submitted
+}
+
 // iconButton is a button showing an icon alone, as in a toolbar.
 func iconButton(c *ui.Context, svg *ui.SVG, tip string) *ui.Element {
 	t := c.Theme()

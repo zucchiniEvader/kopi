@@ -300,7 +300,7 @@ func (w *window) fileDialog(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
-	title, hint, button := "New File", "Its folder: "+orRoot(op.target)+". A name as src/App.java makes the folders.", "Create"
+	title, hint, button := "New File", "In "+orRoot(op.target)+". A name such as util/App.java makes the folders.", "Create"
 	switch op.kind {
 	case fileOpNewFolder:
 		title, button = "New Folder", "Create"
@@ -314,11 +314,13 @@ func (w *window) fileDialog(c *ui.Context) {
 				ui.Text(c, title).FontSize(16).Bold()
 				ui.Text(c, hint).FontSize(13).TextColor(t.TextMuted)
 			})
-			ui.Field(c, "Name", func() {
-				if ui.TextInput(c, &op.value).Font(w.codeFont()).AutoFocus().Submitted() {
-					w.runFileOp()
-				}
-			}).Error(op.err)
+			icon := iconFile
+			if op.kind == fileOpNewFolder || (op.kind == fileOpRename && w.explorer.dirs[op.target]) {
+				icon = iconFolder
+			}
+			if nameInput(c, &op.value, "Name", icon, op.err) {
+				w.runFileOp()
+			}
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 				if ui.Button(c, "Cancel").Clicked() {
 					op.open = false

@@ -24,6 +24,8 @@
   Delete…, from the menu or with ⌘⌫ (Delete
   elsewhere), asks, then moves the rows chosen to the Trash; a file open in
   a tab stays there, saying it was deleted.
+- The fields of the dialogs asking a name, a new file's or a branch's, look
+  as the search field does.
 - Java: .project, .classpath and .settings/ go to the language server's
   workspace, no more into the project.
 

@@ -261,11 +261,9 @@ func (w *window) branchDialog(c *ui.Context) {
 				ui.Text(c, "New Branch").FontSize(16).Bold()
 				ui.Text(c, "A branch from "+w.branch+", checked out with the changes.").FontSize(13).TextColor(t.TextMuted)
 			})
-			ui.Field(c, "Branch name", func() {
-				if ui.TextInput(c, &w.dialogValue).Placeholder("feature/name").Font(w.codeFont()).AutoFocus().Submitted() {
-					create()
-				}
-			}).Error(w.dialogErr)
+			if nameInput(c, &w.dialogValue, "feature/name", iconBranch, w.dialogErr) {
+				create()
+			}
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 				if ui.Button(c, "Cancel").Clicked() {
 					w.dialogOpen = false
