@@ -94,6 +94,8 @@ Tool…** installs the `kopi` command.
 | <kbd>⌘.</kbd> / <kbd>⇧⌥O</kbd> | Quick fix / organize imports |
 | <kbd>⌥↑</kbd> <kbd>⌥↓</kbd> / <kbd>⇧⌥↑</kbd> <kbd>⇧⌥↓</kbd> | Move the lines / copy them |
 | <kbd>⇧⌘K</kbd> / <kbd>⇧⌘\</kbd> | Delete the lines / go to the matching bracket |
+| <kbd>⌘D</kbd> / <kbd>⇧⌘L</kbd> | Add the next place of the selection / every place, as cursors |
+| <kbd>⌥⌘↑</kbd> <kbd>⌥⌘↓</kbd>, <kbd>⌥</kbd>-click | Add a cursor above or below / there |
 | <kbd>F5</kbd> / <kbd>⌃F5</kbd> | Debug / run |
 | <kbd>⇧F5</kbd> / <kbd>⇧⌘F5</kbd> | Stop / restart |
 | <kbd>F9</kbd> | Toggle a breakpoint |

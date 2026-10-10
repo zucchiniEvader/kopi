@@ -151,6 +151,13 @@ type Editor struct {
 	OnCaret    func(p Pos)
 	lastCaret  Pos
 	highlights []Range
+	// extra are the selections besides sel, of more cursors, and
+	// extraGoals where Up and Down keep them; cursors are all of them
+	// while eachCursor goes through them, cursor the one at it.
+	extra      []Selection
+	extraGoals []cursorGoal
+	cursors    []Selection
+	cursor     int
 	brackets   bracketMatch
 
 	diags []Diagnostic
@@ -250,6 +257,7 @@ func (ed *Editor) Selection() Selection { return ed.sel }
 // SetSelection selects from anchor to caret, and scrolls the caret into
 // view.
 func (ed *Editor) SetSelection(s Selection) {
+	ed.clearCursors()
 	ed.sel = Selection{ed.buf.Clamp(s.Anchor), ed.buf.Clamp(s.Caret)}
 	ed.hasGoal = false
 	ed.reveal()
@@ -548,7 +556,6 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 	last := min(n-1, int((ed.scrollY+r.H)/ed.lineH)+1)
 	textX := r.X + gw + padLeft - ed.scrollX
 	lineY := func(i int) float32 { return r.Y + padTop + float32(i)*ed.lineH - ed.scrollY }
-	a, z := ed.sel.Range()
 	caretOn := ed.focused
 	if caretOn {
 		since := p.Now().Sub(ed.blinkStart)
@@ -573,17 +580,9 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			ed.paintHighlights(p, i, sl, textX, y)
 			ed.paintBracketMatch(p, i, sl, textX, y)
 			ed.paintMatches(p, i, sl, textX, y)
-			if !ed.sel.Empty() && i >= a.Line && i <= z.Line {
-				x0, x1 := float32(0), sl.width
-				if i == a.Line {
-					x0 = sl.xs[a.Col]
-				}
-				if i == z.Line {
-					x1 = sl.xs[z.Col]
-				} else {
-					x1 += ed.charW / 2 // the line break
-				}
-				p.Fill(ui.Rect{X: textX + x0, Y: y, W: x1 - x0, H: ed.lineH}, st.Selection, 0)
+			ed.paintSelection(p, ed.sel, i, sl, textX, y)
+			for _, o := range ed.extra {
+				ed.paintSelection(p, o, i, sl, textX, y)
 			}
 			if ed.preedit != "" && i == ed.sel.Caret.Line {
 				ed.paintComposing(p, line, textX, y, caretOn)
@@ -600,8 +599,11 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			ed.paintLens(p, i, textX, y+ed.baseline)
 		}
 		if caretOn && ed.preedit == "" {
-			c := ed.sel.Caret
-			p.Fill(ui.Rect{X: textX + ed.xOf(c) - 1, Y: lineY(c.Line), W: 2, H: ed.lineH}, st.Caret, 0)
+			for _, o := range ed.Cursors() {
+				if c := o.Caret; c.Line >= first && c.Line <= last {
+					p.Fill(ui.Rect{X: textX + ed.xOf(c) - 1, Y: lineY(c.Line), W: 2, H: ed.lineH}, st.Caret, 0)
+				}
+			}
 		}
 	})
 	// The line numbers.
@@ -637,6 +639,26 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 	ed.paintHover(p, r, textX, lineY)
 	ed.paintSignature(p, r, textX, lineY)
 	ed.paintCompletions(p, r, textX, lineY)
+}
+
+// paintSelection fills the part of line i, of shape sl, at x, y, that
+// selection s selects.
+func (ed *Editor) paintSelection(p *ui.Painter, s Selection, i int, sl *shapedLine, x, y float32) {
+	a, z := s.Range()
+	if s.Empty() || i < a.Line || i > z.Line {
+		return
+	}
+	x0, x1 := float32(0), sl.width
+	last := len(sl.xs) - 1
+	if i == a.Line {
+		x0 = sl.xs[min(a.Col, last)]
+	}
+	if i == z.Line {
+		x1 = sl.xs[min(z.Col, last)]
+	} else {
+		x1 += ed.charW / 2 // the line break
+	}
+	p.Fill(ui.Rect{X: x + x0, Y: y, W: x1 - x0, H: ed.lineH}, ed.style.Selection, 0)
 }
 
 // paintGlyphs draws a line's glyphs in the colors of its tokens.
@@ -751,6 +773,9 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 		if ed.completionKey(ev.Mods, ev.Key) || ed.snippetKey(ev.Mods, ev.Key) {
 			return true
 		}
+		if ed.multiKey(ev.Mods, ev.Key) {
+			return true
+		}
 		if ev.Key == ui.KeyEscape && ev.Mods == 0 && ed.sig.active {
 			ed.CloseSignature()
 			return true
@@ -768,6 +793,10 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 		}
 	case ui.InputText:
 		ed.preedit = ""
+		if len(ed.extra) > 0 {
+			ed.eachCursor(true, func() { ed.typed(ev.Text) })
+			return true
+		}
 		ed.typed(ev.Text)
 		ed.typedForCompletion(ev.Text)
 		ed.typedForSignature(ev.Text)
@@ -868,6 +897,8 @@ func (ed *Editor) keyDown(m ui.Modifiers, k ui.Key) bool {
 			ed.vertical(-1, shift)
 		case base == 0:
 			ed.vertical(1, shift)
+		case base == ui.Cmd|ui.Alt && !shift:
+			ed.addCursorLine(up)
 		case base == ui.Alt && !ed.ReadOnly:
 			// Alt moves the lines, Shift+Alt copies them.
 			if shift {
@@ -993,6 +1024,8 @@ func (ed *Editor) shortcut(m ui.Modifiers, k ui.Key) bool {
 			ed.redo()
 		case ui.KeySlash:
 			ed.toggleComment()
+		case ui.KeyD:
+			ed.selectNextMatch()
 		default:
 			return false
 		}
@@ -1004,6 +1037,8 @@ func (ed *Editor) shortcut(m ui.Modifiers, k ui.Key) bool {
 		ed.deleteLines()
 	case m == ui.Cmd|ui.Shift && k == ui.KeyBackslash:
 		ed.goToBracket()
+	case m == ui.Cmd|ui.Shift && k == ui.KeyL:
+		ed.selectAllMatches()
 	case mac && m == ui.Ctrl:
 		// The Emacs keys of macOS's text views.
 		c, b := ed.sel.Caret, ed.buf
@@ -1081,6 +1116,7 @@ func (ed *Editor) vertical(lines int, extend bool) {
 }
 
 func (ed *Editor) selectAll() {
+	ed.clearCursors()
 	ed.sel = Selection{Pos{}, ed.buf.End()}
 	ed.hasGoal = false
 }
@@ -1095,6 +1131,10 @@ func (ed *Editor) lineRange(i int) (Pos, Pos) {
 
 // copy copies the selection, or the caret's line without one.
 func (ed *Editor) copy() {
+	if s, ok := ed.multiCopyText(); ok {
+		ed.svc.WriteClipboard(s)
+		return
+	}
 	if ed.sel.Empty() {
 		ed.svc.WriteClipboard(ed.buf.Line(ed.sel.Caret.Line) + "\n")
 		return
@@ -1106,6 +1146,10 @@ func (ed *Editor) copy() {
 // cut cuts the selection, or the caret's line without one.
 func (ed *Editor) cut() {
 	ed.copy()
+	if len(ed.extra) > 0 {
+		ed.eachCursor(true, func() { ed.insert("", editOther) })
+		return
+	}
 	if ed.sel.Empty() {
 		a, z := ed.lineRange(ed.sel.Caret.Line)
 		ed.edit(a, z, "", editOther)
@@ -1115,7 +1159,7 @@ func (ed *Editor) cut() {
 }
 
 func (ed *Editor) paste() {
-	if s := ed.svc.ReadClipboard(); s != "" {
+	if s := ed.svc.ReadClipboard(); s != "" && !ed.multiPaste(s) {
 		ed.insert(s, editOther)
 	}
 }
@@ -1454,6 +1498,7 @@ func (ed *Editor) edit(a, z Pos, s string, kind editKind) {
 }
 
 func (ed *Editor) undo() {
+	ed.clearCursors()
 	h := &ed.hist
 	if len(h.undo) == 0 || ed.ReadOnly {
 		return
@@ -1474,6 +1519,7 @@ func (ed *Editor) undo() {
 }
 
 func (ed *Editor) redo() {
+	ed.clearCursors()
 	h := &ed.hist
 	if len(h.redo) == 0 || ed.ReadOnly {
 		return
@@ -1502,6 +1548,7 @@ func (ed *Editor) replace(a, z Pos, s string) Pos {
 	// The hover and the highlights tell of the text as it was.
 	ed.hover, ed.highlights = hoverState{}, nil
 	ed.shiftSnippet(a, z, end)
+	ed.shiftCursors(a, z, end)
 	ed.shiftDiagnostics(a, z, end)
 	ed.hl.shift(a, z, end)
 	ed.shiftBreakpoints(a, z, end)
@@ -1558,6 +1605,11 @@ func (ed *Editor) pointer(ev ui.InputEvent) bool {
 		if ev.X < ed.gutterWidth() {
 			unit = 3
 		}
+		if unit == 1 && ev.Mods == ui.Alt {
+			ed.toggleCursorAt(p)
+			return true
+		}
+		ed.clearCursors()
 		switch unit {
 		case 1:
 			if ev.Mods&ui.Shift != 0 {
