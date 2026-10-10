@@ -80,13 +80,13 @@ func defaultStyle(t *ui.Theme) Style {
 // Editor is the state of an editor of a text: its buffer, history,
 // selection, scroll and the shapes of its lines. View shows it.
 type Editor struct {
-	buf  *Buffer
+	buf *Buffer
 	// hist is the text's history, which the views of the text share;
 	// peers are the other views of the text.
 	hist  *history
 	peers []*Editor
-	sel  Selection
-	hl   *highlighter
+	sel   Selection
+	hl    *highlighter
 	// lang is the language of the text, whose comments, brackets and
 	// indent edits follow; indent how the text indents.
 	lang   *lang.Language
