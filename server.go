@@ -456,6 +456,7 @@ func initializeParams(root string, options map[string]any) map[string]any {
 				"rename":            map[string]any{"prepareSupport": false},
 				"references":        map[string]any{},
 				"documentHighlight": map[string]any{},
+				"foldingRange":      map[string]any{"lineFoldingOnly": true},
 				"codeAction": map[string]any{
 					"codeActionLiteralSupport": map[string]any{"codeActionKind": map[string]any{"valueSet": []string{
 						"", "quickfix", "refactor", "refactor.extract", "refactor.inline", "refactor.rewrite", "source", "source.organizeImports", "source.fixAll"}}},
@@ -1013,6 +1014,7 @@ func decodeTokens(data []uint32, legend semanticLegend, b *editor.Buffer) [][]hi
 // semantic asks a server for the meaning of the names of a document,
 // which color it.
 func (w *window) semantic(s *langServer, e *editorTab) {
+	w.foldingRanges(s, e)
 	if s.state != serverReady || e.ed == nil || len(s.legend.TokenTypes) == 0 {
 		return
 	}
@@ -1108,4 +1110,37 @@ func (p *process) Close() error {
 		}()
 	})
 	return nil
+}
+
+// foldingRanges asks a server for the ranges of a document that fold.
+func (w *window) foldingRanges(s *langServer, e *editorTab) {
+	if s.state != serverReady || e.ed == nil || !s.caps.foldingRange {
+		return
+	}
+	if _, ok := s.docs[e.uri]; !ok {
+		return
+	}
+	version := e.ed.Buffer().Version()
+	var res []struct {
+		StartLine int `json:"startLine"`
+		EndLine   int `json:"endLine"`
+	}
+	params := map[string]any{"textDocument": lsp.TextDocumentIdentifier{URI: e.uri}}
+	done := s.conn.Go(context.Background(), "textDocument/foldingRange", params, &res)
+	gen := s.gen
+	go func() {
+		if err := <-done; err != nil {
+			return
+		}
+		w.post(func() {
+			if s.gen != gen || e.ed == nil {
+				return
+			}
+			ranges := make([]editor.FoldRange, 0, len(res))
+			for _, r := range res {
+				ranges = append(ranges, editor.FoldRange{Start: r.StartLine, End: r.EndLine})
+			}
+			e.ed.SetFoldRanges(version, ranges)
+		})
+	}()
 }

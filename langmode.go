@@ -18,6 +18,13 @@ func (w *window) activeText() *editorTab {
 	return nil
 }
 
+// withText runs fn with the tab of the file shown, if a file shows.
+func (w *window) withText(fn func(e *editorTab)) {
+	if e := w.activeText(); e != nil {
+		fn(e)
+	}
+}
+
 // chooseLanguage offers the languages to take the file shown as.
 func (w *window) chooseLanguage() {
 	e := w.activeText()

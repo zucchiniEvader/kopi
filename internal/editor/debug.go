@@ -110,7 +110,7 @@ func (ed *Editor) lensItem(x, y float32) (line, item int) {
 	if x < ed.gutterWidth() || y-padTop+ed.scrollY < 0 {
 		return -1, -1
 	}
-	i := int((y - padTop + ed.scrollY) / ed.lineH)
+	i := ed.lineAtRow(int((y - padTop + ed.scrollY) / ed.lineH))
 	tx := x - ed.gutterWidth() - padLeft + ed.scrollX
 	for k, s := range ed.lensSpans(i) {
 		if tx >= s[0]-2 && tx <= s[1]+2 {

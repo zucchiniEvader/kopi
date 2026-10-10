@@ -168,10 +168,11 @@ func (ed *Editor) textAt(x, y float32) (Pos, bool) {
 	if x < ed.gutterWidth() || y-padTop+ed.scrollY < 0 {
 		return Pos{}, false
 	}
-	i := int((y - padTop + ed.scrollY) / ed.lineH)
-	if i >= ed.buf.Lines() {
+	row := int((y - padTop + ed.scrollY) / ed.lineH)
+	if row >= ed.rows() {
 		return Pos{}, false
 	}
+	i := ed.lineAtRow(row)
 	tx := x - ed.gutterWidth() - padLeft + ed.scrollX
 	if tx < 0 || tx > ed.shape(ed.buf.Line(i)).width {
 		return Pos{}, false
@@ -303,9 +304,11 @@ func (ed *Editor) paintHover(p *ui.Painter, r ui.Rect, textX float32, lineY func
 // view, unless it shows already.
 func (ed *Editor) GoToPos(p Pos) {
 	p = ed.buf.Clamp(p)
+	ed.clearCursors()
 	ed.sel, ed.hasGoal = Selection{p, p}, false
+	ed.revealCaretLine()
 	if ed.h > 0 && ed.lineH > 0 {
-		y := float32(p.Line)*ed.lineH - ed.scrollY
+		y := float32(ed.rowOf(p.Line))*ed.lineH - ed.scrollY
 		if y >= 0 && y+ed.lineH <= ed.h {
 			ed.reveal()
 			return
@@ -345,7 +348,7 @@ func (ed *Editor) pointLink(mods ui.Modifiers, x, y float32) {
 // middle of its line, as a popup at the caret or a test needs.
 func (ed *Editor) PointOf(p Pos) (x, y float32) {
 	p = ed.buf.Clamp(p)
-	return ed.gutterWidth() + padLeft - ed.scrollX + ed.xOf(p), padTop + float32(p.Line)*ed.lineH - ed.scrollY + ed.lineH/2
+	return ed.gutterWidth() + padLeft - ed.scrollX + ed.xOf(p), padTop + float32(ed.rowOf(p.Line))*ed.lineH - ed.scrollY + ed.lineH/2
 }
 
 // SetSemanticTokens colors the text by the meaning of its names, as a

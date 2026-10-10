@@ -159,6 +159,10 @@ type Editor struct {
 	cursors    []Selection
 	cursor     int
 	brackets   bracketMatch
+	fold       foldState
+	// foldHover tells the pointer is over the gutter, which shows the
+	// chevrons of the folds open.
+	foldHover bool
 
 	diags []Diagnostic
 	hover hoverState
@@ -288,7 +292,8 @@ func (ed *Editor) centerCaret() {
 	if ed.h == 0 || ed.lineH == 0 {
 		return
 	}
-	ed.scrollY = float32(ed.sel.Caret.Line)*ed.lineH - ed.h/3
+	ed.revealCaretLine()
+	ed.scrollY = float32(ed.rowOf(ed.sel.Caret.Line))*ed.lineH - ed.h/3
 	ed.center = false
 	ed.clampScroll()
 }
@@ -481,11 +486,11 @@ func (ed *Editor) gutterWidth() float32 {
 
 // posAt returns the place under a point of the view.
 func (ed *Editor) posAt(x, y float32) Pos {
-	i := int((y - padTop + ed.scrollY) / ed.lineH)
+	row := int((y - padTop + ed.scrollY) / ed.lineH)
 	if y-padTop+ed.scrollY < 0 {
-		i = 0
+		row = 0
 	}
-	i = max(0, min(i, ed.buf.Lines()-1))
+	i := ed.lineAtRow(max(0, row))
 	return Pos{i, ed.colAt(i, x-ed.gutterWidth()-padLeft+ed.scrollX)}
 }
 
@@ -494,7 +499,7 @@ func (ed *Editor) caretRect() ui.Rect {
 	c := ed.sel.Caret
 	return ui.Rect{
 		X: ed.gutterWidth() + padLeft - ed.scrollX + ed.xOf(c),
-		Y: padTop + float32(c.Line)*ed.lineH - ed.scrollY,
+		Y: padTop + float32(ed.rowOf(c.Line))*ed.lineH - ed.scrollY,
 		W: 1, H: ed.lineH,
 	}
 }
@@ -502,7 +507,7 @@ func (ed *Editor) caretRect() ui.Rect {
 // maxScroll returns how far the view scrolls: the last line to its top,
 // and the widest line seen to its right edge.
 func (ed *Editor) maxScroll() (float32, float32) {
-	my := float32(ed.buf.Lines()-1) * ed.lineH
+	my := float32(ed.rows()-1) * ed.lineH
 	mx := max(0, ed.maxW+2*ed.charW-(ed.w-ed.gutterWidth()-padLeft))
 	return mx, my
 }
@@ -518,8 +523,9 @@ func (ed *Editor) reveal() {
 	if ed.h == 0 || ed.lineH == 0 {
 		return
 	}
+	ed.revealCaretLine()
 	c := ed.sel.Caret
-	y := float32(c.Line) * ed.lineH
+	y := float32(ed.rowOf(c.Line)) * ed.lineH
 	if y < ed.scrollY {
 		ed.scrollY = y
 	} else if bottom := y + padTop + ed.lineH; bottom > ed.scrollY+ed.h {
@@ -552,10 +558,10 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 	p.Fill(r, st.Background, 0)
 	n := ed.buf.Lines()
 	gw := ed.gutterWidth()
-	first := max(0, int((ed.scrollY-padTop)/ed.lineH))
-	last := min(n-1, int((ed.scrollY+r.H)/ed.lineH)+1)
+	first := ed.lineAtRow(max(0, int((ed.scrollY-padTop)/ed.lineH)))
+	last := min(n-1, ed.lineAtRow(int((ed.scrollY+r.H)/ed.lineH)+1))
 	textX := r.X + gw + padLeft - ed.scrollX
-	lineY := func(i int) float32 { return r.Y + padTop + float32(i)*ed.lineH - ed.scrollY }
+	lineY := func(i int) float32 { return r.Y + padTop + float32(ed.rowOf(i))*ed.lineH - ed.scrollY }
 	caretOn := ed.focused
 	if caretOn {
 		since := p.Now().Sub(ed.blinkStart)
@@ -565,6 +571,9 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 	text := ui.Rect{X: r.X + gw, Y: r.Y, W: r.W - gw, H: r.H}
 	p.Clip(text, 0, func() {
 		for i := first; i <= last; i++ {
+			if ed.isHidden(i) {
+				continue
+			}
 			y := lineY(i)
 			line := ed.buf.Line(i)
 			if ed.sel.Empty() && i == ed.sel.Caret.Line {
@@ -597,6 +606,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			ed.paintGlyphs(p, sl, ed.hl.spans(i), textX, y+ed.baseline, la, lz)
 			ed.paintDiagnostics(p, i, sl, textX, y)
 			ed.paintLens(p, i, textX, y+ed.baseline)
+			ed.paintFoldEllipsis(p, i, sl, textX, y)
 		}
 		if caretOn && ed.preedit == "" {
 			for _, o := range ed.Cursors() {
@@ -606,8 +616,14 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			}
 		}
 	})
-	// The line numbers.
+	// The line numbers, and the chevrons of the folds.
 	for i := first; i <= last; i++ {
+		if ed.isHidden(i) {
+			continue
+		}
+		if ed.marks == nil {
+			ed.paintFoldChevron(p, i, r.X+gw-foldGutter-2, lineY(i), ed.foldHover)
+		}
 		color := st.LineNumber
 		if i == ed.sel.Caret.Line {
 			color = st.Text
@@ -1037,6 +1053,10 @@ func (ed *Editor) shortcut(m ui.Modifiers, k ui.Key) bool {
 		ed.deleteLines()
 	case m == ui.Cmd|ui.Shift && k == ui.KeyBackslash:
 		ed.goToBracket()
+	case m == ui.Cmd|ui.Alt && k == ui.KeyBracketLeft:
+		ed.Fold()
+	case m == ui.Cmd|ui.Alt && k == ui.KeyBracketRight:
+		ed.Unfold()
 	case m == ui.Cmd|ui.Shift && k == ui.KeyL:
 		ed.selectAllMatches()
 	case mac && m == ui.Ctrl:
@@ -1101,13 +1121,15 @@ func (ed *Editor) vertical(lines int, extend bool) {
 	if !ed.hasGoal {
 		ed.goalX = ed.xOf(c)
 	}
+	// By rows: the lines folded away are passed over.
 	var p Pos
-	switch i := c.Line + lines; {
-	case i < 0:
+	switch row := ed.rowOf(c.Line) + lines; {
+	case row < 0:
 		p = Pos{}
-	case i >= ed.buf.Lines():
+	case row >= ed.rows():
 		p = ed.buf.End()
 	default:
+		i := ed.lineAtRow(row)
 		p = Pos{i, ed.colAt(i, ed.goalX)}
 	}
 	goal := ed.goalX
@@ -1545,6 +1567,7 @@ func (ed *Editor) replace(a, z Pos, s string) Pos {
 		ed.OnEdit(a, z, s)
 	}
 	end := ed.buf.Replace(a, z, s)
+	ed.shiftFolds(a, z, end)
 	// The hover and the highlights tell of the text as it was.
 	ed.hover, ed.highlights = hoverState{}, nil
 	ed.shiftSnippet(a, z, end)
@@ -1586,10 +1609,21 @@ func (ed *Editor) pointer(ev ui.InputEvent) bool {
 		ed.wantFocus = true
 		ed.preedit = ""
 		if ev.X < breakpointZone && ed.OnToggleBreakpoint != nil {
-			if i := int((ev.Y - padTop + ed.scrollY) / ed.lineH); i >= 0 && i < ed.buf.Lines() {
+			if row := int((ev.Y - padTop + ed.scrollY) / ed.lineH); row >= 0 && row < ed.rows() {
+				i := ed.lineAtRow(row)
 				ed.OnToggleBreakpoint(i)
 			}
 			return true
+		}
+		if gw := ed.gutterWidth(); ed.marks == nil && ev.X >= gw-foldGutter-2 && ev.X < gw {
+			// The chevrons of the folds.
+			row := int((ev.Y - padTop + ed.scrollY) / ed.lineH)
+			if i := ed.lineAtRow(row); row >= 0 && row < ed.rows() {
+				if _, ok := ed.foldAt(i, false); ok || ed.isClosed(i) {
+					ed.toggleFold(i)
+					return true
+				}
+			}
 		}
 		if line, item := ed.lensItem(ev.X, ev.Y); item >= 0 && ed.OnLens != nil {
 			ed.OnLens(line, item)
@@ -1630,12 +1664,13 @@ func (ed *Editor) pointer(ev ui.InputEvent) bool {
 		if !ed.drag.active {
 			// MyGo draws a frame after the input taken: the link and the
 			// hover show at once, not at the next blink of the caret.
-			hover, link, lens := ed.hover, ed.link, ed.lensHover
+			hover, link, lens, fold := ed.hover, ed.link, ed.lensHover, ed.foldHover
+			ed.foldHover = ev.X < ed.gutterWidth()
 			ed.pointerOver(ev.X, ev.Y)
 			ed.pointLink(ev.Mods, ev.X, ev.Y)
 			l, k := ed.lensItem(ev.X, ev.Y)
 			ed.lensHover = [2]int{l, k}
-			return ed.hover != hover || ed.link != link || ed.lensHover != lens
+			return ed.hover != hover || ed.link != link || ed.lensHover != lens || ed.foldHover != fold
 		}
 		p := ed.posAt(ev.X, ev.Y)
 		oa, oz := ed.drag.origin.Range()
