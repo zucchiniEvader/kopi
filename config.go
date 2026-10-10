@@ -50,6 +50,9 @@ type Settings struct {
 	// Languages set the indent and the clean-ups of the files of each
 	// language, by its ID, over the settings above.
 	Languages map[string]EditorSettings `json:"languages,omitempty"`
+	// Keybindings bind keys to the commands of the command bar, before
+	// the editor's and the menus' own.
+	Keybindings []Keybinding `json:"keybindings,omitempty"`
 }
 
 func defaultSettings() Settings {

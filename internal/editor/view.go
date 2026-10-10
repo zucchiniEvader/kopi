@@ -146,6 +146,9 @@ type Editor struct {
 	OnSignature       func(p Pos, trigger string)
 	SignatureTriggers []string
 	sig               signatureState
+	// OnKey, when set, is offered each key first, which it takes by
+	// returning true, as the app's own keybindings do.
+	OnKey func(m ui.Modifiers, k ui.Key) bool
 	// OnCaret, when set, hears of the caret moved, by the keys, the
 	// pointer or an edit; highlights are ranges SetHighlights marks.
 	OnCaret    func(p Pos)
@@ -834,6 +837,9 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 	case ui.InputKeyDown:
 		if ev.Mods != ui.Cmd {
 			ed.link = linkState{}
+		}
+		if ed.OnKey != nil && ed.OnKey(ev.Mods, ev.Key) {
+			return true
 		}
 		if ed.completionKey(ev.Mods, ev.Key) || ed.snippetKey(ev.Mods, ev.Key) {
 			return true

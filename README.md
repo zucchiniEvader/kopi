@@ -136,6 +136,9 @@ apply to open windows as the file changes:
     "inlayHints": true,            // the names and types it shows in the text
     "wordWrap": false,             // long lines wrap at the editor's width (⌥Z)
     "files.associations": { "*.tmpl": "html" },
+    "keybindings": [               // keys for the command bar's commands
+      { "key": "cmd+shift+r", "command": "Rename Symbol" }
+    ],
     "languages": {                 // over the settings above, by language
       "python": { "tabSize": 4, "formatOnSave": true },
       "go": { "detectIndentation": false, "insertSpaces": false }

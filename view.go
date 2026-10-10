@@ -183,6 +183,7 @@ func (w *window) shortcuts(c *ui.Context) {
 		w.paletteOpen = !w.paletteOpen
 		w.paletteRow = 0
 	}
+	w.customShortcuts(c)
 	// Keys that type text belong to the fields: the fields say so as they
 	// have the focus.
 	w.typing = false

@@ -140,6 +140,13 @@ func (w *window) palette(c *ui.Context) {
 	pal := paletteFor(t)
 	q := strings.TrimSpace(w.paletteQuery)
 	source, prompt := w.commands(), "Type a command…"
+	if _, labels := w.bound(); len(labels) > 0 {
+		for i := range source {
+			if l, ok := labels[strings.ToLower(source[i].title)]; ok {
+				source[i].keys = l
+			}
+		}
+	}
 	if w.paletteChoices != nil {
 		source, prompt = w.paletteChoices, w.palettePrompt
 	}

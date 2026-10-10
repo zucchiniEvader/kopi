@@ -173,6 +173,7 @@ func (w *window) loadAbs(abs string) (*editorTab, bool) {
 				break
 			}
 			e.ed, e.encoding = editor.New(p, text), enc
+			e.ed.OnKey = w.customKey
 			w.applyFileSettings(e)
 		}
 		w.editors = append(w.editors, e)
