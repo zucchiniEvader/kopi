@@ -9,6 +9,10 @@ var (
 	noBlock    = [2]string{}
 )
 
+// Plain is the language of files of no other: its brackets indent, but
+// nothing closes itself.
+var Plain = &Language{ID: "plaintext", Name: "Plain Text", Extensions: []string{".txt", ".text"}, Brackets: cBrackets}
+
 // cLike is a language of C's comments and brackets.
 func cLike(id, name string, exts ...string) *Language {
 	return &Language{ID: id, Name: name, Extensions: exts, LineComment: "//", BlockComment: cBlock,
@@ -104,10 +108,10 @@ var builtin = []*Language{
 		l.Filenames = []string{".editorconfig", ".gitconfig", ".npmrc", ".pylintrc", "setup.cfg", "tox.ini"}
 	}),
 	{ID: "xml", Name: "XML", Extensions: []string{".xml", ".xsd", ".xsl", ".xslt", ".svg", ".plist", ".pom", ".csproj", ".fsproj", ".vbproj", ".props", ".targets", ".xaml", ".storyboard", ".xib", ".iml", ".wsdl", ".resx"},
-		FirstLine: `^<\?xml`, BlockComment: htmlBlock, Brackets: [][2]string{{"<", ">"}},
+		FirstLine: `^<\?xml`, BlockComment: htmlBlock,
 		AutoClose: [][2]string{{"<", ">"}, {`"`, `"`}, {"'", "'"}}, TabSize: 2},
 	{ID: "html", Name: "HTML", Extensions: []string{".html", ".htm", ".xhtml", ".shtml"},
-		FirstLine: `(?i)^<!doctype html`, BlockComment: htmlBlock, Brackets: [][2]string{{"<", ">"}, {"{", "}"}, {"(", ")"}},
+		FirstLine: `(?i)^<!doctype html`, BlockComment: htmlBlock, Brackets: [][2]string{{"{", "}"}, {"(", ")"}},
 		AutoClose: [][2]string{{"{", "}"}, {"[", "]"}, {"(", ")"}, {`"`, `"`}, {"'", "'"}}, TabSize: 2},
 	{ID: "vue", Name: "Vue", Extensions: []string{".vue"}, BlockComment: htmlBlock, Brackets: cBrackets, AutoClose: cAutoClose, TabSize: 2},
 	{ID: "svelte", Name: "Svelte", Extensions: []string{".svelte"}, BlockComment: htmlBlock, Brackets: cBrackets, AutoClose: cAutoClose, TabSize: 2},

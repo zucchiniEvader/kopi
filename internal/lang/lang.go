@@ -45,9 +45,6 @@ type Language struct {
 	Tabs    bool
 }
 
-// Plain is the language of files of no other.
-var Plain = &Language{ID: "plaintext", Name: "Plain Text", Extensions: []string{".txt", ".text"}}
-
 var (
 	once        sync.Once
 	byID        map[string]*Language
@@ -172,4 +169,81 @@ func Detect(p, firstLine string) *Language {
 		return l
 	}
 	return Plain
+}
+
+var (
+	reMu    sync.Mutex
+	reCache = map[string]*regexp.Regexp{}
+)
+
+// compiled returns a pattern compiled, nil for "" or a pattern that does
+// not compile.
+func compiled(pattern string) *regexp.Regexp {
+	if pattern == "" {
+		return nil
+	}
+	reMu.Lock()
+	defer reMu.Unlock()
+	re, ok := reCache[pattern]
+	if !ok {
+		re, _ = regexp.Compile(pattern)
+		reCache[pattern] = re
+	}
+	return re
+}
+
+// IndentsAfter reports whether the line after line goes in one indent
+// further, beyond an opening bracket ending it.
+func (l *Language) IndentsAfter(line string) bool {
+	re := compiled(l.IndentAfter)
+	return re != nil && re.MatchString(line)
+}
+
+// Outdents reports whether line, as typed, goes back one indent, beyond
+// a closing bracket starting it.
+func (l *Language) Outdents(line string) bool {
+	re := compiled(l.Outdent)
+	return re != nil && re.MatchString(line)
+}
+
+// Closing returns the closing bracket of an opening one, false for none.
+func (l *Language) Closing(open string) (string, bool) {
+	for _, b := range l.Brackets {
+		if b[0] == open {
+			return b[1], true
+		}
+	}
+	return "", false
+}
+
+// IsClosing reports whether s closes a bracket.
+func (l *Language) IsClosing(s string) bool {
+	for _, b := range l.Brackets {
+		if b[1] == s {
+			return true
+		}
+	}
+	return false
+}
+
+// AutoClosing returns what typing open inserts after the caret, false for
+// nothing.
+func (l *Language) AutoClosing(open string) (string, bool) {
+	for _, p := range l.AutoClose {
+		if p[0] == open {
+			return p[1], true
+		}
+	}
+	return "", false
+}
+
+// AutoClosed reports whether s is the second of a pair typing inserts, as
+// ) or ".
+func (l *Language) AutoClosed(s string) bool {
+	for _, p := range l.AutoClose {
+		if p[1] == s {
+			return true
+		}
+	}
+	return false
 }

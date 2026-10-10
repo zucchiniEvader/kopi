@@ -5,14 +5,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/highlight"
+	"github.com/zucchiniEvader/kopi/internal/lang"
 )
 
 const (
-	tabSize = 4
 	// The room above the first line, between the gutter's numbers and its
 	// edges, and between the gutter and the text, in DIPs.
 	padTop    = 4
@@ -83,6 +84,10 @@ type Editor struct {
 	hist history
 	sel  Selection
 	hl   *highlighter
+	// lang is the language of the text, whose comments, brackets and
+	// indent edits follow; indent how the text indents.
+	lang   *lang.Language
+	indent Indent
 
 	// goalX is where Up and Down keep the caret across lines, while
 	// hasGoal.
@@ -164,7 +169,31 @@ type dragState struct {
 // New returns an editor of text, highlighted as the language of the file
 // at path.
 func New(path, text string) *Editor {
-	return &Editor{buf: NewBuffer(text), hl: newHighlighter(path), shaped: map[string]*shapedLine{}, execLine: -1, lensHover: [2]int{-1, -1}}
+	ed := &Editor{buf: NewBuffer(text), hl: newHighlighter(path), shaped: map[string]*shapedLine{}, execLine: -1, lensHover: [2]int{-1, -1}}
+	ed.lang = lang.Detect(path, ed.buf.Line(0))
+	ed.indent = DetectIndent(ed.buf.lines, Indent{Tabs: ed.lang.Tabs, Size: ed.lang.TabSize})
+	return ed
+}
+
+// Lang returns the language of the text.
+func (ed *Editor) Lang() *lang.Language { return ed.lang }
+
+// SetLang sets the language of the text, whose comments, brackets and
+// indent edits follow.
+func (ed *Editor) SetLang(l *lang.Language) { ed.lang = l }
+
+// Indent returns how the text indents.
+func (ed *Editor) Indent() Indent { return ed.indent }
+
+// SetIndent sets how the text indents, and the width of its tabs.
+func (ed *Editor) SetIndent(in Indent) {
+	if in.Size <= 0 {
+		in.Size = ed.indent.Size
+	}
+	if in != ed.indent {
+		ed.indent = in
+		ed.shaped = map[string]*shapedLine{} // tabs change width
+	}
 }
 
 // Text returns the text, with the line breaks it came with.
@@ -190,9 +219,14 @@ func (ed *Editor) SetSelection(s Selection) {
 	ed.reveal()
 }
 
-// Language returns the name of the language highlighted, "" for plain
+// Language returns the name of the language of the text, "" for plain
 // text.
-func (ed *Editor) Language() string { return ed.hl.language() }
+func (ed *Editor) Language() string {
+	if ed.lang != lang.Plain {
+		return ed.lang.Name
+	}
+	return ed.hl.language()
+}
 
 // SetStyle sets how the editor looks, in place of the theme's look.
 func (ed *Editor) SetStyle(s Style) { ed.style, ed.styled = s, true }
@@ -329,9 +363,9 @@ func (ed *Editor) shape(s string) *shapedLine {
 			r += runes[r] - 1
 		}
 	}
-	tab := float32(tabSize) * ed.charW
+	tab := float32(ed.indent.Size) * ed.charW
 	if tab == 0 {
-		tab = float32(tabSize) * ed.font.Size * 0.6
+		tab = float32(ed.indent.Size) * ed.font.Size * 0.6
 	}
 	runeX := make([]float32, n+1)
 	x := float32(0)
@@ -639,6 +673,9 @@ func (ed *Editor) menu(m *ui.Menu) {
 	if m.Item("Toggle Line Comment").Shortcut(ui.Cmd, ui.KeySlash).Chosen() {
 		ed.toggleComment()
 	}
+	if m.Item("Toggle Block Comment").Shortcut(ui.Shift|ui.Alt, ui.KeyA).Chosen() {
+		ed.toggleBlockComment()
+	}
 	if m.Item("Select All").Shortcut(ui.Cmd, ui.KeyA).Chosen() {
 		ed.selectAll()
 	}
@@ -820,9 +857,12 @@ func (ed *Editor) keyDown(m ui.Modifiers, k ui.Key) bool {
 			ed.indentLines(false)
 		case ed.sel.Anchor.Line != ed.sel.Caret.Line:
 			ed.indentLines(true)
+		case ed.indent.Tabs:
+			ed.insert("\t", editTyping)
 		default:
 			a, _ := ed.sel.Range()
-			ed.insert(strings.Repeat(" ", tabSize-a.Col%tabSize), editTyping)
+			n := ed.indent.Size
+			ed.insert(strings.Repeat(" ", n-a.Col%n), editTyping)
 		}
 	case ui.KeyF9:
 		if base != 0 || ed.OnToggleBreakpoint == nil {
@@ -872,6 +912,8 @@ func (ed *Editor) shortcut(m ui.Modifiers, k ui.Key) bool {
 		}
 	case m == ui.Cmd|ui.Shift && k == ui.KeyZ:
 		ed.redo()
+	case m == ui.Shift|ui.Alt && k == ui.KeyA:
+		ed.toggleBlockComment()
 	case mac && m == ui.Ctrl:
 		// The Emacs keys of macOS's text views.
 		c, b := ed.sel.Caret, ed.buf
@@ -988,42 +1030,144 @@ func (ed *Editor) paste() {
 	}
 }
 
-// typed inserts text typed, but control characters, which keys handle.
+// typed inserts text typed, but control characters, which keys handle:
+// brackets and quotes typed close themselves, or go around a selection;
+// one typed before the same one closing steps over it; a line typed to
+// close a block goes back one indent.
 func (ed *Editor) typed(s string) {
 	if r, _ := utf8.DecodeRuneInString(s); len(s) == 0 || r < 0x20 || r == 0x7f {
 		return
 	}
-	c := ed.sel.Caret
-	if s == "}" && ed.sel.Empty() {
-		// A brace closing a block goes back one indent.
-		before := ed.buf.Line(c.Line)[:c.Col]
-		if strings.TrimSpace(before) == "" && strings.HasSuffix(before, strings.Repeat(" ", tabSize)) {
-			ed.edit(Pos{c.Line, c.Col - tabSize}, c, s, editTyping)
+	l := ed.lang
+	a, z := ed.sel.Range()
+	if !ed.sel.Empty() {
+		if close, ok := l.AutoClosing(s); ok {
+			inner := ed.buf.Slice(a, z)
+			ed.edit(a, z, s+inner+close, editOther)
+			start := after(a, s)
+			ed.place(Selection{start, after(start, inner)})
 			return
 		}
+		ed.insert(s, editTyping)
+		return
+	}
+	c := a
+	line := ed.buf.Line(c.Line)
+	next := ""
+	if c.Col < len(line) {
+		_, n := utf8.DecodeRuneInString(line[c.Col:])
+		next = line[c.Col : c.Col+n]
+	}
+	if next == s && l.AutoClosed(s) {
+		ed.moveTo(Pos{c.Line, c.Col + len(s)}, false)
+		return
+	}
+	before := line[:c.Col]
+	if l.IsClosing(s) && before != "" && strings.TrimLeft(before, " \t") == "" {
+		// A bracket closing a block goes back one indent.
+		unit := ed.indent.unit()
+		if !strings.HasSuffix(before, unit) {
+			unit = before[len(before)-1:]
+		}
+		ed.edit(Pos{c.Line, c.Col - len(unit)}, c, s, editTyping)
+		return
+	}
+	if close, ok := l.AutoClosing(s); ok && closesBefore(next, l) && (close != s || opensQuote(before)) {
+		ed.insert(s+close, editTyping)
+		in := Pos{c.Line, c.Col + len(s)}
+		ed.place(Selection{in, in})
+		return
 	}
 	ed.insert(s, editTyping)
+	ed.outdentTyped(c.Line)
 }
 
-// backspace deletes the rune before the caret, or back to the indent
-// stop before it in the indent.
+// closesBefore reports whether a pair closes itself before next, the
+// rune after the caret: at the end of the line, before a space, or before
+// what closes or separates.
+func closesBefore(next string, l *lang.Language) bool {
+	return next == "" || strings.TrimSpace(next) == "" || l.IsClosing(next) || l.AutoClosed(next) && next != `"` && next != "'" ||
+		strings.Contains(",;:", next)
+}
+
+// opensQuote reports whether a quote typed after before opens a string:
+// not after a letter or a digit, as in don't.
+func opensQuote(before string) bool {
+	r, _ := utf8.DecodeLastRuneInString(before)
+	return before == "" || !(r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r))
+}
+
+// outdentTyped puts line i back one indent once it was typed to go back,
+// as else: in Python or end in Ruby, unless it already went back from the
+// line before.
+func (ed *Editor) outdentTyped(i int) {
+	line := ed.buf.Line(i)
+	if !ed.lang.Outdents(line) {
+		return
+	}
+	in := ed.buf.Indent(i)
+	if in == "" {
+		return
+	}
+	prev := i - 1
+	for prev >= 0 && strings.TrimSpace(ed.buf.Line(prev)) == "" {
+		prev--
+	}
+	if prev < 0 || ed.buf.Indent(prev) != in {
+		return
+	}
+	unit := ed.indent.unit()
+	if !strings.HasSuffix(in, unit) {
+		unit = in[len(in)-1:]
+	}
+	sel := ed.sel
+	ed.edit(Pos{i, len(in) - len(unit)}, Pos{i, len(in)}, "", editOther)
+	back := func(p Pos) Pos {
+		if p.Line == i {
+			p.Col = max(len(in)-len(unit), p.Col-len(unit))
+		}
+		return p
+	}
+	ed.place(Selection{back(sel.Anchor), back(sel.Caret)})
+}
+
+// place selects s after an edit, as the selection the edit's undo step
+// ends with.
+func (ed *Editor) place(s Selection) {
+	ed.sel = s
+	if n := len(ed.hist.undo); n > 0 {
+		ed.hist.undo[n-1].after = s
+	}
+	ed.reveal()
+}
+
+// backspace deletes the rune before the caret, an empty pair around it,
+// or back to the indent stop before it in an indent of spaces.
 func (ed *Editor) backspace() {
 	c := ed.sel.Caret
 	a := ed.buf.Prev(c)
-	before := ed.buf.Line(c.Line)[:c.Col]
-	if c.Col > 0 && strings.TrimLeft(before, " ") == "" {
-		k := c.Col % tabSize
+	line := ed.buf.Line(c.Line)
+	before := line[:c.Col]
+	switch {
+	case c.Col > 0 && !ed.indent.Tabs && strings.TrimLeft(before, " ") == "":
+		n := ed.indent.Size
+		k := c.Col % n
 		if k == 0 {
-			k = tabSize
+			k = n
 		}
 		a = Pos{c.Line, c.Col - k}
+	case c.Col > 0:
+		if close, ok := ed.lang.AutoClosing(line[a.Col:c.Col]); ok && strings.HasPrefix(line[c.Col:], close) {
+			ed.edit(a, Pos{c.Line, c.Col + len(close)}, "", editDeleting)
+			return
+		}
 	}
 	ed.edit(a, c, "", editDeleting)
 }
 
 // newline breaks the line at the caret, keeping its indent, and indents
-// the line after an opening bracket, with the closing one on the line
-// after when it follows the caret.
+// the line after an opening bracket, or a line opening a block, with the
+// closing bracket on the line after when it follows the caret.
 func (ed *Editor) newline() {
 	a, z := ed.sel.Range()
 	indent := ed.buf.Indent(a.Line)
@@ -1032,15 +1176,22 @@ func (ed *Editor) newline() {
 	}
 	before := strings.TrimRight(ed.buf.Line(a.Line)[:a.Col], " \t")
 	rest := strings.TrimLeft(ed.buf.Line(z.Line)[z.Col:], " \t")
+	inner := indent + ed.indent.unit()
 	if before != "" {
-		if close, ok := map[byte]byte{'{': '}', '(': ')', '[': ']'}[before[len(before)-1]]; ok {
-			inner := indent + strings.Repeat(" ", tabSize)
-			if rest != "" && rest[0] == close {
+		for _, b := range ed.lang.Brackets {
+			if !strings.HasSuffix(before, b[0]) {
+				continue
+			}
+			if strings.HasPrefix(rest, b[1]) {
 				ed.insert("\n"+inner+"\n"+indent, editOther)
-				ed.moveTo(Pos{a.Line + 1, len(inner)}, false)
-				ed.hist.undo[len(ed.hist.undo)-1].after = ed.sel
+				in := Pos{a.Line + 1, len(inner)}
+				ed.place(Selection{in, in})
 				return
 			}
+			ed.insert("\n"+inner, editOther)
+			return
+		}
+		if ed.lang.IndentsAfter(before) {
 			ed.insert("\n"+inner, editOther)
 			return
 		}
@@ -1050,27 +1201,36 @@ func (ed *Editor) newline() {
 
 // indentLines indents the selected lines, or outdents them.
 func (ed *Editor) indentLines(in bool) {
+	unit := ed.indent.unit()
 	ed.editLines(func(line string) (string, int, int) {
 		if in {
 			if line == "" {
 				return line, 0, 0
 			}
-			return strings.Repeat(" ", tabSize) + line, 0, tabSize
+			return unit + line, 0, len(unit)
 		}
 		k := 0
 		if strings.HasPrefix(line, "\t") {
 			k = 1
 		}
-		for k < len(line) && k < tabSize && line[k] == ' ' {
+		for k < len(line) && k < ed.indent.Size && line[k] == ' ' {
 			k++
 		}
 		return line[k:], 0, -k
 	})
 }
 
-// toggleComment comments out the selected lines with //, or comments them
-// in when they all are.
+// toggleComment comments out the selected lines with the language's line
+// comment, or comments them in when they all are; a language of block
+// comments only puts them in one.
 func (ed *Editor) toggleComment() {
+	tok := ed.lang.LineComment
+	if tok == "" {
+		if ed.lang.BlockComment[0] != "" {
+			ed.toggleBlockComment()
+		}
+		return
+	}
 	a, z := ed.selectedLines()
 	all, in := true, -1
 	for i := a; i <= z; i++ {
@@ -1079,7 +1239,7 @@ func (ed *Editor) toggleComment() {
 		if t == "" {
 			continue
 		}
-		if !strings.HasPrefix(t, "//") {
+		if !strings.HasPrefix(t, tok) {
 			all = false
 		}
 		if k := len(l) - len(t); in < 0 || k < in {
@@ -1096,14 +1256,47 @@ func (ed *Editor) toggleComment() {
 		}
 		at := len(line) - len(t)
 		if all {
-			k := 2
-			if strings.HasPrefix(t, "// ") {
-				k = 3
+			k := len(tok)
+			if strings.HasPrefix(t, tok+" ") {
+				k++
 			}
 			return line[:at] + t[k:], at, -k
 		}
-		return line[:in] + "// " + line[in:], in, 3
+		return line[:in] + tok + " " + line[in:], in, len(tok) + 1
 	})
+}
+
+// toggleBlockComment puts the selection, or the caret's line past its
+// indent, in a block comment, or takes it out of the one it is; a
+// language of line comments only comments the lines.
+func (ed *Editor) toggleBlockComment() {
+	open, close := ed.lang.BlockComment[0], ed.lang.BlockComment[1]
+	if open == "" {
+		if ed.lang.LineComment != "" {
+			ed.toggleComment()
+		}
+		return
+	}
+	a, z := ed.sel.Range()
+	if ed.sel.Empty() {
+		l := ed.buf.Line(a.Line)
+		a, z = Pos{a.Line, len(ed.buf.Indent(a.Line))}, Pos{a.Line, len(strings.TrimRight(l, " \t"))}
+		if z.Col < a.Col {
+			z = a
+		}
+	}
+	text := ed.buf.Slice(a, z)
+	lead := text[:len(text)-len(strings.TrimLeft(text, " \t\n"))]
+	trail := text[len(strings.TrimRight(text, " \t\n")):]
+	t := strings.TrimSpace(text)
+	out := open + " " + text + " " + close
+	if len(t) >= len(open)+len(close) && strings.HasPrefix(t, open) && strings.HasSuffix(t, close) {
+		inner := t[len(open) : len(t)-len(close)]
+		inner = strings.TrimSuffix(strings.TrimPrefix(inner, " "), " ")
+		out = lead + inner + trail
+	}
+	ed.edit(a, z, out, editOther)
+	ed.place(Selection{a, after(a, out)})
 }
 
 // selectedLines returns the first and the last line of the selection, but
