@@ -120,3 +120,40 @@ func TestCompletion(t *testing.T) {
 		t.Errorf("after Escape %v", labels)
 	}
 }
+
+func TestSignature(t *testing.T) {
+	ed, tt := openAs(t, "a.go", "")
+	ed.SignatureTriggers = []string{"(", ","}
+	var asked []Pos
+	ed.OnSignature = func(p Pos, trigger string) { asked = append(asked, p) }
+	tt.Type("f")
+	tt.Type("(")
+	if len(asked) != 1 || asked[0] != (Pos{0, 2}) {
+		t.Fatalf("asked %v", asked)
+	}
+	ed.ShowSignature(asked[0], "f(a int, b string)", [2]int{2, 7}, "Does f.")
+	if label, param := ed.Signature(); label != "f(a int, b string)" || param != "a int" {
+		t.Errorf("signature %q %q", label, param)
+	}
+	tt.Frame()
+	// Typing on asks again; the answer moves the parameter.
+	tt.Type("1")
+	tt.Type(",")
+	if len(asked) < 2 {
+		t.Fatalf("asked %v", asked)
+	}
+	ed.ShowSignature(asked[len(asked)-1], "f(a int, b string)", [2]int{9, 17}, "")
+	if _, param := ed.Signature(); param != "b string" {
+		t.Errorf("param %q", param)
+	}
+	tt.Key(0, ui.KeyEscape)
+	if label, _ := ed.Signature(); label != "" {
+		t.Errorf("after Escape %q", label)
+	}
+	// An answer of nothing puts it away.
+	tt.Type(",")
+	ed.ShowSignature(asked[len(asked)-1], "", [2]int{}, "")
+	if label, _ := ed.Signature(); label != "" {
+		t.Errorf("after nothing %q", label)
+	}
+}

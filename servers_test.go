@@ -240,4 +240,14 @@ func TestRealClangd(t *testing.T) {
 	if got := e.ed.Buffer().Line(4); !strings.HasPrefix(strings.TrimSpace(got), "twice(") {
 		t.Errorf("completed %q", got)
 	}
+	// The signature, as the call opens.
+	tt.Key(0, ui.KeyEscape)
+	tt.Key(0, ui.KeyEnter)
+	tt.Type("twice")
+	tt.Key(0, ui.KeyEscape)
+	tt.Type("(")
+	wait("the signature", time.Minute, func() bool { label, _ := e.ed.Signature(); return label != "" })
+	if label, param := e.ed.Signature(); !strings.Contains(label, "twice(int x)") || param != "int x" {
+		t.Errorf("signature %q, param %q", label, param)
+	}
 }

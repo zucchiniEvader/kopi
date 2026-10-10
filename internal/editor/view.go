@@ -140,6 +140,12 @@ type Editor struct {
 	OnAcceptCompletion func(it CompletionItem)
 	comp               completionState
 	snip               snippetState
+	// OnSignature, when set, is asked for the signature of the call at a
+	// place, as a character of SignatureTriggers is typed; it answers
+	// with ShowSignature.
+	OnSignature       func(p Pos, trigger string)
+	SignatureTriggers []string
+	sig               signatureState
 
 	diags []Diagnostic
 	hover hoverState
@@ -309,6 +315,7 @@ func (ed *Editor) build(c *ui.Context, e ui.Element) {
 		if !f {
 			ed.preedit = ""
 			ed.CloseCompletions()
+			ed.CloseSignature()
 		}
 	}
 	if ed.hl.invalidate == nil {
@@ -616,6 +623,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 		p.Fill(ui.Rect{X: r.X + r.W - 8, Y: ty, W: 6, H: th}, st.Scrollbar, 3)
 	}
 	ed.paintHover(p, r, textX, lineY)
+	ed.paintSignature(p, r, textX, lineY)
 	ed.paintCompletions(p, r, textX, lineY)
 }
 
@@ -720,6 +728,7 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 		// Anything but the pointer moving puts the hover away.
 		ed.hover = hoverState{}
 	}
+	defer ed.checkSignature()
 	defer ed.checkCompletions()
 	switch ev.Kind {
 	case ui.InputKeyDown:
@@ -727,6 +736,14 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 			ed.link = linkState{}
 		}
 		if ed.completionKey(ev.Mods, ev.Key) || ed.snippetKey(ev.Mods, ev.Key) {
+			return true
+		}
+		if ev.Key == ui.KeyEscape && ev.Mods == 0 && ed.sig.active {
+			ed.CloseSignature()
+			return true
+		}
+		if ev.Key == ui.KeySpace && ev.Mods == ui.Cmd|ui.Shift && ed.OnSignature != nil {
+			ed.askSignature("")
 			return true
 		}
 		if ev.Key == ui.KeySpace && ev.Mods == ui.Ctrl && ed.OnComplete != nil {
@@ -740,6 +757,7 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 		ed.preedit = ""
 		ed.typed(ev.Text)
 		ed.typedForCompletion(ev.Text)
+		ed.typedForSignature(ev.Text)
 	case ui.InputCompose:
 		if ed.ReadOnly {
 			return true

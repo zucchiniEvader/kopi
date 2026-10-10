@@ -33,3 +33,14 @@ func TestParseCompletions(t *testing.T) {
 		t.Errorf("a bare list: %v", list)
 	}
 }
+
+func TestParamRange(t *testing.T) {
+	sig := "näive(a int, b string)"
+	if r := paramRange(sig, []byte(`"b string"`)); sig[r[0]:r[1]] != "b string" {
+		t.Errorf("by label %v", r)
+	}
+	// UTF-16 offsets: ä is one unit, two bytes.
+	if r := paramRange(sig, []byte(`[6, 11]`)); sig[r[0]:r[1]] != "a int" {
+		t.Errorf("by offsets %v", r)
+	}
+}

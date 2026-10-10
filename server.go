@@ -286,6 +286,7 @@ func (w *window) attach(e *editorTab) {
 	ed.OnHover = func(p editor.Pos) { w.hover(s, e, p) }
 	ed.OnComplete = func(p editor.Pos, trigger string) { w.complete(s, e, p, trigger) }
 	ed.OnAcceptCompletion = func(it editor.CompletionItem) { w.resolveCompletion(s, e, it) }
+	ed.OnSignature = func(p editor.Pos, trigger string) { w.signatureAt(s, e, p, trigger) }
 	ed.OnDefinition = func(p editor.Pos) { w.definition(s, e, p) }
 	if e.abs == "" {
 		return
@@ -422,6 +423,14 @@ func initializeParams(root string, options map[string]any) map[string]any {
 			"textDocument": map[string]any{
 				"synchronization": map[string]any{"didSave": true},
 				"hover":           map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
+				"signatureHelp": map[string]any{
+					"contextSupport": true,
+					"signatureInformation": map[string]any{
+						"documentationFormat":    []string{"markdown", "plaintext"},
+						"parameterInformation":   map[string]any{"labelOffsetSupport": true},
+						"activeParameterSupport": true,
+					},
+				},
 				"completion": map[string]any{
 					"contextSupport": true,
 					"completionItem": map[string]any{
@@ -580,6 +589,7 @@ func (w *window) didOpen(s *langServer, e *editorTab) {
 	}
 	s.docs[e.uri] = 1
 	e.ed.CompletionTriggers = s.caps.completionTriggers
+	e.ed.SignatureTriggers = s.caps.signatureTriggers
 	s.conn.Notify("textDocument/didOpen", lsp.DidOpenTextDocumentParams{TextDocument: lsp.TextDocumentItem{
 		URI: e.uri, LanguageID: s.spec.languageID(e), Version: 1, Text: strings.Join(bufferLines(e.ed.Buffer()), "\n"),
 	}})
