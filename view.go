@@ -146,6 +146,8 @@ func (w *window) mainArea(c *ui.Context, pal *palette) {
 		w.nothingOpen(c, pal)
 	case e.diff != nil:
 		w.diffArea(c, pal, e)
+	case e.preview != nil:
+		w.previewArea(c, pal, e)
 	default:
 		w.editorArea(c, pal, e)
 	}

@@ -52,6 +52,7 @@ func (w *window) commands() []command {
 		{title: "Organize Imports", keys: "⇧⌥O", run: w.organizeImports},
 		{title: "Fold", hint: "The block at the caret", keys: "⌥⌘[", run: func() { w.withText(func(e *editorTab) { e.ed.Fold() }) }},
 		{title: "Unfold", keys: "⌥⌘]", run: func() { w.withText(func(e *editorTab) { e.ed.Unfold() }) }},
+		{title: "Markdown: Open Preview", hint: "Of the Markdown file shown", keys: "⇧⌘V", run: w.openPreview},
 		{title: "Toggle Word Wrap", hint: "Of the file shown", keys: "⌥Z", run: func() {
 			w.withText(func(e *editorTab) { e.ed.SetWordWrap(!e.ed.WordWrap()) })
 		}},

@@ -59,6 +59,8 @@ func (w *window) debugSetup(setup string) {
 				w.openFile(p, n)
 			case "wrap":
 				w.withText(func(e *editorTab) { e.ed.SetWordWrap(true) })
+			case "preview":
+				w.openPreview()
 			case "foldall":
 				w.withText(func(e *editorTab) { e.ed.FoldAll() })
 			case "complete":

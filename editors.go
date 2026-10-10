@@ -53,6 +53,9 @@ type editorTab struct {
 	// the ID of the encoding it is read and written in, "" for UTF-8.
 	config   editorconfig.Config
 	encoding string
+	// preview, set for the tab previewing a Markdown file, is what it
+	// shows.
+	preview *previewState
 }
 
 // enc returns the ID of the encoding of the tab's file.
@@ -247,6 +250,9 @@ func (w *window) show(e *editorTab) {
 func (e *editorTab) title() string {
 	if e.diff != nil {
 		return e.diff.title()
+	}
+	if e.preview != nil {
+		return "Preview " + e.preview.source.title()
 	}
 	if e.abs == "" {
 		return className(e.path)
