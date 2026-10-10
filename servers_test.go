@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/editor"
@@ -170,4 +172,52 @@ func TestServerNotInstalled(t *testing.T) {
 		t.Errorf("choices %q", tt.Texts())
 	}
 	tt.Key(0, ui.KeyEscape)
+}
+
+// TestRealClangd runs the clangd of the machine on C files: KOPI_CLANGD=1.
+func TestRealClangd(t *testing.T) {
+	if os.Getenv("KOPI_CLANGD") == "" {
+		t.Skip("KOPI_CLANGD=1 runs the real clangd")
+	}
+	dir := testRepo(t)
+	writeFile(t, dir, "util.h", "int twice(int x);\n")
+	writeFile(t, dir, "util.c", "#include \"util.h\"\n\nint twice(int x) { return 2 * x; }\n")
+	writeFile(t, dir, "main.c", "#include \"util.h\"\n\nint main(void) {\n    int y = twice(2);\n    return missing(y);\n}\n")
+	w, tt := newTestWindow(t, dir)
+	w.posted = make(chan func(), 4096)
+	cl := w.server("clangd")
+	cl.launch = cl.spec.launch
+	defer w.stopServers()
+	wait := func(what string, d time.Duration, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(d)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("waiting for %s: %s %s", what, cl.statusText(), cl.detail)
+			}
+			select {
+			case fn := <-w.posted:
+				fn()
+			case <-time.After(20 * time.Millisecond):
+			}
+			tt.Frame()
+		}
+	}
+	w.openFile("main.c", 0)
+	e := w.activeTab()
+	wait("the server", time.Minute, func() bool { return cl.state == serverReady })
+	if !cl.caps.definition || !cl.caps.completion || !cl.caps.rename {
+		t.Errorf("caps %+v", cl.caps)
+	}
+	wait("diagnostics", time.Minute, func() bool { return len(e.ed.Diagnostics()) > 0 })
+	if d := e.ed.Diagnostics()[0]; d.From.Line != 4 || !strings.Contains(d.Message, "missing") {
+		t.Errorf("diagnostic %+v", d)
+	}
+	e.ed.Hover(editor.Pos{Line: 3, Col: 14})
+	wait("the hover", time.Minute, func() bool { return strings.Contains(e.ed.HoverText(), "twice") })
+	e.ed.OnDefinition(editor.Pos{Line: 3, Col: 14})
+	wait("twice's declaration", time.Minute, func() bool { return w.activeTab() != e })
+	if got := w.activeTab(); got.title() != "util.h" {
+		t.Errorf("went to %s", got.title())
+	}
 }
