@@ -245,6 +245,7 @@ func openWindow(dir string) error {
 	})
 	offSettings := cfg.OnChange(func(s Settings) { w.win.Update(func() { w.applySettings(s) }) })
 	w.win.OnClosed(func() {
+		w.saveSession()
 		close(stop)
 		if w.debug.client != nil {
 			w.debug.client.Close()
@@ -273,6 +274,7 @@ func openWindow(dir string) error {
 		go state.setLastRepository(repo.Root)
 	}
 	w.load()
+	w.restoreSession()
 	w.loadHistory()
 	w.loadRepos()
 	go w.watch(stop)

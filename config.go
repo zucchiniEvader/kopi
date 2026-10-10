@@ -297,6 +297,8 @@ type storeData struct {
 	// ActiveRepo maps a folder holding several repositories to the one
 	// its Git tab showed last.
 	ActiveRepo map[string]string `json:"activeRepo"`
+	// Sessions are the tabs of each folder's window as it closed.
+	Sessions map[string]session `json:"sessions,omitempty"`
 }
 
 // maxRecent bounds the repositories remembered.
