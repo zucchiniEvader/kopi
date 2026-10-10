@@ -130,6 +130,16 @@ type Editor struct {
 	OnDefinition func(p Pos)
 	// ReadOnly keeps the text as it is.
 	ReadOnly bool
+	// OnComplete, when set, is asked for completions at a place, as a
+	// word is typed, a trigger character, or Ctrl+Space asks; it answers
+	// with ShowCompletions. CompletionTriggers are the characters asking
+	// as they are typed; OnAcceptCompletion hears of a completion put in
+	// the text.
+	OnComplete         func(p Pos, trigger string)
+	CompletionTriggers []string
+	OnAcceptCompletion func(it CompletionItem)
+	comp               completionState
+	snip               snippetState
 
 	diags []Diagnostic
 	hover hoverState
@@ -298,6 +308,7 @@ func (ed *Editor) build(c *ui.Context, e ui.Element) {
 		ed.focused, ed.blinkStart = f, c.Now()
 		if !f {
 			ed.preedit = ""
+			ed.CloseCompletions()
 		}
 	}
 	if ed.hl.invalidate == nil {
@@ -605,6 +616,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 		p.Fill(ui.Rect{X: r.X + r.W - 8, Y: ty, W: 6, H: th}, st.Scrollbar, 3)
 	}
 	ed.paintHover(p, r, textX, lineY)
+	ed.paintCompletions(p, r, textX, lineY)
 }
 
 // paintGlyphs draws a line's glyphs in the colors of its tokens.
@@ -708,10 +720,18 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 		// Anything but the pointer moving puts the hover away.
 		ed.hover = hoverState{}
 	}
+	defer ed.checkCompletions()
 	switch ev.Kind {
 	case ui.InputKeyDown:
 		if ev.Mods != ui.Cmd {
 			ed.link = linkState{}
+		}
+		if ed.completionKey(ev.Mods, ev.Key) || ed.snippetKey(ev.Mods, ev.Key) {
+			return true
+		}
+		if ev.Key == ui.KeySpace && ev.Mods == ui.Ctrl && ed.OnComplete != nil {
+			ed.Complete()
+			return true
 		}
 		if !ed.keyDown(ev.Mods, ev.Key) {
 			return false
@@ -719,6 +739,7 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 	case ui.InputText:
 		ed.preedit = ""
 		ed.typed(ev.Text)
+		ed.typedForCompletion(ev.Text)
 	case ui.InputCompose:
 		if ed.ReadOnly {
 			return true
@@ -749,6 +770,15 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 	case ui.InputPointerDown, ui.InputPointerMove, ui.InputPointerUp:
 		return ed.pointer(ev)
 	case ui.InputScroll:
+		if _, ok := ed.completionAt(ev.X, ev.Y); ok {
+			cs := &ed.comp
+			step := 1
+			if ev.DY < 0 {
+				step = -1
+			}
+			cs.top = max(0, min(cs.top+step, len(cs.shown)-maxCompletionRows))
+			return true
+		}
 		dx, dy := ev.DX, ev.DY
 		if !ev.Precise {
 			dx, dy = dx/40*3*ed.charW, dy/40*3*ed.lineH // a notch scrolls three lines
@@ -1427,6 +1457,7 @@ func (ed *Editor) replace(a, z Pos, s string) Pos {
 		ed.OnEdit(a, z, s)
 	}
 	end := ed.buf.Replace(a, z, s)
+	ed.shiftSnippet(a, z, end)
 	ed.shiftDiagnostics(a, z, end)
 	ed.hl.shift(a, z, end)
 	ed.shiftBreakpoints(a, z, end)
@@ -1436,6 +1467,15 @@ func (ed *Editor) replace(a, z Pos, s string) Pos {
 // pointer places the caret and selects with the pointer: words with a
 // double click, lines with a triple one or in the gutter.
 func (ed *Editor) pointer(ev ui.InputEvent) bool {
+	if ev.Kind == ui.InputPointerDown {
+		if i, ok := ed.completionAt(ev.X, ev.Y); ok {
+			if ev.Button == 0 {
+				ed.acceptCompletion(i)
+			}
+			return true
+		}
+		ed.CloseCompletions()
+	}
 	switch ev.Kind {
 	case ui.InputPointerDown:
 		if ev.Button == 1 {

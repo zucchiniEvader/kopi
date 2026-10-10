@@ -37,6 +37,12 @@ type LocationLink struct {
 	TargetSelectionRange Range  `json:"targetSelectionRange"`
 }
 
+// TextEdit replaces a range of a document with NewText.
+type TextEdit struct {
+	Range   Range  `json:"range"`
+	NewText string `json:"newText"`
+}
+
 type TextDocumentIdentifier struct {
 	URI string `json:"uri"`
 }

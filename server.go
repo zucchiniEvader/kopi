@@ -284,6 +284,8 @@ func (w *window) attach(e *editorTab) {
 		ed.OnEdit = func(a, z editor.Pos, text string) { w.didChange(s, e, a, z, text) }
 	}
 	ed.OnHover = func(p editor.Pos) { w.hover(s, e, p) }
+	ed.OnComplete = func(p editor.Pos, trigger string) { w.complete(s, e, p, trigger) }
+	ed.OnAcceptCompletion = func(it editor.CompletionItem) { w.resolveCompletion(s, e, it) }
 	ed.OnDefinition = func(p editor.Pos) { w.definition(s, e, p) }
 	if e.abs == "" {
 		return
@@ -418,8 +420,23 @@ func initializeParams(root string, options map[string]any) map[string]any {
 				"workspaceEdit":    map[string]any{"documentChanges": false},
 			},
 			"textDocument": map[string]any{
-				"synchronization":    map[string]any{"didSave": true},
-				"hover":              map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
+				"synchronization": map[string]any{"didSave": true},
+				"hover":           map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
+				"completion": map[string]any{
+					"contextSupport": true,
+					"completionItem": map[string]any{
+						"snippetSupport":          true,
+						"labelDetailsSupport":     true,
+						"deprecatedSupport":       true,
+						"preselectSupport":        true,
+						"insertReplaceSupport":    false,
+						"documentationFormat":     []string{"markdown", "plaintext"},
+						"resolveSupport":          map[string]any{"properties": []string{"additionalTextEdits", "detail", "documentation"}},
+						"insertTextModeSupport":   map[string]any{"valueSet": []int{1, 2}},
+						"commitCharactersSupport": false,
+					},
+					"completionItemKind": map[string]any{"valueSet": seq(1, 25)},
+				},
 				"definition":         map[string]any{"linkSupport": true},
 				"publishDiagnostics": map[string]any{"relatedInformation": false},
 				"semanticTokens": map[string]any{
@@ -562,6 +579,7 @@ func (w *window) didOpen(s *langServer, e *editorTab) {
 		return
 	}
 	s.docs[e.uri] = 1
+	e.ed.CompletionTriggers = s.caps.completionTriggers
 	s.conn.Notify("textDocument/didOpen", lsp.DidOpenTextDocumentParams{TextDocument: lsp.TextDocumentItem{
 		URI: e.uri, LanguageID: s.spec.languageID(e), Version: 1, Text: strings.Join(bufferLines(e.ed.Buffer()), "\n"),
 	}})

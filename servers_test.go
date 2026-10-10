@@ -220,4 +220,24 @@ func TestRealClangd(t *testing.T) {
 	if got := w.activeTab(); got.title() != "util.h" {
 		t.Errorf("went to %s", got.title())
 	}
+	// Completions, as a word is typed.
+	w.show(e)
+	e.ed.Focus()
+	tt.Frame()
+	e.ed.SetSelection(editor.Selection{Anchor: editor.Pos{Line: 3, Col: 21}, Caret: editor.Pos{Line: 3, Col: 21}})
+	tt.Key(0, ui.KeyEnter)
+	tt.Type("t")
+	tt.Type("w")
+	wait("completions", time.Minute, func() bool {
+		labels, _ := e.ed.Completions()
+		return len(labels) > 0
+	})
+	labels, _ := e.ed.Completions()
+	if !strings.Contains(labels[0], "twice") {
+		t.Errorf("completions %v", labels)
+	}
+	tt.Key(0, ui.KeyEnter)
+	if got := e.ed.Buffer().Line(4); !strings.HasPrefix(strings.TrimSpace(got), "twice(") {
+		t.Errorf("completed %q", got)
+	}
 }

@@ -22,8 +22,10 @@ type serverCaps struct {
 	formatting, rangeFormatting, documentSymbol, workspaceSymbol  bool
 	documentHighlight, inlayHint, foldingRange                    bool
 	// completionTriggers are the characters asking for completions as
-	// they are typed, signatureTriggers for the signature.
+	// they are typed, signatureTriggers for the signature;
+	// completionResolve that it tells more of a completion chosen.
 	completionTriggers, signatureTriggers []string
+	completionResolve                     bool
 }
 
 // parseCaps reads the capabilities of a server's answer to initialize.
@@ -49,6 +51,7 @@ func parseCaps(raw json.RawMessage) serverCaps {
 		FoldingRangeProvider            json.RawMessage `json:"foldingRangeProvider"`
 		CompletionProvider              *struct {
 			TriggerCharacters []string `json:"triggerCharacters"`
+			ResolveProvider   bool     `json:"resolveProvider"`
 		} `json:"completionProvider"`
 		SignatureHelpProvider *struct {
 			TriggerCharacters   []string `json:"triggerCharacters"`
@@ -89,6 +92,7 @@ func parseCaps(raw json.RawMessage) serverCaps {
 	if p := c.CompletionProvider; p != nil {
 		out.completion = true
 		out.completionTriggers = p.TriggerCharacters
+		out.completionResolve = p.ResolveProvider
 	}
 	if p := c.SignatureHelpProvider; p != nil {
 		out.signatureHelp = true
