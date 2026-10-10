@@ -4,6 +4,7 @@
 package terminal
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -57,7 +58,15 @@ type Terminal struct {
 	mu   sync.Mutex // guards the pty's size
 	done chan struct{}
 	err  error
+	// hmu guards history, the lines scrolled off the top of the screen,
+	// the oldest first, and trimmed, how many went from its start.
+	hmu     sync.Mutex
+	history [][]Cell
+	trimmed int
 }
+
+// maxHistory bounds the lines kept scrolled off the screen.
+const maxHistory = 5000
 
 // ErrUnsupported tells that the platform has no pseudo-terminals Kopi
 // runs: Windows, for now.
@@ -103,7 +112,7 @@ func (t *Terminal) read(changed func()) {
 		n, err := t.pty.Read(buf)
 		if n > 0 {
 			data := append(rest, buf[:n]...)
-			w, _ := t.vt.Write(data)
+			w := t.feed(data)
 			// A rune cut at the end waits for the rest.
 			rest = append(rest[:0:0], data[w:]...)
 			if changed != nil {
@@ -121,6 +130,64 @@ func (t *Terminal) read(changed func()) {
 			return
 		}
 	}
+}
+
+// feed writes output to the screen, a line at a time, keeping the line a
+// line break at the bottom scrolls off; it returns how many bytes it
+// wrote, a rune cut at the end not.
+func (t *Terminal) feed(data []byte) int {
+	written := 0
+	for len(data) > 0 {
+		i := bytes.IndexByte(data, '\n')
+		if i < 0 {
+			n, _ := t.vt.Write(data)
+			return written + n
+		}
+		if i > 0 {
+			n, _ := t.vt.Write(data[:i])
+			written += n
+		}
+		t.keepTop()
+		t.vt.Write(data[i : i+1])
+		written += 1 // the line break
+		data = data[i+1:]
+	}
+	return written
+}
+
+// keepTop keeps the screen's top line in the history when a line break
+// is to scroll it off: at the bottom row, on the main screen.
+func (t *Terminal) keepTop() {
+	t.vt.Lock()
+	_, rows := t.vt.Size()
+	c := t.vt.Cursor()
+	if c.Y != rows-1 || t.vt.Mode()&vt10x.ModeAltScreen != 0 {
+		t.vt.Unlock()
+		return
+	}
+	cols, _ := t.vt.Size()
+	row := make([]Cell, cols)
+	for x := range cols {
+		g := t.vt.Cell(x, 0)
+		row[x] = Cell{Char: g.Char, Mode: g.Mode, FG: uint32(g.FG), BG: uint32(g.BG)}
+	}
+	t.vt.Unlock()
+	t.hmu.Lock()
+	t.history = append(t.history, row)
+	if len(t.history) > maxHistory+maxHistory/5 {
+		cut := len(t.history) - maxHistory
+		t.history = append(t.history[:0:0], t.history[cut:]...)
+		t.trimmed += cut
+	}
+	t.hmu.Unlock()
+}
+
+// History returns the lines scrolled off the screen, the oldest first,
+// and how many went before them.
+func (t *Terminal) History() ([][]Cell, int) {
+	t.hmu.Lock()
+	defer t.hmu.Unlock()
+	return t.history, t.trimmed
 }
 
 // Write sends what the keys type to the shell.

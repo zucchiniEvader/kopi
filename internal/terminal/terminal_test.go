@@ -60,3 +60,37 @@ func TestShell(t *testing.T) {
 		t.Error("the shell did not end")
 	}
 }
+
+func TestHistory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no pty")
+	}
+	term, err := Start("/bin/sh", t.TempDir(), os.Environ(), 30, 5, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	term.Write([]byte("for i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo line$i; done\n"))
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		h, _ := term.History()
+		var all []string
+		for _, row := range h {
+			var b strings.Builder
+			for _, c := range row {
+				if c.Char != 0 {
+					b.WriteRune(c.Char)
+				}
+			}
+			all = append(all, strings.TrimSpace(b.String()))
+		}
+		joined := strings.Join(all, "|")
+		if strings.Contains(joined, "line1|line2|line3") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("history %q", all)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}

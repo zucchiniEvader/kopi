@@ -26,7 +26,30 @@ type termState struct {
 	queued atomic.Bool // a frame asked for, for the screen changed
 	// charW and lineH measure the code font, as the screen is drawn.
 	charW, lineH float32
+	// scroll is how many lines of the history show above the screen;
+	// sel is the text the pointer selected, by lines counted from the
+	// first ever kept, and columns.
+	scroll int
+	sel    termSelection
 }
+
+// termSelection is text of the terminal selected: from a to b, as the
+// pointer dragged, by line and column.
+type termSelection struct {
+	active, dragging bool
+	a, b             [2]int
+}
+
+// ordered returns the selection's ends, the first first.
+func (s termSelection) ordered() ([2]int, [2]int) {
+	if s.b[0] < s.a[0] || s.b[0] == s.a[0] && s.b[1] < s.a[1] {
+		return s.b, s.a
+	}
+	return s.a, s.b
+}
+
+// termPad is the room around the terminal's cells.
+const termPad = 8
 
 // startTerminal runs the user's shell in the folder, in the panel.
 func (w *window) startTerminal() {
@@ -125,6 +148,54 @@ func (w *window) terminalView(c *ui.Context, pal *palette) {
 	}
 	size := float32(w.settings.CodeFontSize) - 1
 	screen := ts.term.Screen()
+	history, trimmed := ts.term.History()
+	ts.scroll = max(0, min(ts.scroll, len(history)))
+	// The lines shown: of the history, then of the screen; top is the
+	// first, of them all.
+	top := len(history) - ts.scroll
+	lineAt := func(i int) []terminal.Cell {
+		if i < len(history) {
+			return history[i]
+		}
+		if k := i - len(history); k < len(screen.Cells) {
+			return screen.Cells[k]
+		}
+		return nil
+	}
+	// cellAt returns the line, counted from the first ever kept, and the
+	// column under a point of the view.
+	cellAt := func(x, y float32) [2]int {
+		if ts.charW == 0 {
+			return [2]int{}
+		}
+		col := max(0, int((x-termPad)/ts.charW))
+		row := max(0, min(int((y-termPad)/ts.lineH), screen.Rows-1))
+		return [2]int{trimmed + top + row, col}
+	}
+	selText := func() string {
+		a, b := ts.sel.ordered()
+		var out []string
+		for l := a[0]; l <= b[0]; l++ {
+			row := lineAt(l - trimmed)
+			from, to := 0, len(row)
+			if l == a[0] {
+				from = min(a[1], len(row))
+			}
+			if l == b[0] {
+				to = min(b[1]+1, len(row))
+			}
+			var sb strings.Builder
+			for _, cell := range row[from:max(from, to)] {
+				if cell.Char == 0 {
+					sb.WriteByte(' ')
+				} else {
+					sb.WriteRune(cell.Char)
+				}
+			}
+			out = append(out, strings.TrimRight(sb.String(), " "))
+		}
+		return strings.Join(out, "\n")
+	}
 	box := ui.Box(c).Grow(1).MinHeight(0).Focusable().FocusRing(false).Clip().Label("Terminal").Cursor(ui.CursorText)
 	if ts.focus {
 		box.Focus()
@@ -136,12 +207,50 @@ func (w *window) terminalView(c *ui.Context, pal *palette) {
 		if term == nil {
 			return false
 		}
+		// What is typed shows the screen, the selection gone.
+		typing := func() { ts.scroll, ts.sel = 0, termSelection{} }
 		switch ev.Kind {
 		case ui.InputText:
+			typing()
 			term.Write([]byte(ev.Text))
 			return true
+		case ui.InputScroll:
+			lines := int(-ev.DY / max(ts.lineH, 1))
+			if !ev.Precise {
+				lines = int(-ev.DY / 40 * 3)
+			}
+			if lines == 0 && ev.DY != 0 {
+				lines = -int(ev.DY / abs32(ev.DY))
+			}
+			ts.scroll = max(0, min(ts.scroll+lines, len(history)))
+			return true
+		case ui.InputPointerDown:
+			if ev.Button == 0 {
+				at := cellAt(ev.X, ev.Y)
+				ts.sel = termSelection{active: true, dragging: true, a: at, b: at}
+			}
+			return true // the focus
+		case ui.InputPointerMove:
+			if ts.sel.dragging {
+				ts.sel.b = cellAt(ev.X, ev.Y)
+				return true
+			}
+			return false
+		case ui.InputPointerUp:
+			if ts.sel.dragging {
+				ts.sel.dragging = false
+				if ts.sel.a == ts.sel.b {
+					ts.sel = termSelection{}
+				}
+			}
+			return true
 		case ui.InputCommand:
+			if ev.Text == "copy" && ts.sel.active {
+				svc.WriteClipboard(selText())
+				return true
+			}
 			if ev.Text == "paste" {
+				typing()
 				if s := svc.ReadClipboard(); s != "" {
 					term.Write([]byte(s))
 				}
@@ -153,11 +262,10 @@ func (w *window) terminalView(c *ui.Context, pal *palette) {
 				return true
 			}
 			if b := keyBytes(ev.Mods, ev.Key, screen.AppCursor); b != "" {
+				typing()
 				term.Write([]byte(b))
 				return true
 			}
-		case ui.InputPointerDown:
-			return true // the focus
 		}
 		return false
 	})
@@ -167,13 +275,29 @@ func (w *window) terminalView(c *ui.Context, pal *palette) {
 			ts.charW /= 10
 			ts.lineH = float32(int(size*1.35 + 0.5))
 		}
-		const pad = 8
+		const pad = termPad
 		cols, rows := int((r.W-2*pad)/ts.charW), int((r.H-2*pad)/ts.lineH)
 		if ts.term != nil && cols > 1 && rows > 0 && (cols != screen.Cols || rows != screen.Rows) {
 			ts.term.Resize(cols, rows)
 			p.After(0)
 		}
-		for y, row := range screen.Cells {
+		selA, selB := ts.sel.ordered()
+		for y := range screen.Rows {
+			row := lineAt(top + y)
+			ly := r.Y + pad + float32(y)*ts.lineH
+			// The selection behind the text.
+			if l := trimmed + top + y; ts.sel.active && l >= selA[0] && l <= selB[0] {
+				from, to := 0, max(len(row), screen.Cols)
+				if l == selA[0] {
+					from = selA[1]
+				}
+				if l == selB[0] {
+					to = selB[1] + 1
+				}
+				if to > from {
+					p.Fill(ui.Rect{X: r.X + pad + float32(from)*ts.charW, Y: ly, W: float32(to-from) * ts.charW, H: ts.lineH}, t.Selection, 0)
+				}
+			}
 			var spans []ui.Span
 			start := 0
 			flush := func(end int) {
@@ -215,13 +339,12 @@ func (w *window) terminalView(c *ui.Context, pal *palette) {
 			// Cells go where their columns are: a run's width is the
 			// font's, monospace.
 			x := r.X + pad
-			ly := r.Y + pad + float32(y)*ts.lineH
 			for _, s := range spans {
 				p.RichText(x, ly, 100000, s)
 				x += float32(len([]rune(s.Text))) * ts.charW
 			}
 		}
-		if screen.Cursor && !ts.ended {
+		if screen.Cursor && !ts.ended && ts.scroll == 0 {
 			cr := ui.Rect{X: r.X + pad + float32(screen.CursorX)*ts.charW, Y: r.Y + pad + float32(screen.CursorY)*ts.lineH, W: ts.charW, H: ts.lineH}
 			if focused {
 				p.Fill(cr, t.Text.Alpha(0.55), 1)
@@ -344,4 +467,11 @@ func termColor(c uint32, fg bool, t *ui.Theme) ui.Color {
 		return ui.RGB(g, g, g)
 	}
 	return hex(c & 0xffffff) // a true color
+}
+
+func abs32(v float32) float32 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

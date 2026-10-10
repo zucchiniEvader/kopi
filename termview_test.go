@@ -61,6 +61,35 @@ func TestTerminalPanel(t *testing.T) {
 	if s := ts.term.Screen(); s.Cols == 80 && s.Rows == 24 {
 		t.Errorf("not resized: %dx%d", s.Cols, s.Rows)
 	}
+	// Lines scrolled off the screen: the wheel shows them, and a drag
+	// selects them, which copying copies.
+	tt.Type("for i in $(seq 1 200); do echo row$i; done")
+	tt.Key(0, ui.KeyEnter)
+	wait("the rows", func() bool { return strings.Contains(screenText(ts.term.Screen()), "row200") })
+	box, _ := tt.Find("Terminal")
+	wait("the history", func() bool { h, _ := ts.term.History(); return len(h) > 100 })
+	for range 20 {
+		tt.Scroll(box.X+50, box.Y+50, 0, -40)
+	}
+	tt.Frame()
+	if ts.scroll == 0 {
+		t.Fatal("did not scroll")
+	}
+	ly := box.Y + termPad + ts.lineH/2
+	tt.Press(box.X+termPad+1, ly)
+	tt.Move(box.X+termPad+ts.charW*3+1, ly+ts.lineH)
+	tt.Release(box.X+termPad+ts.charW*3+1, ly+ts.lineH)
+	tt.Command("copy")
+	if got := tt.Clipboard(); !strings.HasPrefix(got, "row") || strings.Count(got, "\n") != 1 {
+		t.Errorf("copied %q", got)
+	}
+	// Typing goes back to the screen.
+	tt.Type(" ")
+	tt.Frame()
+	if ts.scroll != 0 || ts.sel.active {
+		t.Errorf("scroll %d, selection %v", ts.scroll, ts.sel.active)
+	}
+	tt.Key(0, ui.KeyBackspace)
 	tt.Type("exit")
 	tt.Key(0, ui.KeyEnter)
 	wait("the end", func() bool { return ts.ended })
