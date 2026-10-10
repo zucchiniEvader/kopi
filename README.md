@@ -97,6 +97,7 @@ Tool…** installs the `kopi` command.
 | <kbd>⌘D</kbd> / <kbd>⇧⌘L</kbd> | Add the next place of the selection / every place, as cursors |
 | <kbd>⌥⌘↑</kbd> <kbd>⌥⌘↓</kbd>, <kbd>⌥</kbd>-click | Add a cursor above or below / there |
 | <kbd>⌥⌘[</kbd> / <kbd>⌥⌘]</kbd> | Fold / unfold the block at the caret (or its chevron in the gutter) |
+| <kbd>⌃⇧⌘→</kbd> / <kbd>⌃⇧⌘←</kbd> | Expand / shrink the selection |
 | <kbd>F5</kbd> / <kbd>⌃F5</kbd> | Debug / run |
 | <kbd>⇧F5</kbd> / <kbd>⇧⌘F5</kbd> | Stop / restart |
 | <kbd>F9</kbd> | Toggle a breakpoint |

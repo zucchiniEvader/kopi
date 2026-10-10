@@ -294,4 +294,13 @@ func TestRealClangd(t *testing.T) {
 	if c := w.paletteChoices[0]; c.title != "twice" {
 		t.Errorf("workspace symbol %+v", c)
 	}
+	w.paletteOpen = false
+	tt.Frame()
+	// Expanding the selection, by the server's ranges.
+	e.ed.SetSelection(editor.Selection{Anchor: editor.Pos{Line: 3, Col: 15}, Caret: editor.Pos{Line: 3, Col: 15}})
+	e.ed.ExpandSelection()
+	wait("the selection", time.Minute, func() bool { return e.ed.SelectedText() != "" })
+	if got := e.ed.SelectedText(); got != "twice" {
+		t.Errorf("expanded to %q", got)
+	}
 }

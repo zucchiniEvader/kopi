@@ -20,7 +20,7 @@ type serverCaps struct {
 	hover, definition, typeDefinition, implementation, references bool
 	completion, signatureHelp, rename, codeAction                 bool
 	formatting, rangeFormatting, documentSymbol, workspaceSymbol  bool
-	documentHighlight, inlayHint, foldingRange                    bool
+	documentHighlight, inlayHint, foldingRange, selectionRange    bool
 	// completionTriggers are the characters asking for completions as
 	// they are typed, signatureTriggers for the signature;
 	// completionResolve that it tells more of a completion chosen.
@@ -49,6 +49,7 @@ func parseCaps(raw json.RawMessage) serverCaps {
 		DocumentHighlightProvider       json.RawMessage `json:"documentHighlightProvider"`
 		InlayHintProvider               json.RawMessage `json:"inlayHintProvider"`
 		FoldingRangeProvider            json.RawMessage `json:"foldingRangeProvider"`
+		SelectionRangeProvider          json.RawMessage `json:"selectionRangeProvider"`
 		CompletionProvider              *struct {
 			TriggerCharacters []string `json:"triggerCharacters"`
 			ResolveProvider   bool     `json:"resolveProvider"`
@@ -95,6 +96,7 @@ func parseCaps(raw json.RawMessage) serverCaps {
 	out.documentHighlight = provides(c.DocumentHighlightProvider)
 	out.inlayHint = provides(c.InlayHintProvider)
 	out.foldingRange = provides(c.FoldingRangeProvider)
+	out.selectionRange = provides(c.SelectionRangeProvider)
 	if p := c.CompletionProvider; p != nil {
 		out.completion = true
 		out.completionTriggers = p.TriggerCharacters

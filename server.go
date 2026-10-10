@@ -288,6 +288,7 @@ func (w *window) attach(e *editorTab) {
 	ed.OnAcceptCompletion = func(it editor.CompletionItem) { w.resolveCompletion(s, e, it) }
 	ed.OnSignature = func(p editor.Pos, trigger string) { w.signatureAt(s, e, p, trigger) }
 	ed.OnCaret = func(p editor.Pos) { w.caretMoved(s, e, p) }
+	ed.OnSelectionRanges = func(p editor.Pos) { w.selectionRanges(s, e, p) }
 	ed.OnDefinition = func(p editor.Pos) { w.definition(s, e, p) }
 	if e.abs == "" {
 		return
@@ -457,6 +458,7 @@ func initializeParams(root string, options map[string]any) map[string]any {
 				"references":        map[string]any{},
 				"documentHighlight": map[string]any{},
 				"foldingRange":      map[string]any{"lineFoldingOnly": true},
+				"selectionRange":    map[string]any{},
 				"codeAction": map[string]any{
 					"codeActionLiteralSupport": map[string]any{"codeActionKind": map[string]any{"valueSet": []string{
 						"", "quickfix", "refactor", "refactor.extract", "refactor.inline", "refactor.rewrite", "source", "source.organizeImports", "source.fixAll"}}},
@@ -1141,6 +1143,40 @@ func (w *window) foldingRanges(s *langServer, e *editorTab) {
 				ranges = append(ranges, editor.FoldRange{Start: r.StartLine, End: r.EndLine})
 			}
 			e.ed.SetFoldRanges(version, ranges)
+		})
+	}()
+}
+
+// lspSelectionRange is a range around a place, and the one around it.
+type lspSelectionRange struct {
+	Range  lsp.Range          `json:"range"`
+	Parent *lspSelectionRange `json:"parent"`
+}
+
+// selectionRanges asks a server for the ranges around p, to expand the
+// selection to; the editor's own without it.
+func (w *window) selectionRanges(s *langServer, e *editorTab, p editor.Pos) {
+	if s.state != serverReady || !s.caps.selectionRange {
+		e.ed.ExpandWith(nil)
+		return
+	}
+	var res []lspSelectionRange
+	params := map[string]any{"textDocument": lsp.TextDocumentIdentifier{URI: e.uri}, "positions": []lsp.Position{position(e.ed.Buffer(), p)}}
+	done := s.conn.Go(context.Background(), "textDocument/selectionRange", params, &res)
+	go func() {
+		err := <-done
+		w.post(func() {
+			if e.ed == nil {
+				return
+			}
+			var ranges []editor.Range
+			if err == nil && len(res) > 0 {
+				b := e.ed.Buffer()
+				for r := &res[0]; r != nil; r = r.Parent {
+					ranges = append(ranges, editor.Range{From: editorPos(b, r.Range.Start), To: editorPos(b, r.Range.End)})
+				}
+			}
+			e.ed.ExpandWith(ranges)
 		})
 	}()
 }

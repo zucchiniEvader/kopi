@@ -160,6 +160,11 @@ type Editor struct {
 	cursor     int
 	brackets   bracketMatch
 	fold       foldState
+	// OnSelectionRanges, when set, is asked for the ranges around a
+	// place, to expand the selection to, which it gives ExpandWith.
+	OnSelectionRanges func(p Pos)
+	expand            expandState
+	lastExpanded      Selection
 	// foldHover tells the pointer is over the gutter, which shows the
 	// chevrons of the folds open.
 	foldHover bool
@@ -887,6 +892,16 @@ func (ed *Editor) keyDown(m ui.Modifiers, k ui.Key) bool {
 	switch k {
 	case ui.KeyLeft, ui.KeyRight:
 		fwd := k == ui.KeyRight
+		// Ctrl+Shift+Cmd (Shift+Alt off the Mac) expands the selection,
+		// or shrinks it.
+		if expand := ui.Ctrl | ui.Shift | ui.Cmd; mac && m == expand || !mac && m == ui.Shift|ui.Alt {
+			if fwd {
+				ed.ExpandSelection()
+			} else {
+				ed.ShrinkSelection()
+			}
+			return true
+		}
 		switch {
 		case base == 0 && !shift && !ed.sel.Empty():
 			a, z := ed.sel.Range()
