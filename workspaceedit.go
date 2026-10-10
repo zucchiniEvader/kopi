@@ -76,8 +76,19 @@ func (w *window) formatDocument(e *editorTab, then func()) {
 			then()
 		}
 	}
-	s := w.serverOf(e)
-	if e.ed == nil || s == nil || s.state != serverReady {
+	if e.ed == nil {
+		done()
+		return
+	}
+	// The first server formatting, as a linter alongside one that does not.
+	s := w.serverWith(e, func(c serverCaps) bool { return c.formatting || c.rangeFormatting })
+	if s == nil {
+		s = w.serverOf(e)
+	}
+	if s == nil || s.state != serverReady {
+		if then == nil {
+			e.ed.Notice(e.ed.Selection().Caret, "No language server formats "+languageName(e)+".")
+		}
 		done()
 		return
 	}

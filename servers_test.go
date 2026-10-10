@@ -137,9 +137,15 @@ func TestUserServer(t *testing.T) {
 		return string(data) == `[{"strict":true}]`
 	})
 
-	// Disabled, the file goes to no server, and Kopi's takes it again.
+	// pyright disabled, the file goes to ruff, which serves alongside
+	// another but alone too; both disabled, to none.
 	s2 := s
 	s2.LanguageServers = map[string]ServerSetting{"pyright": {Disabled: true}}
+	w.applySettings(s2)
+	if got := w.serverOf(e); got == nil || got.spec.id != "ruff" {
+		t.Errorf("served by %v", got)
+	}
+	s2.LanguageServers = map[string]ServerSetting{"pyright": {Disabled: true}, "ruff": {Disabled: true}}
 	w.applySettings(s2)
 	if got := w.serverOf(e); got != nil {
 		t.Errorf("served by %s", got.spec.id)
@@ -303,4 +309,44 @@ func TestRealClangd(t *testing.T) {
 	if got := e.ed.SelectedText(); got != "twice" {
 		t.Errorf("expanded to %q", got)
 	}
+}
+
+// TestServerAlongside runs a linter beside the server of a language: it
+// hears of the document, its problems show with the server's, and it
+// formats as the server does not.
+func TestServerAlongside(t *testing.T) {
+	dir := testRepo(t)
+	writeFile(t, dir, "a.py", "x=1\n")
+	w, tt := newTestWindow(t, dir)
+	w.posted = make(chan func(), 1024)
+	defer w.stopServers()
+	uri := lsp.FileURI(filepath.Join(w.repo.Root, "a.py"))
+	main := &fakeServer{caps: map[string]any{"hoverProvider": true}}
+	lint := &fakeServer{caps: map[string]any{"documentFormattingProvider": true},
+		answers: map[string]any{"textDocument/formatting": []lsp.TextEdit{{Range: rng(0, 1, 0, 2), NewText: " = "}}}}
+	w.server("pyright").launch = main.launcher()
+	w.server("ruff").launch = lint.launcher()
+	w.openFile("a.py", 0)
+	e := w.activeTab()
+	pump(t, w, tt, "both", func() bool {
+		return hasPrefix(main.heard(), "textDocument/didOpen a.py") && hasPrefix(lint.heard(), "textDocument/didOpen a.py")
+	})
+	if w.serverOf(e) != w.server("pyright") {
+		t.Errorf("served by %s", w.serverOf(e).spec.id)
+	}
+	w.setDiagnostics(w.server("pyright"), uri, []lsp.Diagnostic{{Range: rng(0, 0, 0, 1), Severity: 1, Message: "typed"}})
+	w.setDiagnostics(w.server("ruff"), uri, []lsp.Diagnostic{{Range: rng(0, 1, 0, 2), Severity: 2, Source: "Ruff", Message: "spaces"}})
+	var msgs []string
+	for _, d := range e.ed.Diagnostics() {
+		msgs = append(msgs, d.Message)
+	}
+	if slices.Sort(msgs); !slices.Equal(msgs, []string{"Ruff: spaces", "typed"}) {
+		t.Errorf("diagnostics %q", msgs)
+	}
+	w.formatActive()
+	pump(t, w, tt, "the format", func() bool { return e.ed.Text() == "x = 1\n" })
+	tt.Type("y")
+	pump(t, w, tt, "the changes", func() bool {
+		return hasPrefix(main.heard(), "textDocument/didChange") && hasPrefix(lint.heard(), "textDocument/didChange")
+	})
 }

@@ -141,6 +141,8 @@ apply to open windows as the file changes:
       "pyright": { "command": ["basedpyright-langserver", "--stdio"],
                    "settings": { "basedpyright": { "analysis": { "typeCheckingMode": "strict" } } } },
       "clangd": { "disabled": true },
+      "eslint": { "command": ["vscode-eslint-language-server", "--stdio"],
+                  "languages": ["javascript", "typescript"], "alongside": true },
       "my-server": { "command": ["my-server", "--stdio"], "languages": ["foo"] }
     }
   }
@@ -149,7 +151,10 @@ apply to open windows as the file changes:
 
 A server of `languageServers` changes Kopi's of that ID (its `command`,
 `initializationOptions`, `settings`, `languages`), or, with a new ID, a
-`command` and `languages`, serves those languages before Kopi's. The IDs of
+`command` and `languages`, serves those languages before Kopi's; one
+`alongside` serves beside the server of its languages, as Ruff beside
+pyright: its problems show with the server's, its code actions with
+the server's, and it formats when the server does not. The IDs of
 the languages are VS Code's (`python`, `typescriptreact`, `shellscript`…).
 
 A work tree's `.vscode/settings.json` goes over them: `editor.tabSize`,

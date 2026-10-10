@@ -52,6 +52,10 @@ type serverSpec struct {
 	install  string
 	// logPath is the file of the server's log for a repository.
 	logPath func(root string) string
+	// alongside serves its languages beside the server of each, as a
+	// linter does: its problems, code actions and formatting, not its
+	// hovers or completions; missing, it says nothing.
+	alongside bool
 	// ready runs once the server is initialized, with the plugins it
 	// loaded; failed once it could not start. restart reports whether
 	// settings changed call for the server to start again.
@@ -230,10 +234,44 @@ func (w *window) server(id string) *langServer {
 }
 
 // serverOf returns the server of the language of a tab's document, nil
-// for none.
+// for none: the first not alongside others, else the first.
 func (w *window) serverOf(e *editorTab) *langServer {
+	var first *langServer
 	for _, s := range w.servers() {
-		if !s.disabled && s.spec.serves(e) {
+		if s.disabled || !s.spec.serves(e) {
+			continue
+		}
+		if !s.spec.alongside {
+			return s
+		}
+		if first == nil {
+			first = s
+		}
+	}
+	return first
+}
+
+// serversOf returns the servers of a tab's document: its server, then
+// those alongside it.
+func (w *window) serversOf(e *editorTab) []*langServer {
+	main := w.serverOf(e)
+	if main == nil {
+		return nil
+	}
+	out := []*langServer{main}
+	for _, s := range w.servers() {
+		if s != main && !s.disabled && s.spec.alongside && s.spec.serves(e) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// serverWith returns the first server of a tab's document, running, that
+// does what can says; nil for none.
+func (w *window) serverWith(e *editorTab, can func(c serverCaps) bool) *langServer {
+	for _, s := range w.serversOf(e) {
+		if s.state == serverReady && can(s.caps) {
 			return s
 		}
 	}
@@ -281,7 +319,11 @@ func (w *window) attach(e *editorTab) {
 	}
 	ed := e.ed
 	if e.abs != "" {
-		ed.OnEdit = func(a, z editor.Pos, text string) { w.didChange(s, e, a, z, text) }
+		ed.OnEdit = func(a, z editor.Pos, text string) {
+			for _, s := range w.serversOf(e) {
+				w.didChange(s, e, a, z, text)
+			}
+		}
 	}
 	ed.OnHover = func(p editor.Pos) { w.hover(s, e, p) }
 	ed.OnComplete = func(p editor.Pos, trigger string) { w.complete(s, e, p, trigger) }
@@ -293,8 +335,12 @@ func (w *window) attach(e *editorTab) {
 	if e.abs == "" {
 		return
 	}
-	w.start(s)
-	w.didOpen(s, e)
+	for _, s := range w.serversOf(e) {
+		if s.launch != nil {
+			w.start(s)
+			w.didOpen(s, e)
+		}
+	}
 	w.applyDiagnostics(e)
 }
 
@@ -318,6 +364,9 @@ func (w *window) start(s *langServer) {
 					s.state, s.status, s.detail, s.conn = serverFailed, "Unavailable", err.Error(), nil
 					if isNotInstalled(err) {
 						s.status = "Not installed"
+						if s.spec.alongside {
+							s.status = "" // a linter missing says nothing
+						}
 					}
 					if s.spec.failed != nil {
 						s.spec.failed(w, err)
@@ -359,7 +408,7 @@ func (w *window) start(s *langServer) {
 			s.caps = parseCaps(init.Capabilities)
 			s.legend = s.caps.legend
 			for _, e := range w.editors {
-				if e.ed != nil && e.abs != "" && w.serverOf(e) == s {
+				if e.ed != nil && e.abs != "" && slices.Contains(w.serversOf(e), s) {
 					w.didOpen(s, e)
 				}
 			}
@@ -678,16 +727,16 @@ var semanticDelay = 300 * time.Millisecond
 
 // didSave and didClose tell the server of a document saved or closed.
 func (w *window) didSave(e *editorTab) {
-	if s := w.serverOf(e); s != nil && s.state == serverReady {
-		if _, ok := s.docs[e.uri]; ok {
+	for _, s := range w.serversOf(e) {
+		if _, ok := s.docs[e.uri]; ok && s.state == serverReady {
 			s.conn.Notify("textDocument/didSave", lsp.DidSaveTextDocumentParams{TextDocument: lsp.TextDocumentIdentifier{URI: e.uri}})
 		}
 	}
 }
 
 func (w *window) didClose(e *editorTab) {
-	if s := w.serverOf(e); s != nil && s.state == serverReady {
-		if _, ok := s.docs[e.uri]; ok {
+	for _, s := range w.serversOf(e) {
+		if _, ok := s.docs[e.uri]; ok && s.state == serverReady {
 			delete(s.docs, e.uri)
 			s.conn.Notify("textDocument/didClose", lsp.DidCloseTextDocumentParams{TextDocument: lsp.TextDocumentIdentifier{URI: e.uri}})
 		}
@@ -762,17 +811,23 @@ func addErrors(m map[string]int, rel string, n int) {
 
 // applyDiagnostics shows the problems the server found in an editor.
 func (w *window) applyDiagnostics(e *editorTab) {
-	s := w.serverOf(e)
-	if e.ed == nil || s == nil {
+	servers := w.serversOf(e)
+	if e.ed == nil || len(servers) == 0 {
 		return
 	}
 	b := e.ed.Buffer()
 	var out []editor.Diagnostic
-	for _, d := range s.diags[e.uri] {
-		out = append(out, editor.Diagnostic{
-			From: editorPos(b, d.Range.Start), To: editorPos(b, d.Range.End),
-			Severity: editor.Severity(max(d.Severity, 1)), Message: d.Message,
-		})
+	for _, s := range servers {
+		for _, d := range s.diags[e.uri] {
+			msg := d.Message
+			if s.spec.alongside && d.Source != "" {
+				msg = d.Source + ": " + msg
+			}
+			out = append(out, editor.Diagnostic{
+				From: editorPos(b, d.Range.Start), To: editorPos(b, d.Range.End),
+				Severity: editor.Severity(max(d.Severity, 1)), Message: msg,
+			})
+		}
 	}
 	e.ed.SetDiagnostics(out)
 }

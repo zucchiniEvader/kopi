@@ -24,6 +24,8 @@ type ServerSetting struct {
 	Options   map[string]any `json:"initializationOptions,omitempty"`
 	Settings  map[string]any `json:"settings,omitempty"`
 	Disabled  bool           `json:"disabled,omitempty"`
+	// Alongside serves the languages beside their server, as a linter.
+	Alongside bool `json:"alongside,omitempty"`
 }
 
 // errNotInstalled tells that none of a server's commands was found.
@@ -134,6 +136,8 @@ var catalog = []*serverSpec{
 		[]string{"typescript-language-server", "--stdio"}, []string{"vtsls", "--stdio"}),
 	stdio("pyright", "Python", []string{"python"}, "npm install -g pyright",
 		[]string{"basedpyright-langserver", "--stdio"}, []string{"pyright-langserver", "--stdio"}, []string{"pylsp"}),
+	alongside(stdio("ruff", "Ruff", []string{"python"}, "pip install ruff",
+		[]string{"ruff", "server"})),
 	stdio("rust-analyzer", "Rust", []string{"rust"}, "rustup component add rust-analyzer",
 		[]string{"rust-analyzer"}),
 	stdio("clangd", "C/C++", []string{"c", "cpp", "objective-c", "objective-cpp", "cuda-cpp"}, "brew install llvm, or Xcode's command line tools",
@@ -194,9 +198,16 @@ var catalog = []*serverSpec{
 		[]string{"texlab"}),
 }
 
+// alongside makes a server serve beside the server of its languages.
+func alongside(sp *serverSpec) *serverSpec {
+	sp.alongside = true
+	return sp
+}
+
 // userSpec is a server of the settings' own, by its ID.
 func userSpec(id string, set ServerSetting) *serverSpec {
 	sp := stdio(id, id, set.Languages, "", set.Command)
+	sp.alongside = set.Alongside
 	return sp
 }
 
@@ -206,9 +217,12 @@ func userSpec(id string, set ServerSetting) *serverSpec {
 func specsFor(s Settings) []*serverSpec {
 	var out []*serverSpec
 	for _, sp := range append(slices.Clone(serverSpecs), catalog...) {
-		if set, ok := s.LanguageServers[sp.id]; ok && len(set.Languages) > 0 {
+		if set, ok := s.LanguageServers[sp.id]; ok && (len(set.Languages) > 0 || set.Alongside != sp.alongside) {
 			c := *sp
-			c.languages = set.Languages
+			if len(set.Languages) > 0 {
+				c.languages = set.Languages
+			}
+			c.alongside = c.alongside || set.Alongside
 			sp = &c
 		}
 		out = append(out, sp)

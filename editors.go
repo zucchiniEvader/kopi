@@ -323,7 +323,7 @@ func (w *window) saveEditor() {
 			go mygo.Dialog.Error("Could not save "+e.title(), err.Error())
 		}
 	}
-	if s := w.serverOf(e); *w.fileSettings(e).FormatOnSave && e.abs != "" && s != nil && s.state == serverReady && s.caps.formatting {
+	if s := w.serverWith(e, func(c serverCaps) bool { return c.formatting }); *w.fileSettings(e).FormatOnSave && e.abs != "" && s != nil {
 		w.formatDocument(e, save)
 		return
 	}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strings"
+	"sync"
 
 	"github.com/zucchiniEvader/kopi/internal/lsp"
 )
@@ -30,72 +32,101 @@ type lspCommand struct {
 	Arguments []any  `json:"arguments"`
 }
 
-// codeActions asks the server of the document shown for its code actions
-// at the selection, of kinds only, none for all; and offers them, or does
-// the first with apply.
+// codeActions asks the servers of the document shown, its own and those
+// alongside, for their code actions at the selection, of kinds only, none
+// for all; and offers them, or does the first with apply.
 func (w *window) codeActions(only []string, apply bool) {
 	what := "code actions"
 	if len(only) > 0 {
 		what = only[0]
 	}
-	e, s := w.activeServer(what, func(c serverCaps) bool { return c.codeAction })
+	e, _ := w.activeServer(what, func(c serverCaps) bool { return true })
 	if e == nil {
+		return
+	}
+	var servers []*langServer
+	for _, s := range w.serversOf(e) {
+		if s.state == serverReady && s.caps.codeAction {
+			servers = append(servers, s)
+		}
+	}
+	caret := e.ed.Selection().Caret
+	if len(servers) == 0 {
+		e.ed.Notice(caret, w.serverOf(e).spec.title()+" gives no "+what+".")
 		return
 	}
 	b := e.ed.Buffer()
 	a, z := e.ed.Selection().Range()
 	r := lsp.Range{Start: position(b, a), End: position(b, z)}
-	// The problems the selection touches.
-	var diags []lsp.Diagnostic
-	for _, d := range s.diags[e.uri] {
-		if !lspBefore(d.Range.End, r.Start) && !lspBefore(r.End, d.Range.Start) {
-			diags = append(diags, d)
-		}
+	type offer struct {
+		s  *langServer
+		ca codeAction
 	}
-	ctx := map[string]any{"diagnostics": orEmpty(diags), "triggerKind": 1}
-	if len(only) > 0 {
-		ctx["only"] = only
-	}
-	params := map[string]any{"textDocument": lsp.TextDocumentIdentifier{URI: e.uri}, "range": r, "context": ctx}
-	var raw []json.RawMessage
-	done := s.conn.Go(context.Background(), "textDocument/codeAction", params, &raw)
-	gen := s.gen
-	caret := a
-	go func() {
-		if err := <-done; err != nil {
-			return
-		}
-		var actions []codeAction
-		for _, it := range raw {
-			var ca codeAction
-			if json.Unmarshal(it, &ca) == nil && ca.Title != "" && ca.Disabled == nil {
-				ca.raw = it
-				actions = append(actions, ca)
+	results := make([][]offer, len(servers))
+	var wg sync.WaitGroup
+	for i, s := range servers {
+		// The problems the selection touches, of that server.
+		var diags []lsp.Diagnostic
+		for _, d := range s.diags[e.uri] {
+			if !lspBefore(d.Range.End, r.Start) && !lspBefore(r.End, d.Range.Start) {
+				diags = append(diags, d)
 			}
 		}
+		ctx := map[string]any{"diagnostics": orEmpty(diags), "triggerKind": 1}
+		if len(only) > 0 {
+			ctx["only"] = only
+		}
+		params := map[string]any{"textDocument": lsp.TextDocumentIdentifier{URI: e.uri}, "range": r, "context": ctx}
+		var raw []json.RawMessage
+		done := s.conn.Go(context.Background(), "textDocument/codeAction", params, &raw)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := <-done; err != nil {
+				return
+			}
+			for _, it := range raw {
+				var ca codeAction
+				if json.Unmarshal(it, &ca) == nil && ca.Title != "" && ca.Disabled == nil {
+					ca.raw = it
+					results[i] = append(results[i], offer{s, ca})
+				}
+			}
+		}()
+	}
+	go func() {
+		wg.Wait()
+		var offers []offer
+		for _, list := range results {
+			offers = append(offers, list...)
+		}
 		// The preferred, as the fix of a problem, first.
-		slices.SortStableFunc(actions, func(x, y codeAction) int {
+		slices.SortStableFunc(offers, func(x, y offer) int {
 			switch {
-			case x.IsPreferred && !y.IsPreferred:
+			case x.ca.IsPreferred && !y.ca.IsPreferred:
 				return -1
-			case y.IsPreferred && !x.IsPreferred:
+			case y.ca.IsPreferred && !x.ca.IsPreferred:
 				return 1
 			}
 			return 0
 		})
 		w.post(func() {
-			if s.gen != gen || e.ed == nil {
+			if e.ed == nil {
 				return
 			}
 			switch {
-			case len(actions) == 0:
+			case len(offers) == 0:
 				e.ed.Notice(caret, "No "+what+" here.")
 			case apply:
-				w.runCodeAction(s, e, actions[0])
+				w.runCodeAction(offers[0].s, e, offers[0].ca)
 			default:
-				choices := make([]command, len(actions))
-				for i, ca := range actions {
-					choices[i] = command{title: ca.Title, hint: ca.Kind, run: func() { w.runCodeAction(s, e, ca) }}
+				choices := make([]command, len(offers))
+				for i, o := range offers {
+					hint := o.ca.Kind
+					if len(servers) > 1 {
+						hint = strings.TrimSpace(hint + " · " + o.s.spec.title())
+					}
+					choices[i] = command{title: o.ca.Title, hint: hint, run: func() { w.runCodeAction(o.s, e, o.ca) }}
 				}
 				w.choose("Code actions", choices)
 			}
