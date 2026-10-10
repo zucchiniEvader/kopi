@@ -151,6 +151,7 @@ type Editor struct {
 	OnCaret    func(p Pos)
 	lastCaret  Pos
 	highlights []Range
+	brackets   bracketMatch
 
 	diags []Diagnostic
 	hover hoverState
@@ -568,7 +569,9 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			sl := ed.shape(line)
 			ed.paintMarkLine(p, i, sl, text, textX, y)
 			ed.maxW = max(ed.maxW, sl.width)
+			ed.paintIndentGuides(p, i, textX, y)
 			ed.paintHighlights(p, i, sl, textX, y)
+			ed.paintBracketMatch(p, i, sl, textX, y)
 			ed.paintMatches(p, i, sl, textX, y)
 			if !ed.sel.Empty() && i >= a.Line && i <= z.Line {
 				x0, x1 := float32(0), sl.width
@@ -865,6 +868,13 @@ func (ed *Editor) keyDown(m ui.Modifiers, k ui.Key) bool {
 			ed.vertical(-1, shift)
 		case base == 0:
 			ed.vertical(1, shift)
+		case base == ui.Alt && !ed.ReadOnly:
+			// Alt moves the lines, Shift+Alt copies them.
+			if shift {
+				ed.copyLines(!up)
+			} else {
+				ed.moveLines(up)
+			}
 		case mac && base == ui.Super && up:
 			ed.moveTo(Pos{}, shift)
 		case mac && base == ui.Super:
@@ -990,6 +1000,10 @@ func (ed *Editor) shortcut(m ui.Modifiers, k ui.Key) bool {
 		ed.redo()
 	case m == ui.Shift|ui.Alt && k == ui.KeyA:
 		ed.toggleBlockComment()
+	case m == ui.Cmd|ui.Shift && k == ui.KeyK && !ed.ReadOnly:
+		ed.deleteLines()
+	case m == ui.Cmd|ui.Shift && k == ui.KeyBackslash:
+		ed.goToBracket()
 	case mac && m == ui.Ctrl:
 		// The Emacs keys of macOS's text views.
 		c, b := ed.sel.Caret, ed.buf
