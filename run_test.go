@@ -143,11 +143,18 @@ func TestRunWithoutMain(t *testing.T) {
 	if !strings.Contains(w.runText(), "Main.java has no main method.") {
 		t.Errorf("text %q", w.runText())
 	}
-	w.openFile("main.go", 0)
+	w.openFile("docs/long.txt", 0)
 	w.runStart()
-	if !strings.Contains(w.runText(), "Open a Java file with a main method") {
+	if !strings.Contains(w.runText(), "Open a file to run it") {
 		t.Errorf("text %q", w.runText())
 	}
+	// A Go file runs its package.
+	w.openFile("main.go", 0)
+	w.runStart()
+	if !strings.Contains(w.runText(), "Running go run "+w.repo.Root) {
+		t.Errorf("text %q", w.runText())
+	}
+	w.runStop()
 	// launch.json, written for the file shown.
 	w.openFile("src/main/java/com/example/App.java", 0)
 	w.openLaunchConfig()

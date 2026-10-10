@@ -60,11 +60,13 @@ type runState struct {
 	// waiting tells a run waiting for the language server; next is the
 	// one to start once the program running stops.
 	waiting bool
-	pending *pendingRun
-	next    *pendingRun
-	last    *pendingRun // the run last asked for, which Restart runs again
-	loaded  bool        // launch.json was read for the Run and Debug tab
-	gen     int
+	// keepLines keeps the panel's lines as a run starts, after its task.
+	keepLines bool
+	pending   *pendingRun
+	next      *pendingRun
+	last      *pendingRun // the run last asked for, which Restart runs again
+	loaded    bool        // launch.json was read for the Run and Debug tab
+	gen       int
 }
 
 // pendingRun is a configuration to run, or to debug.
@@ -169,9 +171,25 @@ func (w *window) launchConfig(cfg launch.Config, debug bool) {
 	}
 	r.gen++
 	gen := r.gen
-	r.lines, r.waiting, r.status, r.pending = nil, false, "", nil
-	r.last = &pendingRun{cfg, debug}
+	if !r.keepLines {
+		r.lines = nil
+	}
+	r.keepLines, r.waiting, r.status, r.pending = false, false, "", nil
+	if r.last == nil || r.last.cfg.Name != cfg.Name || cfg.PreLaunchTask != "" {
+		r.last = &pendingRun{cfg, debug}
+	}
 	r.list.ScrollToEnd()
+	// Programs of other languages than Java's, or the current file of one.
+	if cfg.Type == "" && cfg.Name == currentFile && w.currentJavaFile() == nil {
+		if c, ok := w.currentFileConfig(); ok {
+			cfg = c
+		}
+	}
+	if cfg.Type != "" && cfg.Type != "java" {
+		w.saveForRun()
+		w.launchOther(cfg, debug)
+		return
+	}
 	file := ""
 	if e := w.currentJavaFile(); e != nil {
 		file = e.abs
@@ -180,7 +198,7 @@ func (w *window) launchConfig(cfg launch.Config, debug bool) {
 	resolved, err := cfg.Resolve(launch.Vars{Workspace: w.repo.Root, File: file, Home: home})
 	if err != nil {
 		if cfg.Name == currentFile && file == "" {
-			w.say(lineFail, "Open a Java file with a main method to run it, or add a configuration to %s.", launch.File)
+			w.say(lineFail, "Open a file to run it, as of Java with a main method, Go, Python or JavaScript, or add a configuration to %s.", launch.File)
 		} else {
 			w.say(lineFail, "%s: %v", cfg.Name, err)
 		}
@@ -208,7 +226,14 @@ func (w *window) launchConfig(cfg launch.Config, debug bool) {
 		return
 	}
 	if resolved.PreLaunchTask != "" {
-		w.say(lineInfo, "preLaunchTask %q does not run: tasks are not supported yet.", resolved.PreLaunchTask)
+		// The task first, its output kept, then this again without it.
+		without := cfg
+		without.PreLaunchTask = ""
+		w.runTask(resolved.PreLaunchTask, func() {
+			r.keepLines = true
+			w.launchConfig(without, debug)
+		})
+		return
 	}
 	// The language server builds what is saved.
 	for _, e := range w.editors {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -25,11 +26,13 @@ import (
 // only.
 type debugState struct {
 	client *dap.Client
-	gen    int
-	name   string
-	paused bool
-	reason string
-	thread int
+	// adapter stops the debug adapter Kopi started, nil for jdtls's.
+	adapter io.Closer
+	gen     int
+	name    string
+	paused  bool
+	reason  string
+	thread  int
 	// The threads, the frames of the thread stopped, the one chosen, its
 	// scopes, the variables loaded by their reference, and those open.
 	threads []dap.Thread
@@ -303,7 +306,7 @@ func (w *window) setBreakpoints(path string, lines []int) {
 // debugAttach connects an editor to the breakpoints of its file, and to
 // the lenses running and debugging its main method.
 func (w *window) debugAttach(e *editorTab) {
-	if e.ed == nil || e.abs == "" || !strings.HasSuffix(e.abs, ".java") {
+	if e.ed == nil || e.abs == "" {
 		return
 	}
 	e.ed.SetBreakpoints(w.breakpoints[e.abs])
@@ -550,7 +553,10 @@ func (w *window) debugEnd() {
 	if d.client != nil {
 		d.client.Close()
 	}
-	d.client = nil
+	if d.adapter != nil {
+		go d.adapter.Close()
+	}
+	d.client, d.adapter = nil, nil
 	d.gen++
 	w.debugResumed()
 	d.threads = nil

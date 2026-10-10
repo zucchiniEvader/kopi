@@ -1,6 +1,6 @@
-// Package launch reads the Java launch configurations of VS Code's
-// .vscode/launch.json, as its Java debugger takes them, and expands their
-// variables.
+// Package launch reads the launch configurations of VS Code's
+// .vscode/launch.json, those of Java as its Java debugger takes them,
+// others as their debug adapters do, and expands their variables.
 package launch
 
 import (
@@ -17,9 +17,14 @@ import (
 // File is where a work tree keeps its launch configurations.
 const File = ".vscode/launch.json"
 
-// Config is a configuration launching a Java program.
+// Config is a configuration launching a program: of Java, by its fields;
+// of another type, by Program, Args, Cwd and Env, and Raw, all of it, for
+// its debug adapter.
 type Config struct {
+	Type        string
 	Name        string
+	Program     string
+	Raw         map[string]any
 	MainClass   string
 	ProjectName string
 	Args        []string
@@ -44,6 +49,7 @@ type raw struct {
 	Type          string            `json:"type"`
 	Request       string            `json:"request"`
 	Name          string            `json:"name"`
+	Program       string            `json:"program"`
 	MainClass     string            `json:"mainClass"`
 	ProjectName   string            `json:"projectName"`
 	Args          json.RawMessage   `json:"args"`
@@ -57,7 +63,7 @@ type raw struct {
 	PreLaunchTask string            `json:"preLaunchTask"`
 }
 
-// Load reads the Java launch configurations of the work tree at root:
+// Load reads the launch configurations of the work tree at root:
 // none, without an error, when it has no launch.json.
 func Load(root string) ([]Config, error) {
 	data, err := os.ReadFile(filepath.Join(root, File))
@@ -71,20 +77,27 @@ func Load(root string) ([]Config, error) {
 }
 
 // Parse reads launch.json's text, JSON with comments and trailing commas,
-// and returns its configurations launching Java programs.
+// and returns its configurations launching programs: not those attaching
+// to one.
 func Parse(data []byte) ([]Config, error) {
 	var file struct {
-		Configurations []raw `json:"configurations"`
+		Configurations []json.RawMessage `json:"configurations"`
 	}
 	if err := json.Unmarshal(StripJSONC(data), &file); err != nil {
 		return nil, fmt.Errorf("%s: %w", File, err)
 	}
 	var out []Config
-	for _, r := range file.Configurations {
-		if r.Type != "java" || r.Request != "" && r.Request != "launch" {
+	for _, data := range file.Configurations {
+		var r raw
+		var all map[string]any
+		if json.Unmarshal(data, &r) != nil || json.Unmarshal(data, &all) != nil {
+			continue
+		}
+		if r.Type == "" || r.Request != "" && r.Request != "launch" {
 			continue
 		}
 		c := Config{
+			Type: r.Type, Program: r.Program, Raw: all,
 			Name: r.Name, MainClass: r.MainClass, ProjectName: r.ProjectName, Cwd: r.Cwd,
 			Env: r.Env, EnvFile: r.EnvFile, ClassPaths: r.ClassPaths, ModulePaths: r.ModulePaths,
 			JavaExec: r.JavaExec, PreLaunchTask: r.PreLaunchTask,
@@ -98,6 +111,9 @@ func Parse(data []byte) ([]Config, error) {
 		}
 		if c.Name == "" {
 			c.Name = c.MainClass
+		}
+		if c.Name == "" {
+			c.Name = filepath.Base(c.Program)
 		}
 		out = append(out, c)
 	}
@@ -250,6 +266,12 @@ func (c Config) Resolve(v Vars) (Config, error) {
 	}
 	r := c
 	r.MainClass = exp(c.MainClass)
+	if c.Program != "" {
+		r.Program = abs(exp(c.Program))
+	}
+	if c.Raw != nil {
+		r.Raw = expandAll(c.Raw, exp).(map[string]any)
+	}
 	r.Args, r.VMArgs = list(c.Args), list(c.VMArgs)
 	r.Cwd = abs(exp(c.Cwd))
 	if r.Cwd == "" {
@@ -277,6 +299,28 @@ func (c Config) Resolve(v Vars) (Config, error) {
 		r.Env[k] = exp(val)
 	}
 	return r, err
+}
+
+// expandAll returns v with the variables of its strings expanded, through
+// its maps and lists.
+func expandAll(v any, exp func(string) string) any {
+	switch x := v.(type) {
+	case string:
+		return exp(x)
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = expandAll(e, exp)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			out[k] = expandAll(e, exp)
+		}
+		return out
+	}
+	return v
 }
 
 // ParseEnvFile reads KEY=value lines, as .env files write them: comments

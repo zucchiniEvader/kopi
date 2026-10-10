@@ -33,11 +33,14 @@ tree's Git changes.
 - **Go**: gopls, found on the machine or installed with Go once: problems as
   you type, hovers, go to definition into the standard library's and the
   modules' sources.
-- **Run and debug**: `.vscode/launch.json` as VS Code's Java debugger reads
-  it, or the Java file shown; Run | Debug on main methods; a Run and Debug
-  tab with breakpoints, variables and the call stack, through Microsoft's
-  java-debug; the program's input and output in a panel (<kbd>⌘J</kbd>),
-  its stack traces linked to their sources.
+- **Run and debug**: `.vscode/launch.json` as VS Code reads it, with the
+  `preLaunchTask` of `tasks.json`, or the file shown: Java through
+  Microsoft's java-debug, with Run | Debug on main methods; Go through
+  `dlv dap`, Python through debugpy, and C, C++, Rust or Swift programs
+  through `lldb-dap`; Node, TypeScript, shell, Ruby, PHP and other scripts
+  run. A Run and Debug tab with breakpoints, variables and the call stack;
+  the program's input and output in a panel (<kbd>⌘J</kbd>), its Java
+  stack traces linked to their sources.
 - **Updates**: a new version, from the releases here, checked once a day and
   from Check for Updates…, installed in place with its notes from
   `CHANGELOG.md`.

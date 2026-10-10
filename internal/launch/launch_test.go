@@ -35,7 +35,8 @@ func TestParseAndResolve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(configs) != 2 || configs[0].Name != "App" || configs[1].Name != "Current File" {
+	// Of every type, but attaching.
+	if len(configs) != 3 || configs[0].Name != "App" || configs[1].Type != "node" || configs[2].Name != "Current File" {
 		t.Fatalf("configs %+v", configs)
 	}
 	c := configs[0]
@@ -60,10 +61,10 @@ func TestParseAndResolve(t *testing.T) {
 		t.Errorf("class paths %q", got)
 	}
 	// ${file} needs a file.
-	if _, err := configs[1].Resolve(Vars{Workspace: root}); err == nil {
+	if _, err := configs[2].Resolve(Vars{Workspace: root}); err == nil {
 		t.Error("${file} without a file")
 	}
-	r, err = configs[1].Resolve(Vars{Workspace: root, File: filepath.Join(root, "src", "App.java")})
+	r, err = configs[2].Resolve(Vars{Workspace: root, File: filepath.Join(root, "src", "App.java")})
 	if err != nil || r.MainClass != filepath.Join(root, "src", "App.java") {
 		t.Errorf("main %q, %v", r.MainClass, err)
 	}
