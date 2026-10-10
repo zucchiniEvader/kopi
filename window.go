@@ -319,6 +319,13 @@ func (w *window) applySettings(s Settings) {
 	old := w.settings
 	w.settings = s
 	w.syncServers(old, s)
+	if old.InlayHints != s.InlayHints {
+		for _, e := range w.editors {
+			if ls := w.serverOf(e); ls != nil {
+				w.inlayHints(ls, e)
+			}
+		}
+	}
 }
 
 // background runs fn on a goroutine of its own, or at once in tests,

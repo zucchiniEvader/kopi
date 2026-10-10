@@ -222,6 +222,11 @@ func TestRealClangd(t *testing.T) {
 	if !cl.caps.definition || !cl.caps.completion || !cl.caps.rename {
 		t.Errorf("caps %+v", cl.caps)
 	}
+	// The name of twice's parameter, in the text.
+	wait("inlay hints", time.Minute, func() bool { return len(e.ed.InlayHints(3)) > 0 })
+	if h := e.ed.InlayHints(3)[0]; !strings.Contains(h.Label, "x") || h.Pos.Col != 18 {
+		t.Errorf("hint %+v", h)
+	}
 	wait("diagnostics", time.Minute, func() bool { return len(e.ed.Diagnostics()) > 0 })
 	if d := e.ed.Diagnostics()[0]; d.From.Line != 4 || !strings.Contains(d.Message, "missing") {
 		t.Errorf("diagnostic %+v", d)

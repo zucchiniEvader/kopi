@@ -21,7 +21,8 @@ tree's Git changes.
   and its indent, as the file indents or its `.editorconfig` says.
 - **Language servers**: problems, hovers, completions with snippets,
   signatures, go to definition, references, symbols, rename, formatting,
-  quick fixes and semantic colors from the servers on the machine (the PATH of the login shell):
+  quick fixes, inlay hints, folding and semantic colors from the servers
+  on the machine (the PATH of the login shell):
   typescript-language-server, pyright, rust-analyzer, clangd, the
   servers of HTML, CSS and JSON, yaml-language-server, bash-language-server
   and some 20 more, or one of `languageServers`. The status bar says when a
@@ -132,6 +133,7 @@ apply to open windows as the file changes:
     "trimTrailingWhitespace": false, // as files save, unless .editorconfig
     "insertFinalNewline": false,     // says otherwise
     "formatOnSave": false,         // by the file's language server
+    "inlayHints": true,            // the names and types it shows in the text
     "files.associations": { "*.tmpl": "html" },
     "languages": {                 // over the settings above, by language
       "python": { "tabSize": 4, "formatOnSave": true },

@@ -52,6 +52,9 @@ func (w *window) commands() []command {
 		{title: "Organize Imports", keys: "⇧⌥O", run: w.organizeImports},
 		{title: "Fold", hint: "The block at the caret", keys: "⌥⌘[", run: func() { w.withText(func(e *editorTab) { e.ed.Fold() }) }},
 		{title: "Unfold", keys: "⌥⌘]", run: func() { w.withText(func(e *editorTab) { e.ed.Unfold() }) }},
+		{title: "Toggle Inlay Hints", hint: "The names and types the language server shows in the text", run: func() {
+			cfg.Update(func(s *Settings) { s.InlayHints = !s.InlayHints })
+		}},
 		{title: "Fold All", run: func() { w.withText(func(e *editorTab) { e.ed.FoldAll() }) }},
 		{title: "Unfold All", run: func() { w.withText(func(e *editorTab) { e.ed.UnfoldAll() }) }},
 		{title: "Close Tab", keys: "⌘W", run: w.closeTab},

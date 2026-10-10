@@ -35,8 +35,11 @@ type Settings struct {
 	// is saved, unless its .editorconfig says otherwise.
 	TrimTrailingWhitespace bool `json:"trimTrailingWhitespace"`
 	InsertFinalNewline     bool `json:"insertFinalNewline"`
-	// FormatOnSave has the language server format a file as it is saved.
+	// FormatOnSave has the language server format a file as it is saved;
+	// InlayHints shows the hints it gives in the text, as the names of
+	// parameters.
 	FormatOnSave bool `json:"formatOnSave"`
+	InlayHints   bool `json:"inlayHints"`
 	// LanguageServers change Kopi's language servers, or add others, by
 	// their IDs; FilesAssociations take files, by patterns of their names,
 	// as of languages, by their IDs.
@@ -50,6 +53,7 @@ type Settings struct {
 func defaultSettings() Settings {
 	return Settings{
 		CodeFontSize:    13,
+		InlayHints:      true,
 		SidebarPosition: "left",
 		IconTheme:       "material",
 		Theme:           "system",

@@ -471,6 +471,7 @@ func initializeParams(root string, options map[string]any) map[string]any {
 				"workspaceFolders": true,
 				"workspaceEdit":    map[string]any{"documentChanges": true},
 				"symbol":           map[string]any{},
+				"inlayHint":        map[string]any{"refreshSupport": true},
 				"executeCommand":   map[string]any{},
 				"applyEdit":        true,
 			},
@@ -508,6 +509,7 @@ func initializeParams(root string, options map[string]any) map[string]any {
 				"documentHighlight": map[string]any{},
 				"foldingRange":      map[string]any{"lineFoldingOnly": true},
 				"selectionRange":    map[string]any{},
+				"inlayHint":         map[string]any{},
 				"codeAction": map[string]any{
 					"codeActionLiteralSupport": map[string]any{"codeActionKind": map[string]any{"valueSet": []string{
 						"", "quickfix", "refactor", "refactor.extract", "refactor.inline", "refactor.rewrite", "source", "source.organizeImports", "source.fixAll"}}},
@@ -636,6 +638,18 @@ func (h *serverHandler) Request(method string, params json.RawMessage) (any, err
 		}
 		return out, nil
 	case "client/registerCapability", "client/unregisterCapability", "window/workDoneProgress/create", "window/showMessageRequest":
+		return nil, nil
+	case "workspace/inlayHint/refresh":
+		w, s, gen := h.w, h.s, h.gen
+		w.post(func() {
+			if s.gen == gen {
+				for _, e := range w.editors {
+					if w.serverOf(e) == s {
+						w.inlayHints(s, e)
+					}
+				}
+			}
+		})
 		return nil, nil
 	case "workspace/semanticTokens/refresh":
 		w, s, gen := h.w, h.s, h.gen
@@ -1072,6 +1086,7 @@ func decodeTokens(data []uint32, legend semanticLegend, b *editor.Buffer) [][]hi
 // which color it.
 func (w *window) semantic(s *langServer, e *editorTab) {
 	w.foldingRanges(s, e)
+	w.inlayHints(s, e)
 	if s.state != serverReady || e.ed == nil || len(s.legend.TokenTypes) == 0 {
 		return
 	}
@@ -1234,4 +1249,68 @@ func (w *window) selectionRanges(s *langServer, e *editorTab, p editor.Pos) {
 			e.ed.ExpandWith(ranges)
 		})
 	}()
+}
+
+// inlayHints asks a server for the hints of a document, shown in its
+// text, unless the settings hide them.
+func (w *window) inlayHints(s *langServer, e *editorTab) {
+	if s.state != serverReady || e.ed == nil || !s.caps.inlayHint {
+		return
+	}
+	if !w.settings.InlayHints {
+		e.ed.SetInlayHints(e.ed.Buffer().Version(), nil)
+		return
+	}
+	if _, ok := s.docs[e.uri]; !ok {
+		return
+	}
+	b := e.ed.Buffer()
+	version := b.Version()
+	last := b.Lines() - 1
+	params := map[string]any{
+		"textDocument": lsp.TextDocumentIdentifier{URI: e.uri},
+		"range":        lsp.Range{End: position(b, editor.Pos{Line: last, Col: len(b.Line(last))})},
+	}
+	var res []struct {
+		Position     lsp.Position    `json:"position"`
+		Label        json.RawMessage `json:"label"`
+		PaddingLeft  bool            `json:"paddingLeft"`
+		PaddingRight bool            `json:"paddingRight"`
+	}
+	done := s.conn.Go(context.Background(), "textDocument/inlayHint", params, &res)
+	gen := s.gen
+	go func() {
+		if err := <-done; err != nil {
+			return
+		}
+		w.post(func() {
+			if s.gen != gen || e.ed == nil || e.ed.Buffer().Version() != version {
+				return
+			}
+			b := e.ed.Buffer()
+			hints := make([]editor.InlayHint, 0, len(res))
+			for _, h := range res {
+				hints = append(hints, editor.InlayHint{Pos: editorPos(b, h.Position), Label: hintLabel(h.Label),
+					PadLeft: h.PaddingLeft, PadRight: h.PaddingRight})
+			}
+			e.ed.SetInlayHints(version, hints)
+		})
+	}()
+}
+
+// hintLabel reads the label of a hint: a string, or parts of one.
+func hintLabel(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var parts []struct {
+		Value string `json:"value"`
+	}
+	json.Unmarshal(raw, &parts)
+	var b strings.Builder
+	for _, p := range parts {
+		b.WriteString(p.Value)
+	}
+	return b.String()
 }

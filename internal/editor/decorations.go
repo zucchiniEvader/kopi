@@ -174,7 +174,7 @@ func (ed *Editor) textAt(x, y float32) (Pos, bool) {
 	}
 	i := ed.lineAtRow(row)
 	tx := x - ed.gutterWidth() - padLeft + ed.scrollX
-	if tx < 0 || tx > ed.shape(ed.buf.Line(i)).width {
+	if tx < 0 || tx > ed.shapeLine(i).width {
 		return Pos{}, false
 	}
 	return Pos{i, ed.colAt(i, tx)}, true

@@ -93,7 +93,7 @@ func (ed *Editor) lensSpans(i int) [][2]float32 {
 	if l == nil || i >= ed.buf.Lines() {
 		return nil
 	}
-	x := ed.shape(ed.buf.Line(i)).width + 3*ed.charW
+	x := ed.shapeLine(i).width + 3*ed.charW
 	sep := ed.shape(lensSeparator).width
 	var out [][2]float32
 	for _, item := range l.Items {

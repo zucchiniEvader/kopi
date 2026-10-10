@@ -160,6 +160,7 @@ type Editor struct {
 	cursor     int
 	brackets   bracketMatch
 	fold       foldState
+	inlay      inlayState
 	// OnSelectionRanges, when set, is asked for the ranges around a
 	// place, to expand the selection to, which it gives ExpandWith.
 	OnSelectionRanges func(p Pos)
@@ -245,6 +246,7 @@ func (ed *Editor) SetIndent(in Indent) {
 	if in != ed.indent {
 		ed.indent = in
 		ed.shaped = map[string]*shapedLine{} // tabs change width
+		ed.inlay.shaped = map[int]*shapedLine{}
 	}
 }
 
@@ -361,6 +363,7 @@ func (ed *Editor) setupFont() {
 	}
 	ed.fontUsed, ed.font = ed.style.Font, ed.style.Font
 	clear(ed.shaped)
+	ed.inlay.shaped = map[int]*shapedLine{}
 	ed.maxW = 0
 	m := ed.font.Metrics()
 	h := m.Ascent + m.Descent
@@ -460,7 +463,7 @@ func (ed *Editor) shape(s string) *shapedLine {
 // start.
 func (ed *Editor) colAt(i int, x float32) int {
 	l := ed.buf.Line(i)
-	sl := ed.shape(l)
+	sl := ed.shapeLine(i)
 	prev := 0
 	for b := 1; b <= len(l); b++ {
 		if b < len(l) && !utf8.RuneStart(l[b]) {
@@ -477,7 +480,7 @@ func (ed *Editor) colAt(i int, x float32) int {
 // xOf returns the x of p from the start of its line.
 func (ed *Editor) xOf(p Pos) float32 {
 	p = ed.buf.Clamp(p) // a place of the text before an edit
-	return ed.shape(ed.buf.Line(p.Line)).xs[p.Col]
+	return ed.shapeLine(p.Line).xs[p.Col]
 }
 
 // gutterWidth is the width of the line numbers' column.
@@ -587,7 +590,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			if i == ed.execLine {
 				p.Fill(ui.Rect{X: text.X, Y: y, W: text.W, H: ed.lineH}, st.ExecLine, 0)
 			}
-			sl := ed.shape(line)
+			sl := ed.shapeLine(i)
 			ed.paintMarkLine(p, i, sl, text, textX, y)
 			ed.maxW = max(ed.maxW, sl.width)
 			ed.paintIndentGuides(p, i, textX, y)
@@ -612,6 +615,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			ed.paintDiagnostics(p, i, sl, textX, y)
 			ed.paintLens(p, i, textX, y+ed.baseline)
 			ed.paintFoldEllipsis(p, i, sl, textX, y)
+			ed.paintInlayHints(p, i, sl, textX, y)
 		}
 		if caretOn && ed.preedit == "" {
 			for _, o := range ed.Cursors() {
@@ -1583,6 +1587,7 @@ func (ed *Editor) replace(a, z Pos, s string) Pos {
 	}
 	end := ed.buf.Replace(a, z, s)
 	ed.shiftFolds(a, z, end)
+	ed.shiftInlay(a, z, end)
 	// The hover and the highlights tell of the text as it was.
 	ed.hover, ed.highlights = hoverState{}, nil
 	ed.shiftSnippet(a, z, end)
