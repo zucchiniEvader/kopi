@@ -2,9 +2,10 @@
 
 A native, minimal code editor, drawn by MyGo's native UI on the GPU: no
 webview, no JavaScript, with the system's fonts, accent color, dark mode,
-menus and vibrancy. It edits Java and Go with their language servers, runs and
-debugs Java programs with VS Code's launch configurations, and shows,
-commits, pulls and pushes the work tree's Git changes.
+menus and vibrancy. It edits the files of some 90 languages, with the
+language servers of most, runs and debugs Java programs with VS Code's
+launch configurations, and shows, commits, pulls and pushes the work
+tree's Git changes.
 
 ## Features
 
@@ -14,6 +15,16 @@ commits, pulls and pushes the work tree's Git changes.
   `git grep`), go to a file (<kbd>⌘P</kbd>), files changed
   on disk read again, and VS Code's file icon themes (Material Icon Theme by
   default).
+- **Languages**: a file's language by its name, its `#!` line or
+  `files.associations`, or chosen from the status bar; its comments
+  (<kbd>⌘/</kbd>, <kbd>⇧⌥A</kbd>), brackets and quotes closing themselves,
+  and its indent, as the file indents or its `.editorconfig` says.
+- **Language servers**: problems, hovers, go to definition and semantic
+  colors from the servers on the machine (the PATH of the login shell):
+  typescript-language-server, pyright, rust-analyzer, clangd, the
+  servers of HTML, CSS and JSON, yaml-language-server, bash-language-server
+  and some 20 more, or one of `languageServers`. The status bar says when a
+  server is missing, and **Language Server: Install** installs it.
 - **Java**: Eclipse JDT Language Server (jdtls), downloaded once, on Java 21
   or later: problems as you type, hovers, go to definition (<kbd>⌘</kbd>-click,
   <kbd>F12</kbd>) into the JDK's and the libraries' sources, Maven, Gradle and
@@ -102,10 +113,24 @@ apply to open windows as the file changes:
     "iconTheme": "material",       // "none", or a VS Code icon theme's folder
     "editorCommand": "",           // e.g. "zed {file}:{line}"
     "sidebarPosition": "left",     // or "right"
-    "theme": "system"              // or "light", "dark"
+    "theme": "system",             // or "light", "dark"
+    "trimTrailingWhitespace": false, // as files save, unless .editorconfig
+    "insertFinalNewline": false,     // says otherwise
+    "files.associations": { "*.tmpl": "html" },
+    "languageServers": {
+      "pyright": { "command": ["basedpyright-langserver", "--stdio"],
+                   "settings": { "basedpyright": { "analysis": { "typeCheckingMode": "strict" } } } },
+      "clangd": { "disabled": true },
+      "my-server": { "command": ["my-server", "--stdio"], "languages": ["foo"] }
+    }
   }
 }
 ```
+
+A server of `languageServers` changes Kopi's of that ID (its `command`,
+`initializationOptions`, `settings`, `languages`), or, with a new ID, a
+`command` and `languages`, serves those languages before Kopi's. The IDs of
+the languages are VS Code's (`python`, `typescriptreact`, `shellscript`…).
 
 Files open in another editor with `$KOPI_EDITOR` or `editorCommand` (`{file}`,
 `{line}` and `{repo}` are replaced), else VS Code, else the app the system

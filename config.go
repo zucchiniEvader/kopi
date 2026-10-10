@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/zucchiniEvader/kopi/internal/lang"
 )
 
 // Settings are the user's preferences, in ~/.kopi/kopi.jsonc as
@@ -34,6 +35,11 @@ type Settings struct {
 	// is saved, unless its .editorconfig says otherwise.
 	TrimTrailingWhitespace bool `json:"trimTrailingWhitespace"`
 	InsertFinalNewline     bool `json:"insertFinalNewline"`
+	// LanguageServers change Kopi's language servers, or add others, by
+	// their IDs; FilesAssociations take files, by patterns of their names,
+	// as of languages, by their IDs.
+	LanguageServers   map[string]ServerSetting `json:"languageServers,omitempty"`
+	FilesAssociations map[string]string        `json:"files.associations,omitempty"`
 }
 
 func defaultSettings() Settings {
@@ -99,6 +105,7 @@ func (c *config) Update(fn func(s *Settings)) {
 	c.settings.normalize()
 	s := c.settings
 	c.mu.Unlock()
+	lang.SetAssociations(s.FilesAssociations)
 	c.write(s)
 	c.notify(s)
 }
@@ -167,6 +174,7 @@ func (c *config) load() bool {
 	}
 	s.normalize()
 	c.settings = s
+	lang.SetAssociations(s.FilesAssociations)
 	return true
 }
 

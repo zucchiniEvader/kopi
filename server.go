@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -45,6 +46,12 @@ type serverSpec struct {
 	// is to load; settings answer workspace/configuration, by section.
 	options  func(bundles []string) map[string]any
 	settings map[string]any
+	// commands are the commands of a server run as one, tried in order;
+	// install says how to install it.
+	commands [][]string
+	install  string
+	// logPath is the file of the server's log for a repository.
+	logPath func(root string) string
 	// ready runs once the server is initialized, with the plugins it
 	// loaded; failed once it could not start. restart reports whether
 	// settings changed call for the server to start again.
@@ -67,10 +74,22 @@ func (sp *serverSpec) is(p string) bool {
 	return false
 }
 
-// languageID is the languageId of a document of the server.
-func (sp *serverSpec) languageID(p string) string {
-	if l := lang.ForName(p); l != nil && slices.Contains(sp.languages, l.ID) {
-		return l.ID
+// serves reports whether the document of a tab is the server's, by the
+// language its editor takes it as.
+func (sp *serverSpec) serves(e *editorTab) bool {
+	if sp.owns != nil && sp.owns(e.path) {
+		return true
+	}
+	if e.ed != nil {
+		return slices.Contains(sp.languages, e.ed.Lang().ID)
+	}
+	return sp.is(e.path)
+}
+
+// languageID is the languageId of the document of a tab.
+func (sp *serverSpec) languageID(e *editorTab) string {
+	if e.ed != nil && slices.Contains(sp.languages, e.ed.Lang().ID) {
+		return e.ed.Lang().ID
 	}
 	return sp.languages[0]
 }
@@ -82,7 +101,11 @@ type langServer struct {
 	// launch starts the server: the spec's, nil in tests, which give
 	// their own.
 	launch serverLauncher
-	state  int
+	// disabled keeps the server from starting, as the settings say.
+	disabled bool
+	state    int
+	// caps are what the server does, as it said once initialized.
+	caps   serverCaps
 	status string // what the status bar says
 	detail string // why it failed, or what it is doing
 	gen    int    // counts starts, to drop what older servers send
@@ -142,14 +165,55 @@ func (s *langServer) busy() bool {
 	return s.state == serverStarting || s.state == serverReady && len(s.order) > 0
 }
 
-// newServers returns a window's language servers, one of each spec,
-// none started.
-func newServers() []*langServer {
-	out := make([]*langServer, len(serverSpecs))
-	for i, sp := range serverSpecs {
-		out[i] = &langServer{spec: sp}
+// newServers returns a window's language servers with settings, one of
+// each spec, none started.
+func newServers(s Settings) []*langServer {
+	specs := specsFor(s)
+	out := make([]*langServer, len(specs))
+	for i, sp := range specs {
+		out[i] = &langServer{spec: sp, disabled: s.LanguageServers[sp.id].Disabled}
 	}
 	return out
+}
+
+// syncServers makes the window's servers those of new settings: those
+// added, those gone stopped, and those changed started again.
+func (w *window) syncServers(old, new Settings) {
+	specs := specsFor(new)
+	byID := map[string]*langServer{}
+	for _, s := range w.langServers {
+		byID[s.spec.id] = s
+	}
+	var out []*langServer
+	for _, sp := range specs {
+		s := byID[sp.id]
+		delete(byID, sp.id)
+		if s == nil {
+			s = &langServer{spec: sp}
+			if w.launchServers {
+				s.launch = sp.launch
+			}
+		}
+		set := new.LanguageServers[sp.id]
+		restart := !reflect.DeepEqual(old.LanguageServers[sp.id], set) || sp.restart != nil && sp.restart(old, new)
+		s.spec, s.disabled = sp, set.Disabled
+		out = append(out, s)
+		if restart && s.state != serverIdle {
+			w.stop(s)
+		}
+	}
+	for _, s := range byID {
+		w.stop(s)
+	}
+	w.langServers = out
+	// Each file to the server of its language now.
+	for _, e := range w.editors {
+		if e.abs != "" && e.ed != nil {
+			if s := w.serverOf(e); s != nil && s.state == serverIdle {
+				w.attach(e)
+			}
+		}
+	}
 }
 
 // servers are the window's language servers.
@@ -165,10 +229,11 @@ func (w *window) server(id string) *langServer {
 	panic("no language server " + id)
 }
 
-// serverFor returns the server of a file's language, nil for none.
-func (w *window) serverFor(p string) *langServer {
+// serverOf returns the server of the language of a tab's document, nil
+// for none.
+func (w *window) serverOf(e *editorTab) *langServer {
 	for _, s := range w.servers() {
-		if s.spec.is(p) {
+		if !s.disabled && s.spec.serves(e) {
 			return s
 		}
 	}
@@ -210,7 +275,7 @@ func (w *window) serverSays(s *langServer, gen int, text string) {
 // attach connects an editor of a file to the language server of its
 // language, which it starts the first time.
 func (w *window) attach(e *editorTab) {
-	s := w.serverFor(e.path)
+	s := w.serverOf(e)
 	if s == nil || s.launch == nil || e.ed == nil {
 		return
 	}
@@ -246,6 +311,9 @@ func (w *window) start(s *langServer) {
 			w.post(func() {
 				if s.gen == gen {
 					s.state, s.status, s.detail, s.conn = serverFailed, "Unavailable", err.Error(), nil
+					if isNotInstalled(err) {
+						s.status = "Not installed"
+					}
 					if s.spec.failed != nil {
 						s.spec.failed(w, err)
 					}
@@ -257,17 +325,20 @@ func (w *window) start(s *langServer) {
 			fail(err)
 			return
 		}
-		conn := lsp.NewConn(rwc, &serverHandler{w: w, s: s, gen: gen})
+		conn := lsp.NewConn(rwc, &serverHandler{w: w, s: s, spec: s.spec, gen: gen, user: settings.LanguageServers[s.spec.id].Settings})
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		var init struct {
-			Capabilities struct {
-				SemanticTokensProvider *struct {
-					Legend semanticLegend `json:"legend"`
-				} `json:"semanticTokensProvider"`
-			} `json:"capabilities"`
+			Capabilities json.RawMessage `json:"capabilities"`
 		}
-		if err := conn.Call(ctx, "initialize", initializeParams(root, s.spec.options(bundles)), &init); err != nil {
+		var options map[string]any
+		if s.spec.options != nil {
+			options = s.spec.options(bundles)
+		}
+		if o := settings.LanguageServers[s.spec.id].Options; o != nil {
+			options = o
+		}
+		if err := conn.Call(ctx, "initialize", initializeParams(root, options), &init); err != nil {
 			conn.Close()
 			fail(fmt.Errorf("the %s language server did not start: %w", s.spec.name, err))
 			return
@@ -280,11 +351,10 @@ func (w *window) start(s *langServer) {
 			}
 			s.conn, s.state, s.status = conn, serverReady, ""
 			s.stop = func() { shutdown(conn) }
-			if p := init.Capabilities.SemanticTokensProvider; p != nil {
-				s.legend = p.Legend
-			}
+			s.caps = parseCaps(init.Capabilities)
+			s.legend = s.caps.legend
 			for _, e := range w.editors {
-				if e.ed != nil && e.abs != "" && s.spec.is(e.path) {
+				if e.ed != nil && e.abs != "" && w.serverOf(e) == s {
 					w.didOpen(s, e)
 				}
 			}
@@ -373,6 +443,9 @@ type serverHandler struct {
 	w   *window
 	s   *langServer
 	gen int
+	// spec is the server's as it started; user its settings of the user.
+	spec *serverSpec
+	user map[string]any
 }
 
 func (h *serverHandler) Notify(method string, params json.RawMessage) {
@@ -442,7 +515,7 @@ func (h *serverHandler) Notify(method string, params json.RawMessage) {
 		}
 		// The server's own log, which its log file has too.
 		if json.Unmarshal(params, &p) == nil && p.Type == 1 && debugFrames {
-			log.Printf("%s: %s", s.spec.name, p.Message)
+			log.Printf("%s: %s", h.spec.name, p.Message)
 		}
 	}
 }
@@ -458,8 +531,9 @@ func (h *serverHandler) Request(method string, params json.RawMessage) (any, err
 		json.Unmarshal(params, &p)
 		out := make([]any, len(p.Items))
 		for i, it := range p.Items {
-			if v, ok := h.s.spec.settings[it.Section]; ok {
-				out[i] = v
+			out[i] = settingsSection(h.user, it.Section)
+			if out[i] == nil {
+				out[i] = settingsSection(h.spec.settings, it.Section)
 			}
 		}
 		return out, nil
@@ -489,7 +563,7 @@ func (w *window) didOpen(s *langServer, e *editorTab) {
 	}
 	s.docs[e.uri] = 1
 	s.conn.Notify("textDocument/didOpen", lsp.DidOpenTextDocumentParams{TextDocument: lsp.TextDocumentItem{
-		URI: e.uri, LanguageID: s.spec.languageID(e.path), Version: 1, Text: strings.Join(bufferLines(e.ed.Buffer()), "\n"),
+		URI: e.uri, LanguageID: s.spec.languageID(e), Version: 1, Text: strings.Join(bufferLines(e.ed.Buffer()), "\n"),
 	}})
 	w.semantic(s, e)
 }
@@ -503,13 +577,28 @@ func (w *window) didChange(s *langServer, e *editorTab, a, z editor.Pos, text st
 	version++
 	s.docs[e.uri] = version
 	b := e.ed.Buffer()
-	r := lsp.Range{
-		Start: lsp.Position{Line: a.Line, Character: lsp.UTF16Col(b.Line(a.Line), a.Col)},
-		End:   lsp.Position{Line: z.Line, Character: lsp.UTF16Col(b.Line(z.Line), z.Col)},
+	var change lsp.TextDocumentContentChangeEvent
+	switch s.caps.sync {
+	case syncNone:
+		return
+	case syncFull:
+		// The whole text, as it is once changed.
+		end := editor.Pos{Line: b.Lines() - 1, Col: len(b.Line(b.Lines() - 1))}
+		change.Text = strings.Join(bufferLines(b)[:a.Line], "\n")
+		if a.Line > 0 {
+			change.Text += "\n"
+		}
+		change.Text += b.Line(a.Line)[:a.Col] + text + b.Slice(z, end)
+	default:
+		r := lsp.Range{
+			Start: lsp.Position{Line: a.Line, Character: lsp.UTF16Col(b.Line(a.Line), a.Col)},
+			End:   lsp.Position{Line: z.Line, Character: lsp.UTF16Col(b.Line(z.Line), z.Col)},
+		}
+		change = lsp.TextDocumentContentChangeEvent{Range: &r, Text: text}
 	}
 	s.conn.Notify("textDocument/didChange", lsp.DidChangeTextDocumentParams{
 		TextDocument:   lsp.VersionedTextDocumentIdentifier{URI: e.uri, Version: version},
-		ContentChanges: []lsp.TextDocumentContentChangeEvent{{Range: &r, Text: text}},
+		ContentChanges: []lsp.TextDocumentContentChangeEvent{change},
 	})
 	// The meaning of the names, once the typing pauses.
 	e.semGen++
@@ -529,7 +618,7 @@ var semanticDelay = 300 * time.Millisecond
 
 // didSave and didClose tell the server of a document saved or closed.
 func (w *window) didSave(e *editorTab) {
-	if s := w.serverFor(e.path); s != nil && s.state == serverReady {
+	if s := w.serverOf(e); s != nil && s.state == serverReady {
 		if _, ok := s.docs[e.uri]; ok {
 			s.conn.Notify("textDocument/didSave", lsp.DidSaveTextDocumentParams{TextDocument: lsp.TextDocumentIdentifier{URI: e.uri}})
 		}
@@ -537,7 +626,7 @@ func (w *window) didSave(e *editorTab) {
 }
 
 func (w *window) didClose(e *editorTab) {
-	if s := w.serverFor(e.path); s != nil && s.state == serverReady {
+	if s := w.serverOf(e); s != nil && s.state == serverReady {
 		if _, ok := s.docs[e.uri]; ok {
 			delete(s.docs, e.uri)
 			s.conn.Notify("textDocument/didClose", lsp.DidCloseTextDocumentParams{TextDocument: lsp.TextDocumentIdentifier{URI: e.uri}})
@@ -613,7 +702,7 @@ func addErrors(m map[string]int, rel string, n int) {
 
 // applyDiagnostics shows the problems the server found in an editor.
 func (w *window) applyDiagnostics(e *editorTab) {
-	s := w.serverFor(e.path)
+	s := w.serverOf(e)
 	if e.ed == nil || s == nil {
 		return
 	}
@@ -870,7 +959,7 @@ func (w *window) semantic(s *langServer, e *editorTab) {
 // document of its language open.
 func (w *window) semanticAll(s *langServer) {
 	for _, e := range w.editors {
-		if s.spec.is(e.path) {
+		if w.serverOf(e) == s {
 			w.semantic(s, e)
 		}
 	}

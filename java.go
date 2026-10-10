@@ -25,6 +25,7 @@ var jdtlsSpec = &serverSpec{
 	name:      "Java",
 	languages: []string{"java"},
 	owns:      func(p string) bool { return strings.HasPrefix(p, "jdt://") },
+	logPath:   func(root string) string { return javaWorkspace(cacheDir(), root) + ".log" },
 	launch:    launchJava,
 	ready: func(w *window, s *langServer, bundles []string) {
 		s.debugger = len(bundles) > 0

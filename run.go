@@ -80,6 +80,9 @@ type runProc struct {
 	name     string
 	stopping bool
 	done     chan struct{}
+	// after, if set, runs once the program ended, with whether it
+	// exited with 0.
+	after func(ok bool)
 
 	mu     sync.Mutex
 	chunks []runChunk
@@ -358,8 +361,9 @@ func (w *window) runExec(cmd *exec.Cmd, name string) {
 	w.runExecAs(cmd, name, "Running")
 }
 
-// runExecAs starts a program, saying what it does, as Debugging.
-func (w *window) runExecAs(cmd *exec.Cmd, name, verb string) {
+// runExecAs starts a program, saying what it does, as Debugging, and
+// returns it, nil if it did not start.
+func (w *window) runExecAs(cmd *exec.Cmd, name, verb string) *runProc {
 	r := &w.run
 	proc.HideConsole(cmd)
 	stdout, err1 := cmd.StdoutPipe()
@@ -367,13 +371,13 @@ func (w *window) runExecAs(cmd *exec.Cmd, name, verb string) {
 	stdin, err3 := cmd.StdinPipe()
 	if err := firstErr(err1, err2, err3); err != nil {
 		w.say(lineFail, "%v", err)
-		return
+		return nil
 	}
 	short := path.Base(strings.ReplaceAll(name, ".", "/"))
 	w.say(lineInfo, "%s %s", verb, name)
 	if err := cmd.Start(); err != nil {
 		w.say(lineFail, "Could not start %s: %v", short, err)
-		return
+		return nil
 	}
 	p := &runProc{cmd: cmd, stdin: stdin, name: short, done: make(chan struct{})}
 	r.proc, r.status = p, verb+" "+short
@@ -419,9 +423,13 @@ func (w *window) runExecAs(cmd *exec.Cmd, name, verb string) {
 			default:
 				w.say(lineFail, "%s exited with code %d.", short, code)
 			}
+			if p.after != nil {
+				p.after(code == 0 && !p.stopping)
+			}
 			w.runNext()
 		})
 	}()
+	return p
 }
 
 func firstErr(errs ...error) error {

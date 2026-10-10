@@ -116,6 +116,9 @@ type window struct {
 	// goroutines post to the main thread.
 	langServers []*langServer
 	posted      chan func()
+	// launchServers tells the servers added start with their specs'
+	// launchers, as in the app, not in tests.
+	launchServers bool
 
 	// The search of the editor, and the bar going to a file.
 	edFind editorFind
@@ -206,6 +209,7 @@ func openWindow(dir string) error {
 	windowsMu.Unlock()
 
 	w := newWindow(repo)
+	w.launchServers = true
 	for _, s := range w.langServers {
 		s.launch = s.spec.launch
 	}
@@ -276,7 +280,7 @@ func newWindow(repo *git.Repo) *window {
 	width, shown := state.layout()
 	w := &window{
 		repo:         repo,
-		langServers:  newServers(),
+		langServers:  newServers(cfg.Get()),
 		settings:     cfg.Get(),
 		sidebarShown: shown,
 		sidebarWidth: width,
@@ -309,18 +313,7 @@ func windowTitle(root string) string {
 func (w *window) applySettings(s Settings) {
 	old := w.settings
 	w.settings = s
-	for _, ls := range w.langServers {
-		if ls.spec.restart == nil || !ls.spec.restart(old, s) || ls.state == serverIdle {
-			continue
-		}
-		// Start the server again, as with the Java or the jdtls chosen.
-		w.stop(ls)
-		for _, e := range w.editors {
-			if e.abs != "" && ls.spec.is(e.path) && e.ed != nil {
-				w.attach(e)
-			}
-		}
-	}
+	w.syncServers(old, s)
 }
 
 // background runs fn on a goroutine of its own, or at once in tests,

@@ -604,7 +604,7 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 				name = e.origin() + " · " + e.title() + " (read-only)"
 			}
 			small(name).Grow(1).Shrink(1).MinWidth(0)
-			if s := w.serverFor(e.path); s != nil {
+			if s := w.serverOf(e); s != nil {
 				if errs, warns := counts(e); errs+warns > 0 {
 					ui.Row(c).Gap(8).Children(func() {
 						if errs > 0 {
@@ -654,9 +654,12 @@ func (w *window) serverChip(c *ui.Context, s *langServer) {
 	if status == "" {
 		return
 	}
-	row := ui.Row(c).Gap(5).AlignItems(ui.Center).Shrink(1).MinWidth(0).MaxWidth(360)
+	row := ui.Row(c).Gap(5).AlignItems(ui.Center).Shrink(1).MinWidth(0).MaxWidth(360).Cursor(ui.CursorPointer)
 	if s.detail != "" {
 		row.Tooltip(s.detail)
+	}
+	if row.Clicked() {
+		w.serverActions(s)
 	}
 	row.Children(func() {
 		if s.busy() {

@@ -106,10 +106,59 @@ func All() []*Language {
 	return append(out, builtin...)
 }
 
+var (
+	assocMu      sync.Mutex
+	associations map[string]string
+)
+
+// SetAssociations takes files, by patterns of their names or paths, as
+// *.tmpl or **/templates/*.html, as of languages, by their IDs, before
+// what their names say.
+func SetAssociations(m map[string]string) {
+	assocMu.Lock()
+	associations = m
+	assocMu.Unlock()
+}
+
+// associated returns the language the associations give a file, nil for
+// none.
+func associated(p string) *Language {
+	assocMu.Lock()
+	m := associations
+	assocMu.Unlock()
+	base := path.Base(p)
+	for pattern, id := range m {
+		l := byID[id]
+		if l == nil {
+			continue
+		}
+		if !strings.Contains(pattern, "/") {
+			if ok, _ := path.Match(pattern, base); ok {
+				return l
+			}
+			continue
+		}
+		// **/ at the start takes any folders.
+		rest, any := strings.CutPrefix(pattern, "**/")
+		n := strings.Count(rest, "/") + 1
+		parts := strings.Split(p, "/")
+		if len(parts) < n || !any && len(parts) != n {
+			continue
+		}
+		if ok, _ := path.Match(rest, strings.Join(parts[len(parts)-n:], "/")); ok {
+			return l
+		}
+	}
+	return nil
+}
+
 // ForName returns the language of a file by its name or path, slashes
 // between its folders, nil when its name says nothing.
 func ForName(p string) *Language {
 	index()
+	if l := associated(p); l != nil {
+		return l
+	}
 	base := path.Base(p)
 	if l := byName[base]; l != nil {
 		return l

@@ -21,6 +21,7 @@ var goplsSpec = &serverSpec{
 	id:        "gopls",
 	name:      "Go",
 	languages: []string{"go"},
+	logPath:   func(root string) string { return filepath.Join(cacheDir(), "gopls-logs", workspaceKey(root)+".log") },
 	launch:    launchGo,
 	options:   func([]string) map[string]any { return goSettings },
 	settings:  map[string]any{"gopls": goSettings},

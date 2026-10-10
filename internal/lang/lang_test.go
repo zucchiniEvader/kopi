@@ -45,3 +45,13 @@ func TestBuiltin(t *testing.T) {
 		t.Error("go, python or css as not expected")
 	}
 }
+
+func TestAssociations(t *testing.T) {
+	SetAssociations(map[string]string{"*.tmpl": "html", "**/conf/*.txt": "ini", "Jenkinsfile": "groovy", "x": "nothing"})
+	defer SetAssociations(nil)
+	for p, want := range map[string]string{"a/b.tmpl": "html", "a/conf/c.txt": "ini", "conf/c.txt": "ini", "c.txt": "plaintext", "Jenkinsfile": "groovy", "x": "plaintext"} {
+		if got := Detect(p, ""); got.ID != want {
+			t.Errorf("%s: %s, want %s", p, got.ID, want)
+		}
+	}
+}
