@@ -197,11 +197,11 @@ func TestServerNotInstalled(t *testing.T) {
 	ra.launch = ra.spec.launch
 	w.openFile("a.rs", 0)
 	pump(t, w, tt, "the failure", func() bool { return ra.state == serverFailed })
-	if !tt.HasText("Rust: Not installed") || !strings.Contains(ra.detail, "rustup component add rust-analyzer") {
+	if !tt.HasText("Rust: Language server not installed") || !strings.Contains(ra.detail, "rustup component add rust-analyzer") {
 		t.Errorf("texts %q, detail %q", tt.Texts(), ra.detail)
 	}
 	// Its chip offers to install it.
-	if err := tt.Click("Rust: Not installed"); err != nil {
+	if err := tt.Click("Rust: Language server not installed"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

@@ -767,7 +767,7 @@ func (w *window) serverChip(c *ui.Context, s *langServer) {
 		}
 		// A server missing is not a fault: it may be installed.
 		color := t.TextMuted
-		if s.state == serverFailed && s.status != "Not installed" {
+		if s.state == serverFailed && s.status != notInstalled {
 			color = t.Danger
 		}
 		ui.Text(c, status).FontSize(11).TextColor(color).SingleLine().Shrink(1).MinWidth(0)

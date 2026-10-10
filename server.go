@@ -385,7 +385,7 @@ func (w *window) start(s *langServer) {
 				if s.gen == gen {
 					s.state, s.status, s.detail, s.conn = serverFailed, "Unavailable", err.Error(), nil
 					if isNotInstalled(err) {
-						s.status = "Not installed"
+						s.status = notInstalled
 						if s.spec.alongside {
 							s.status = "" // a linter missing says nothing
 						}
@@ -1373,3 +1373,7 @@ func (w *window) addFolder(s *langServer, e *editorTab) {
 		"removed": []any{},
 	}})
 }
+
+// notInstalled is the status of a server not found: the language's own
+// tools may well be, as Python is, but not its server.
+const notInstalled = "Language server not installed"
