@@ -34,6 +34,10 @@ tree's Git changes.
 - **Go**: gopls, found on the machine or installed with Go once: problems as
   you type, hovers, go to definition into the standard library's and the
   modules' sources.
+- **Python**: the folder's interpreter, its `.venv`, `venv` or `env`, or
+  Poetry's, Pipenv's, conda's environment, else the system's, or the one
+  chosen from the status bar (**Python: Select Interpreter**): Run, Debug,
+  pyright and the terminal use it, the environment active.
 - **Run and debug**: `.vscode/launch.json` as VS Code reads it, with the
   `preLaunchTask` of `tasks.json`, or the file shown: Java through
   Microsoft's java-debug, with Run | Debug on main methods; Go through

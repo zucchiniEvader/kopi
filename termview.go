@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/zucchiniEvader/kopi/internal/python"
 	"github.com/zucchiniEvader/kopi/internal/shellenv"
 	"github.com/zucchiniEvader/kopi/internal/terminal"
 )
@@ -63,7 +64,14 @@ func (w *window) startTerminal() {
 	if dir == "" {
 		dir, _ = os.UserHomeDir()
 	}
-	t, err := terminal.Start(terminal.Shell(), dir, os.Environ(), 80, 24, func() {
+	env := os.Environ()
+	// The folder's Python environment, active, as its activate script does.
+	if !w.noFolder() {
+		if i := w.pythonInterp(); i.IsEnv() {
+			env = python.Activate(env, i)
+		}
+	}
+	t, err := terminal.Start(terminal.Shell(), dir, env, 80, 24, func() {
 		// Frames as the screen changes, one asked at a time.
 		if ts.queued.CompareAndSwap(false, true) {
 			w.post(func() { ts.queued.Store(false) })

@@ -169,3 +169,25 @@ func TestRealDebugpy(t *testing.T) {
 	w.debugOrContinue()
 	waitRun(t, w, tt, "the end", time.Minute, func() bool { return !w.debugging() && strings.Contains(w.runText(), "answer 42") })
 }
+
+// TestRealDebugpyChosen debugs a Python file with the interpreter chosen
+// for the folder, no configuration naming it: KOPI_DEBUGPY=<python>.
+func TestRealDebugpyChosen(t *testing.T) {
+	py := os.Getenv("KOPI_DEBUGPY")
+	if py == "" {
+		t.Skip("KOPI_DEBUGPY=<python with debugpy> debugs with the real debugpy")
+	}
+	dir := testRepo(t)
+	writeFile(t, dir, "app.py", "answer = 6 * 7\nprint('answer', answer)\n")
+	w, tt := newTestWindow(t, dir)
+	w.posted = make(chan func(), 4096)
+	defer delete(state.data.Interpreters, w.repo.Root)
+	w.setPython(py)
+	w.openFile("app.py", 0)
+	w.toggleBreakpoint(w.activeTab(), 1)
+	w.runConfigs()
+	w.launchConfig(w.chosenConfig(), true)
+	waitRun(t, w, tt, "the pause", 5*time.Minute, func() bool { return w.debug.paused && len(w.debug.frames) > 0 })
+	w.debugOrContinue()
+	waitRun(t, w, tt, "the end", time.Minute, func() bool { return !w.debugging() && strings.Contains(w.runText(), "answer 42") })
+}

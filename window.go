@@ -160,8 +160,10 @@ type window struct {
 	// paletteSearch, when set, is asked for the choices as the query
 	// changes, which it sets, matching it: the bar does not match them.
 	paletteSearch func(q string)
-	// rename is the symbol the rename dialog renames.
+	// rename is the symbol the rename dialog renames; py the folder's
+	// Python interpreters.
 	rename      renameState
+	py          pyState
 	paletteList ui.ListState
 	// palettePointer is where the pointer was over the list.
 	palettePointer [2]float32
@@ -272,6 +274,7 @@ func openWindow(dir string) error {
 		go w.checkChanges()
 		// Files may have changed in other apps.
 		w.win.Update(func() {
+			w.py.current = nil // an environment may have come
 			w.checkDisk()
 			w.explorer.reset()
 		})

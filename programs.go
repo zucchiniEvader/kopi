@@ -20,6 +20,7 @@ import (
 	"github.com/zucchiniEvader/kopi/internal/jsdebug"
 	"github.com/zucchiniEvader/kopi/internal/launch"
 	"github.com/zucchiniEvader/kopi/internal/proc"
+	"github.com/zucchiniEvader/kopi/internal/python"
 	"github.com/zucchiniEvader/kopi/internal/shellenv"
 )
 
@@ -55,6 +56,7 @@ func (w *window) currentFileConfig() (launch.Config, bool) {
 		c.Type, c.Program = "go", filepath.Dir(e.abs)
 	case "python":
 		c.Type = "debugpy"
+		c.Raw = map[string]any{"python": w.pythonInterp().Path}
 	case "javascript":
 		c.Type = "node"
 	case "typescript", "shellscript", "ruby", "php", "perl", "lua", "r":
@@ -178,6 +180,16 @@ func (w *window) launchOther(cfg launch.Config, debug bool) {
 	if c.Raw == nil {
 		c.Raw = map[string]any{}
 	}
+	// Python's, the folder's interpreter, unless the configuration says.
+	var py python.Interpreter
+	if isPython(c.Type) {
+		py = w.pythonInterp()
+		if str(c.Raw, "python") == "" {
+			c.Raw["python"] = py.Path
+		} else {
+			py = w.knownInterpreter(str(c.Raw, "python"))
+		}
+	}
 	// What only the raw configuration says: a string or a list.
 	if len(c.Args) == 0 {
 		c.Args = stringsOf(c.Raw["args"])
@@ -196,6 +208,9 @@ func (w *window) launchOther(cfg launch.Config, debug bool) {
 		cmd := exec.Command(argv[0], argv[1:]...)
 		cmd.Dir = c.Cwd
 		cmd.Env = os.Environ()
+		if isPython(c.Type) {
+			cmd.Env = python.Activate(cmd.Env, py)
+		}
 		for k, v := range c.Env {
 			cmd.Env = append(cmd.Env, k+"="+v)
 		}

@@ -28,7 +28,7 @@ func (w *window) captureIfAsked() {
 			}
 			w.win.Update(func() { w.debugSetup(setup) })
 			time.Sleep(1200 * time.Millisecond)
-			if strings.Contains(setup, "complete") || strings.Contains(setup, "terminal") {
+			if strings.Contains(setup, "complete") || strings.Contains(setup, "terminal") || strings.Contains(setup, "python") {
 				time.Sleep(2 * time.Second)
 			}
 			if prof != nil {
@@ -70,6 +70,8 @@ func (w *window) debugSetup(setup string) {
 						}
 					})
 				})
+			case "python":
+				w.choosePython()
 			case "previewside":
 				w.openPreviewToSide()
 			case "foldall":

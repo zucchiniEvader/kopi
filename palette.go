@@ -55,6 +55,7 @@ func (w *window) commands() []command {
 		{title: "Unfold", keys: "⌥⌘]", run: func() { w.withText(func(e *editorTab) { e.ed.Unfold() }) }},
 		{title: "Split Editor", hint: "The tab shown to a pane on the right, or the panes joined", keys: "⌘\\", run: w.toggleSplit},
 		{title: "Focus the Other Pane", run: w.focusOther},
+		{title: "Python: Select Interpreter", hint: "The folder's, to run, debug and check its Python with", run: w.choosePython},
 		{title: "Markdown: Open Preview to the Side", hint: "The file on the left, its preview on the right", run: w.openPreviewToSide},
 		{title: "Markdown: Open Preview", hint: "Of the Markdown file shown", keys: "⇧⌘V", run: w.openPreview},
 		{title: "Toggle Word Wrap", hint: "Of the file shown", keys: "⌥Z", run: func() {
@@ -201,7 +202,7 @@ func (w *window) palette(c *ui.Context) {
 				run(w.paletteRow)
 			}
 		})
-		w.paletteList.Key = func(i int) any { return cmds[i].title }
+		w.paletteList.Key = func(i int) any { return cmds[i].title + "\x00" + cmds[i].hint }
 		ui.List(c, &w.paletteList, len(cmds), func(i int) {
 			cmd := cmds[i]
 			item := ui.Row(c).MinHeight(34).Padding(6, 10).Gap(8).Radius(8).Cursor(ui.CursorPointer)

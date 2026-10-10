@@ -304,6 +304,8 @@ type storeData struct {
 	ActiveRepo map[string]string `json:"activeRepo"`
 	// Sessions are the tabs of each folder's window as it closed.
 	Sessions map[string]session `json:"sessions,omitempty"`
+	// Interpreters are the Python interpreters chosen, by folder.
+	Interpreters map[string]string `json:"interpreters,omitempty"`
 }
 
 // maxRecent bounds the repositories remembered.

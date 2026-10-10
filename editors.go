@@ -730,6 +730,10 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 				lang = "Plain Text"
 			}
 			pick(lang, "Change Language Mode", w.chooseLanguage)
+			if e.ed.Lang().ID == "python" && e.diff == nil {
+				w.loadPythons(nil)
+				pick(w.pythonLabel(), "Select Interpreter", w.choosePython)
+			}
 			eol := "LF"
 			if e.ed.Buffer().CRLF {
 				eol = "CRLF"

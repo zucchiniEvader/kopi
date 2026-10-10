@@ -364,6 +364,12 @@ func (w *window) start(s *langServer) {
 	// as of a workspace started over, are gone.
 	s.diags, s.errors, s.counted = map[string][]lsp.Diagnostic{}, map[string]int{}, map[string]counted{}
 	launch, settings, root := s.launch, w.settings, w.repo.Root
+	// The user's settings of the server; a Python server's with the
+	// folder's interpreter.
+	user := settings.LanguageServers[s.spec.id].Settings
+	if slices.Contains(s.spec.languages, "python") && !s.spec.alongside {
+		user = w.pythonSettings(user)
+	}
 	// The projects of the files open, as the server's first folders.
 	s.folders = map[string]bool{}
 	var folders []string
@@ -395,7 +401,7 @@ func (w *window) start(s *langServer) {
 			fail(err)
 			return
 		}
-		conn := lsp.NewConn(rwc, &serverHandler{w: w, s: s, spec: s.spec, gen: gen, user: settings.LanguageServers[s.spec.id].Settings})
+		conn := lsp.NewConn(rwc, &serverHandler{w: w, s: s, spec: s.spec, gen: gen, user: user})
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		var init struct {

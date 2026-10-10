@@ -52,6 +52,24 @@ func (s *store) setSession(root string, ss session) {
 	s.save()
 }
 
+// interpreter returns the Python interpreter chosen for a folder, "" for
+// none.
+func (s *store) interpreter(root string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.Interpreters[root]
+}
+
+func (s *store) setInterpreter(root, p string) {
+	s.mu.Lock()
+	if s.data.Interpreters == nil {
+		s.data.Interpreters = map[string]string{}
+	}
+	s.data.Interpreters[root] = p
+	s.mu.Unlock()
+	s.save()
+}
+
 // sessionOf returns the window's session: the tabs of its folder's files.
 func (w *window) sessionOf() session {
 	var ss session

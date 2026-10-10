@@ -31,6 +31,9 @@ type fakeServer struct {
 	// told it.
 	answers map[string]any
 	init    json.RawMessage
+	// section is the section of the settings it asks for, as it starts:
+	// fake.analysis without one.
+	section string
 }
 
 func (f *fakeServer) launcher() serverLauncher {
@@ -82,9 +85,13 @@ func (f *fakeServer) Notify(method string, params json.RawMessage) {
 		f.mu.Lock()
 		conn := f.conn
 		f.mu.Unlock()
+		section := f.section
+		if section == "" {
+			section = "fake.analysis"
+		}
 		go func() {
 			var out any
-			conn.Call(context.Background(), "workspace/configuration", map[string]any{"items": []map[string]string{{"section": "fake.analysis"}}}, &out)
+			conn.Call(context.Background(), "workspace/configuration", map[string]any{"items": []map[string]string{{"section": section}}}, &out)
 			f.mu.Lock()
 			f.config = out
 			f.mu.Unlock()
