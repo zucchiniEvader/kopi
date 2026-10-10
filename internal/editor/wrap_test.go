@@ -52,3 +52,20 @@ func TestWordWrap(t *testing.T) {
 		t.Errorf("unwrapped rows %d", ed.rows())
 	}
 }
+
+func TestFitsUnshaped(t *testing.T) {
+	ed, tt := openAs(t, "a.go", "")
+	tt.Frame()
+	ed.wrap.on, ed.wrap.width = true, 400
+	for _, line := range []string{"x", "\tif x := f(y); x != nil {", strings.Repeat("ab ", 20), strings.Repeat("ab ", 40), "\t\t\t\t\t\t\t\t\t\tdeep", "héllo"} {
+		if !ed.fitsUnshaped(line) {
+			continue
+		}
+		if w := ed.shape(line).width; w > ed.wrap.width {
+			t.Errorf("%q fits by its columns, %v wide shaped, over %v", line, w, ed.wrap.width)
+		}
+	}
+	if ed.fitsUnshaped("héllo") || ed.fitsUnshaped(strings.Repeat("ab ", 400)) {
+		t.Error("non-ASCII, or long, fits unshaped")
+	}
+}

@@ -39,9 +39,9 @@ func (ed *Editor) SetWordWrap(on bool) {
 func (ed *Editor) WordWrap() bool { return ed.wrap.on }
 
 // maxWrapLines bounds the texts whose lines wrap: each line's rows are
-// counted again as the text changes, of those its edits leave as they
-// were, kept.
-const maxWrapLines = 20000
+// counted again as the text changes, short lines of ASCII by their
+// columns, others kept by their text: 100,000 lines take 5 ms an edit.
+const maxWrapLines = 200000
 
 // wrapping reports whether lines wrap now: on, with the view's width, in
 // a text not too long.
@@ -69,8 +69,13 @@ func (ed *Editor) segments(i int) []int {
 			return s
 		}
 	}
-	sl := ed.shapeLine(i)
 	var out []int
+	if !hints && ed.fitsUnshaped(line) {
+		// A short line of ASCII: as wide as its columns, in the code's
+		// font, which is monospace.
+		return nil
+	}
+	sl := ed.shapeLine(i)
 	if sl.width > ed.wrap.width {
 		start, brk := 0, -1
 		for b := 0; b < len(line); {
@@ -102,6 +107,27 @@ func (ed *Editor) segments(i int) []int {
 		ed.wrap.segs[line] = out
 	}
 	return out
+}
+
+// fitsUnshaped reports whether a line of ASCII alone fits the width it
+// wraps at, by its columns, tabs to their stops: without shaping it.
+func (ed *Editor) fitsUnshaped(line string) bool {
+	if ed.charW == 0 {
+		return false
+	}
+	cols, tab := 0, max(ed.indent.Size, 1)
+	for i := 0; i < len(line); i++ {
+		switch c := line[i]; {
+		case c >= 0x80:
+			return false
+		case c == '\t':
+			cols += tab - cols%tab
+		default:
+			cols++
+		}
+	}
+	// A column of room, for fonts a little wider than their "0".
+	return float32(cols+1)*ed.charW <= ed.wrap.width
 }
 
 // wrapIndex returns the first row of each line, the rows of the lines
