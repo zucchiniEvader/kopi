@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 	"runtime/pprof"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -41,8 +43,29 @@ func (w *window) captureIfAsked() {
 	}()
 }
 
-// debugSetup puts the window in a state to capture.
+// debugSetup puts the window in a state to capture: one of the states
+// below, or steps apart with commas, as open:src/a.go:12,wrap.
 func (w *window) debugSetup(setup string) {
+	if strings.Contains(setup, ",") || strings.Contains(setup, ":") {
+		for _, step := range strings.Split(setup, ",") {
+			name, arg, _ := strings.Cut(step, ":")
+			switch name {
+			case "open":
+				p, line, _ := strings.Cut(arg, ":")
+				n, _ := strconv.Atoi(line)
+				w.openFile(p, n)
+			case "wrap":
+				w.withText(func(e *editorTab) { e.ed.SetWordWrap(true) })
+			case "foldall":
+				w.withText(func(e *editorTab) { e.ed.FoldAll() })
+			case "complete":
+				w.withText(func(e *editorTab) { e.ed.Complete() })
+			default:
+				w.debugSetup(name)
+			}
+		}
+		return
+	}
 	switch setup {
 	case "history":
 		w.tab = tabGit

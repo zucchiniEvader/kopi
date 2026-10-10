@@ -24,6 +24,12 @@ func TestInlayHints(t *testing.T) {
 	if got, want := ed.xOf(Pos{0, 11}), ed.shape(ed.buf.Line(0)).xs[11]+w1+w2; got != want {
 		t.Errorf("x of 11: %v, want %v", got, want)
 	}
+	// Each hint shows where its column was, after the hints before: not
+	// over the text.
+	xs := ed.hintXs(ed.InlayHints(0), ed.shapeLine(0))
+	if base := ed.shape(ed.buf.Line(0)).xs; xs[0] != base[5] || xs[1] != base[10]+w1 {
+		t.Errorf("hints at %v, want %v and %v", xs, base[5], base[10]+w1)
+	}
 	// A click past the hint lands after it.
 	if c := ed.colAt(0, ed.xOf(Pos{0, 11})); c != 11 {
 		t.Errorf("col at 11's x: %d", c)

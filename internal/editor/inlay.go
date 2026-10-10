@@ -124,12 +124,8 @@ func (ed *Editor) paintInlayHints(p *ui.Painter, i int, sl *shapedLine, x, y flo
 	if len(hints) == 0 {
 		return
 	}
-	// The hints before each one push it right.
-	before := float32(0)
-	for _, h := range hints {
-		w := ed.hintWidth(h)
-		c := min(h.Pos.Col, len(sl.xs)-1)
-		hx := x + sl.xs[c] + before
+	for k, h := range hints {
+		hx := x + ed.hintXs(hints, sl)[k]
 		if h.PadLeft {
 			hx += ed.charW / 2
 		}
@@ -137,6 +133,22 @@ func (ed *Editor) paintInlayHints(p *ui.Painter, i int, sl *shapedLine, x, y flo
 		box := ui.Rect{X: hx, Y: y + 2, W: label.width + ed.charW/2, H: ed.lineH - 4}
 		p.Fill(box, ed.style.Selection.Alpha(0.35), 3)
 		p.Glyphs(label.glyphs, hx+ed.charW/4, y+ed.baseline, ed.style.LineNumber)
-		before += w
 	}
+}
+
+// hintXs returns where each of a line's hints starts, from the line's
+// left, in sl, the line shaped with them: its places hold the hints
+// before each column, and the hints at one column push each other right.
+func (ed *Editor) hintXs(hints []InlayHint, sl *shapedLine) []float32 {
+	out := make([]float32, len(hints))
+	before, at := float32(0), -1
+	for k, h := range hints {
+		c := min(h.Pos.Col, len(sl.xs)-1)
+		if c != at {
+			before, at = 0, c
+		}
+		out[k] = sl.xs[c] + before
+		before += ed.hintWidth(h)
+	}
+	return out
 }
