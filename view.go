@@ -128,7 +128,6 @@ func (w *window) toolbar(c *ui.Context, pal *palette) {
 		// The tabs; the repository's name and place show in the explorer,
 		// its branch in the Git tab. What the tabs leave drags the window.
 		if len(w.editors) > 0 {
-			w.navButtons(c)
 			w.editorTabs(c, pal)
 		}
 		ui.Spacer(c)
@@ -148,7 +147,10 @@ func (w *window) mainArea(c *ui.Context, pal *palette) {
 	case w.split():
 		w.splitArea(c, pal)
 	default:
-		w.tabArea(c, pal, e)
+		ui.Column(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+			w.pathBar(c, pal, e, true)
+			w.tabArea(c, pal, e)
+		})
 	}
 }
 

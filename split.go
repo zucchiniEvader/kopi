@@ -117,7 +117,11 @@ func (w *window) splitArea(c *ui.Context, pal *palette) {
 				ui.Box(c).Width(1).Background(pal.cardBorder).Shrink(0)
 			}
 			pane := ui.Column(c).Grow(1).Basis(0).MinWidth(0).Key(e)
-			pane.Children(func() { w.tabArea(c, pal, e) })
+			pane.Children(func() {
+				// Back and Forward, of the window, at its left.
+				w.pathBar(c, pal, e, k == 0)
+				w.tabArea(c, pal, e)
+			})
 			if e != w.activeTab() && (pane.FocusWithin() || pane.Pressed()) {
 				w.focusOther()
 			}

@@ -43,6 +43,9 @@ tree's Git changes.
   chosen from the status bar (**Python: Select Interpreter**), or given by
   its path, a Python or an environment's folder anywhere: Run, Debug,
   pyright and the terminal use it, the environment active.
+- **Path bar**: over the editor, Back and Forward, then the folders, the
+  file and the symbols holding the caret, as its language server gives
+  them: a folder reveals in the explorer, a symbol lists the file's.
 - **Run and debug**: `.vscode/launch.json` as VS Code reads it, with the
   `preLaunchTask` of `tasks.json`, or the file shown: Java through
   Microsoft's java-debug, with Run | Debug on main methods; Go through
@@ -148,6 +151,7 @@ apply to open windows as the file changes:
     "inlayHints": true,            // the names and types it shows in the text
     "wordWrap": false,             // long lines wrap at the editor's width (⌥Z)
     "autoInstallServers": true,    // install a server missing, with pip or npm
+    "breadcrumbs": true,           // the path bar: folders, file, symbols at the caret
     "files.associations": { "*.tmpl": "html" },
     "keybindings": [               // keys for the command bar's commands
       { "key": "cmd+shift+r", "command": "Rename Symbol" }

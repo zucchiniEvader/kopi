@@ -1115,6 +1115,7 @@ func decodeTokens(data []uint32, legend semanticLegend, b *editor.Buffer) [][]hi
 func (w *window) semantic(s *langServer, e *editorTab) {
 	w.foldingRanges(s, e)
 	w.inlayHints(s, e)
+	w.documentSymbols(s, e)
 	if s.state != serverReady || e.ed == nil || len(s.legend.TokenTypes) == 0 {
 		return
 	}

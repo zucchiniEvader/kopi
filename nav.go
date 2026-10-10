@@ -103,14 +103,28 @@ func navKeys() (back, forward, backLabel, forwardLabel string) {
 	return "Alt+Left", "Alt+Right", "Alt+←", "Alt+→"
 }
 
-// navButtons are Back and Forward, at the left of the tabs.
+// navButtons are Back and Forward, at the left of the path bar.
 func (w *window) navButtons(c *ui.Context) {
-	ui.Row(c).Gap(0).Shrink(0).Margin(0, 0, 0, 6).AlignItems(ui.Center).Children(func() {
-		if b := iconButton(c, iconArrowLeft, "Go Back ("+backLabel+")").Disabled(!w.canNavigate(-1)); b.Clicked() {
+	ui.Row(c).Gap(0).Shrink(0).Margin(0, 6, 0, 0).AlignItems(ui.Center).Children(func() {
+		if b := navButton(c, iconArrowLeft, "Go Back ("+backLabel+")").Disabled(!w.canNavigate(-1)); b.Clicked() {
 			w.navigate(-1)
 		}
-		if b := iconButton(c, iconArrowRight, "Go Forward ("+forwardLabel+")").Disabled(!w.canNavigate(1)); b.Clicked() {
+		if b := navButton(c, iconArrowRight, "Go Forward ("+forwardLabel+")").Disabled(!w.canNavigate(1)); b.Clicked() {
 			w.navigate(1)
 		}
 	})
+}
+
+// navButton is an arrow of the path bar, smaller than the toolbar's
+// buttons.
+func navButton(c *ui.Context, svg *ui.SVG, tip string) ui.Element {
+	t := c.Theme()
+	b := ui.ButtonBase(c).Size(20, 20).Radius(4).Center().Label(tip).Tooltip(tip).TextColor(t.TextMuted)
+	if b.Pressed() {
+		b.Background(ui.RGBA(127, 127, 127, 0.22))
+	} else if b.Hovered() {
+		b.Background(ui.RGBA(127, 127, 127, 0.13))
+	}
+	b.Children(func() { ui.Icon(c, svg).FontSize(13) })
+	return b
 }

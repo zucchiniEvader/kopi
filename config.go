@@ -42,6 +42,9 @@ type Settings struct {
 	InlayHints   bool `json:"inlayHints"`
 	// WordWrap wraps the lines longer than the editor.
 	WordWrap bool `json:"wordWrap"`
+	// Breadcrumbs shows, over the editor, the folders, the file and the
+	// symbols holding the caret.
+	Breadcrumbs bool `json:"breadcrumbs"`
 	// LanguageServers change Kopi's language servers, or add others, by
 	// their IDs; FilesAssociations take files, by patterns of their names,
 	// as of languages, by their IDs.
@@ -63,6 +66,7 @@ func defaultSettings() Settings {
 		CodeFontSize:       13,
 		InlayHints:         true,
 		AutoInstallServers: true,
+		Breadcrumbs:        true,
 		SidebarPosition:    "left",
 		IconTheme:          "material",
 		Theme:              "system",

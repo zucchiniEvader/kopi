@@ -126,7 +126,7 @@ func TestTabsScroll(t *testing.T) {
 	e := w.activeTab()
 	at := editor.Pos{Line: 2}
 	e.ed.SetSelection(editor.Selection{Anchor: at, Caret: at})
-	tt.ClickAt(r.X+200, r.Y+titleBarHeight+8)
+	tt.ClickAt(r.X+200, r.Y+titleBarHeight+pathBarHeight+8)
 	tt.Frame()
 	if e.ed.Selection().Caret.Line != 0 {
 		t.Errorf("the click below the tabs missed the editor: caret %v", e.ed.Selection().Caret)

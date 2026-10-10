@@ -58,6 +58,8 @@ type editorTab struct {
 	// show it, is the tab of the file.
 	preview *previewState
 	viewOf  *editorTab
+	// symbols are the document's, which the path bar shows.
+	symbols docSymbols
 }
 
 // enc returns the ID of the encoding of the tab's file.
@@ -688,9 +690,13 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 		ui.Row(c).Height(26).Padding(0, 12).Gap(16).AlignItems(ui.Center).Shrink(0).
 			BorderWidth(1, 0, 0, 0).BorderColor(pal.cardBorder).Background(pal.headerBg).Children(func() {
 			small := func(s string) ui.Element { return ui.Text(c, s).FontSize(11).TextColor(t.TextMuted).SingleLine() }
+			// The path bar says the file's path; this, that a library's
+			// document is read-only.
 			name := e.path
 			if e.abs == "" {
 				name = e.origin() + " · " + e.title() + " (read-only)"
+			} else if w.settings.Breadcrumbs {
+				name = ""
 			}
 			small(name).Grow(1).Shrink(1).MinWidth(0)
 			if s := w.serverOf(e); s != nil {
