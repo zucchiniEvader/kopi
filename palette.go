@@ -42,6 +42,14 @@ func (w *window) commands() []command {
 		{title: "Save All", keys: "⌥⌘S", run: w.saveAll},
 		{title: "Format Document", hint: "Or the selection", keys: "⇧⌥F", run: w.formatActive},
 		{title: "Rename Symbol", keys: "F2", run: w.startRename},
+		{title: "Find All References", keys: "⇧F12", run: w.findReferences},
+		{title: "Go to Implementations", keys: "⌘F12", run: w.goToImplementation},
+		{title: "Go to Type Definition", run: w.goToTypeDefinition},
+		{title: "Go to Symbol in File", keys: "⇧⌘O", run: w.goToSymbolInFile},
+		{title: "Go to Symbol in Workspace", keys: "⌘T", run: w.goToSymbolInWorkspace},
+		{title: "Go to Problem", hint: "Errors and warnings of the files", run: w.goToProblem},
+		{title: "Quick Fix", hint: "Code actions at the selection", keys: "⌘.", run: w.quickFix},
+		{title: "Organize Imports", keys: "⇧⌥O", run: w.organizeImports},
 		{title: "Close Tab", keys: "⌘W", run: w.closeTab},
 		{title: "Next Change", hint: "In the diff tab", keys: "⌥F5", run: func() { w.goToChange(1) }},
 		{title: "Previous Change", hint: "In the diff tab", keys: "⇧⌥F5", run: func() { w.goToChange(-1) }},
@@ -114,7 +122,7 @@ func (w *window) openSettings(path string) {
 // palette shows the command bar while it is open.
 func (w *window) palette(c *ui.Context) {
 	if !w.paletteOpen {
-		w.paletteQuery, w.paletteChoices = "", nil
+		w.paletteQuery, w.paletteChoices, w.paletteSearch = "", nil, nil
 		return
 	}
 	t := c.Theme()
@@ -126,7 +134,7 @@ func (w *window) palette(c *ui.Context) {
 	}
 	var cmds []command
 	for _, cmd := range source {
-		if fuzzyMatch(cmd.title, q) {
+		if w.paletteSearch != nil || fuzzyMatch(cmd.title, q) {
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -141,7 +149,7 @@ func (w *window) palette(c *ui.Context) {
 			return
 		}
 		w.paletteOpen = false
-		w.paletteQuery, w.paletteChoices = "", nil
+		w.paletteQuery, w.paletteChoices, w.paletteSearch = "", nil, nil
 		cmds[i].run()
 	}
 	ui.DialogBase(c, &w.paletteOpen, func(backdrop, panel ui.Element) {
@@ -153,6 +161,9 @@ func (w *window) palette(c *ui.Context) {
 			input := ui.TextInputBase(c, &w.paletteQuery).Placeholder(prompt).Label("Command").FontSize(15).Grow(1).AutoFocus()
 			if input.Changed() {
 				w.paletteRow = 0
+				if w.paletteSearch != nil {
+					w.paletteSearch(strings.TrimSpace(w.paletteQuery))
+				}
 			}
 			if input.Shortcut(0, ui.KeyDown) && len(cmds) > 0 {
 				w.paletteRow = (w.paletteRow + 1) % len(cmds)
@@ -206,8 +217,16 @@ func (w *window) palette(c *ui.Context) {
 		})
 	})
 	if !w.paletteOpen {
-		w.paletteQuery, w.paletteChoices = "", nil
+		w.paletteQuery, w.paletteChoices, w.paletteSearch = "", nil, nil
 	}
+}
+
+// searchChoices opens the command bar on choices fetch sets as the query
+// changes, asking with prompt.
+func (w *window) searchChoices(prompt string, fetch func(q string)) {
+	w.choose(prompt, []command{})
+	w.paletteSearch = fetch
+	fetch("")
 }
 
 // choose opens the command bar on choices, asking with prompt.

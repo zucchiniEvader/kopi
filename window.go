@@ -152,6 +152,9 @@ type window struct {
 	// commands, as the languages to pick one; palettePrompt asks for one.
 	paletteChoices []command
 	palettePrompt  string
+	// paletteSearch, when set, is asked for the choices as the query
+	// changes, which it sets, matching it: the bar does not match them.
+	paletteSearch func(q string)
 	// rename is the symbol the rename dialog renames.
 	rename      renameState
 	paletteList ui.ListState

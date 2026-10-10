@@ -25,7 +25,7 @@ type serverCaps struct {
 	// they are typed, signatureTriggers for the signature;
 	// completionResolve that it tells more of a completion chosen.
 	completionTriggers, signatureTriggers []string
-	completionResolve                     bool
+	completionResolve, codeActionResolve  bool
 }
 
 // parseCaps reads the capabilities of a server's answer to initialize.
@@ -82,6 +82,12 @@ func parseCaps(raw json.RawMessage) serverCaps {
 	out.references = provides(c.ReferencesProvider)
 	out.rename = provides(c.RenameProvider)
 	out.codeAction = provides(c.CodeActionProvider)
+	var ca struct {
+		ResolveProvider bool `json:"resolveProvider"`
+	}
+	if json.Unmarshal(c.CodeActionProvider, &ca) == nil {
+		out.codeActionResolve = ca.ResolveProvider
+	}
 	out.formatting = provides(c.DocumentFormattingProvider)
 	out.rangeFormatting = provides(c.DocumentRangeFormattingProvider)
 	out.documentSymbol = provides(c.DocumentSymbolProvider)

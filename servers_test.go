@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -255,5 +256,42 @@ func TestRealClangd(t *testing.T) {
 	wait("the signature", time.Minute, func() bool { label, _ := e.ed.Signature(); return label != "" })
 	if label, param := e.ed.Signature(); !strings.Contains(label, "twice(int x)") || param != "int x" {
 		t.Errorf("signature %q, param %q", label, param)
+	}
+
+	// References: a list of the three files.
+	tt.Key(0, ui.KeyEscape)
+	e.ed.SetSelection(editor.Selection{Anchor: editor.Pos{Line: 3, Col: 14}, Caret: editor.Pos{Line: 3, Col: 14}})
+	tt.Frame()
+	w.findReferences()
+	wait("references", time.Minute, func() bool { return w.paletteOpen })
+	var titles []string
+	for _, c := range w.paletteChoices {
+		titles = append(titles, c.title)
+	}
+	// Without compile_commands.json, clangd knows the files open.
+	if len(titles) < 2 || !slices.Contains(titles, "main.c:4") {
+		t.Errorf("references %v", titles)
+	}
+	w.paletteOpen = false
+	e.ed.Focus()
+	tt.Frame()
+	// The other places of y, marked as the caret rests on it.
+	e.ed.SetSelection(editor.Selection{Anchor: editor.Pos{Line: 3, Col: 8}, Caret: editor.Pos{Line: 3, Col: 8}})
+	tt.Key(0, ui.KeyRight)
+	wait("highlights", time.Minute, func() bool { return len(e.ed.Highlights()) >= 2 })
+	// The symbols of the file, and of the workspace.
+	w.goToSymbolInFile()
+	wait("symbols", time.Minute, func() bool { return w.paletteOpen })
+	if len(w.paletteChoices) == 0 || !strings.Contains(w.paletteChoices[0].title, "main") {
+		t.Errorf("symbols %+v", w.paletteChoices)
+	}
+	w.paletteOpen = false
+	tt.Frame()
+	w.goToSymbolInWorkspace()
+	tt.Frame()
+	tt.Type("twi")
+	wait("workspace symbols", time.Minute, func() bool { return len(w.paletteChoices) > 0 && strings.Contains(w.paletteChoices[0].title, "tw") })
+	if c := w.paletteChoices[0]; c.title != "twice" {
+		t.Errorf("workspace symbol %+v", c)
 	}
 }

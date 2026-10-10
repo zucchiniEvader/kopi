@@ -287,6 +287,7 @@ func (w *window) attach(e *editorTab) {
 	ed.OnComplete = func(p editor.Pos, trigger string) { w.complete(s, e, p, trigger) }
 	ed.OnAcceptCompletion = func(it editor.CompletionItem) { w.resolveCompletion(s, e, it) }
 	ed.OnSignature = func(p editor.Pos, trigger string) { w.signatureAt(s, e, p, trigger) }
+	ed.OnCaret = func(p editor.Pos) { w.caretMoved(s, e, p) }
 	ed.OnDefinition = func(p editor.Pos) { w.definition(s, e, p) }
 	if e.abs == "" {
 		return
@@ -419,6 +420,8 @@ func initializeParams(root string, options map[string]any) map[string]any {
 				"semanticTokens":   map[string]any{"refreshSupport": true},
 				"workspaceFolders": true,
 				"workspaceEdit":    map[string]any{"documentChanges": true},
+				"symbol":           map[string]any{},
+				"executeCommand":   map[string]any{},
 				"applyEdit":        true,
 			},
 			"textDocument": map[string]any{
@@ -447,10 +450,23 @@ func initializeParams(root string, options map[string]any) map[string]any {
 					},
 					"completionItemKind": map[string]any{"valueSet": seq(1, 25)},
 				},
-				"definition":         map[string]any{"linkSupport": true},
-				"formatting":         map[string]any{},
-				"rangeFormatting":    map[string]any{},
-				"rename":             map[string]any{"prepareSupport": false},
+				"definition":        map[string]any{"linkSupport": true},
+				"formatting":        map[string]any{},
+				"rangeFormatting":   map[string]any{},
+				"rename":            map[string]any{"prepareSupport": false},
+				"references":        map[string]any{},
+				"documentHighlight": map[string]any{},
+				"codeAction": map[string]any{
+					"codeActionLiteralSupport": map[string]any{"codeActionKind": map[string]any{"valueSet": []string{
+						"", "quickfix", "refactor", "refactor.extract", "refactor.inline", "refactor.rewrite", "source", "source.organizeImports", "source.fixAll"}}},
+					"isPreferredSupport": true,
+					"disabledSupport":    true,
+					"dataSupport":        true,
+					"resolveSupport":     map[string]any{"properties": []string{"edit"}},
+				},
+				"implementation":     map[string]any{"linkSupport": true},
+				"typeDefinition":     map[string]any{"linkSupport": true},
+				"documentSymbol":     map[string]any{"hierarchicalDocumentSymbolSupport": true},
 				"publishDiagnostics": map[string]any{"relatedInformation": false},
 				"semanticTokens": map[string]any{
 					"requests":       map[string]any{"full": true},

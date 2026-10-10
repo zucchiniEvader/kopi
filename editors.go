@@ -31,8 +31,9 @@ type editorTab struct {
 	uri  string
 	ed   *editor.Editor
 	err  string
-	// semGen counts the edits, to ask for semantic tokens once they stop.
-	semGen int
+	// semGen counts the edits, to ask for semantic tokens once they stop;
+	// caretGen the caret's moves, to mark the symbol at it once it rests.
+	semGen, caretGen int
 	// library tells a document from outside the repository: a class of
 	// the JDK or of a dependency, or a file elsewhere.
 	library bool
@@ -621,7 +622,11 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 			small(name).Grow(1).Shrink(1).MinWidth(0)
 			if s := w.serverOf(e); s != nil {
 				if errs, warns := counts(e); errs+warns > 0 {
-					ui.Row(c).Gap(8).Children(func() {
+					row := ui.Row(c).Gap(8).Cursor(ui.CursorPointer).Tooltip("Go to Problem")
+					if row.Clicked() {
+						w.goToProblem()
+					}
+					row.Children(func() {
 						if errs > 0 {
 							small(fmt.Sprintf("✕ %d", errs)).TextColor(pal.delText).Tooltip(plural(errs, "error"))
 						}

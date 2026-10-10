@@ -146,6 +146,11 @@ type Editor struct {
 	OnSignature       func(p Pos, trigger string)
 	SignatureTriggers []string
 	sig               signatureState
+	// OnCaret, when set, hears of the caret moved, by the keys, the
+	// pointer or an edit; highlights are ranges SetHighlights marks.
+	OnCaret    func(p Pos)
+	lastCaret  Pos
+	highlights []Range
 
 	diags []Diagnostic
 	hover hoverState
@@ -563,6 +568,7 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 			sl := ed.shape(line)
 			ed.paintMarkLine(p, i, sl, text, textX, y)
 			ed.maxW = max(ed.maxW, sl.width)
+			ed.paintHighlights(p, i, sl, textX, y)
 			ed.paintMatches(p, i, sl, textX, y)
 			if !ed.sel.Empty() && i >= a.Line && i <= z.Line {
 				x0, x1 := float32(0), sl.width
@@ -731,6 +737,7 @@ func (ed *Editor) input(ev ui.InputEvent) bool {
 		// Anything but the pointer moving puts the hover away.
 		ed.hover = hoverState{}
 	}
+	defer ed.caretMoved()
 	defer ed.checkSignature()
 	defer ed.checkCompletions()
 	switch ev.Kind {
@@ -1478,8 +1485,8 @@ func (ed *Editor) replace(a, z Pos, s string) Pos {
 		ed.OnEdit(a, z, s)
 	}
 	end := ed.buf.Replace(a, z, s)
-	// The hover tells of the text as it was.
-	ed.hover = hoverState{}
+	// The hover and the highlights tell of the text as it was.
+	ed.hover, ed.highlights = hoverState{}, nil
 	ed.shiftSnippet(a, z, end)
 	ed.shiftDiagnostics(a, z, end)
 	ed.hl.shift(a, z, end)

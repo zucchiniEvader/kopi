@@ -97,11 +97,16 @@ const (
 	SeverityHint        = 4
 )
 
+// Diagnostic is a problem of a document. Code, Tags and Data go back to
+// the server as they came, asking for the code actions fixing it.
 type Diagnostic struct {
-	Range    Range  `json:"range"`
-	Severity int    `json:"severity,omitempty"`
-	Source   string `json:"source,omitempty"`
-	Message  string `json:"message"`
+	Range    Range           `json:"range"`
+	Severity int             `json:"severity,omitempty"`
+	Code     json.RawMessage `json:"code,omitempty"`
+	Source   string          `json:"source,omitempty"`
+	Message  string          `json:"message"`
+	Tags     []int           `json:"tags,omitempty"`
+	Data     json.RawMessage `json:"data,omitempty"`
 }
 
 type PublishDiagnosticsParams struct {

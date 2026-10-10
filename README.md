@@ -19,8 +19,9 @@ tree's Git changes.
   `files.associations`, or chosen from the status bar; its comments
   (<kbd>⌘/</kbd>, <kbd>⇧⌥A</kbd>), brackets and quotes closing themselves,
   and its indent, as the file indents or its `.editorconfig` says.
-- **Language servers**: problems, hovers, go to definition and semantic
-  colors from the servers on the machine (the PATH of the login shell):
+- **Language servers**: problems, hovers, completions with snippets,
+  signatures, go to definition, references, symbols, rename, formatting,
+  quick fixes and semantic colors from the servers on the machine (the PATH of the login shell):
   typescript-language-server, pyright, rust-analyzer, clangd, the
   servers of HTML, CSS and JSON, yaml-language-server, bash-language-server
   and some 20 more, or one of `languageServers`. The status bar says when a
@@ -88,6 +89,9 @@ Tool…** installs the `kopi` command.
 | <kbd>⌘</kbd>-click, <kbd>F12</kbd> | Go to the definition |
 | <kbd>⌃Space</kbd> / <kbd>⇧⌘Space</kbd> | Completions / the signature of the call |
 | <kbd>F2</kbd> / <kbd>⇧⌥F</kbd> | Rename the symbol / format the document |
+| <kbd>⇧F12</kbd> / <kbd>⌘F12</kbd> | References / implementations |
+| <kbd>⇧⌘O</kbd> / <kbd>⌘T</kbd> | Go to a symbol of the file / of the workspace |
+| <kbd>⌘.</kbd> / <kbd>⇧⌥O</kbd> | Quick fix / organize imports |
 | <kbd>F5</kbd> / <kbd>⌃F5</kbd> | Debug / run |
 | <kbd>⇧F5</kbd> / <kbd>⇧⌘F5</kbd> | Stop / restart |
 | <kbd>F9</kbd> | Toggle a breakpoint |
