@@ -90,7 +90,7 @@ func TestBinaryFileEditor(t *testing.T) {
 	w, tt := newTestWindow(t, dir)
 	w.openFile("logo.bin", 0)
 	tt.Frame()
-	if !tt.HasText("This file is binary, or not UTF-8 text.") {
+	if !tt.HasText("This file is binary.") {
 		t.Errorf("texts %q", tt.Texts())
 	}
 }

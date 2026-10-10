@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/zucchiniEvader/kopi/internal/encoding"
 	"os"
 	"time"
 
@@ -54,8 +55,11 @@ func (w *window) checkDisk() {
 		if err != nil {
 			continue
 		}
+		text, err := encoding.Decode(data, e.enc())
+		if err != nil {
+			continue
+		}
 		e.stamp = now
-		text := string(data)
 		switch {
 		case text == e.ed.Text():
 			e.disk = diskSame

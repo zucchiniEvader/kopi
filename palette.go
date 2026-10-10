@@ -70,6 +70,7 @@ func (w *window) commands() []command {
 		{title: "Change Indentation", hint: "Tabs or spaces, and their width", run: w.chooseIndent},
 		{title: "Detect Indentation from Content", run: w.detectIndent},
 		{title: "Change End of Line Sequence", hint: "LF or CRLF", run: w.chooseEOL},
+		{title: "Change Encoding", hint: "Reopen or save the file in another", run: w.chooseEncoding},
 		{title: "Open Settings", keys: "⌘,", run: func() { w.openSettings(cfg.ensure()) }},
 		{title: "Refresh Changes", keys: "⌘R", run: w.refresh},
 		{title: "Keyboard Shortcuts", run: func() { w.help = true }},

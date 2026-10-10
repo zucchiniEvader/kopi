@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/zucchiniEvader/kopi/internal/editor"
+	"github.com/zucchiniEvader/kopi/internal/encoding"
 	"github.com/zucchiniEvader/kopi/internal/lang"
 )
 
@@ -121,4 +122,76 @@ func indentLabel(in editor.Indent) string {
 		return fmt.Sprintf("Tab Size: %d", in.Size)
 	}
 	return fmt.Sprintf("Spaces: %d", in.Size)
+}
+
+// encodingName names an encoding, short, as the status bar does.
+func encodingName(id string) string {
+	if e, ok := encoding.ByID(id); ok {
+		name, _, _ := strings.Cut(e.Name, " (")
+		return name
+	}
+	return id
+}
+
+// isASCII reports whether s is of ASCII alone.
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
+// chooseEncoding offers to read the file shown again in another
+// encoding, or to save it in one.
+func (w *window) chooseEncoding() {
+	e := w.activeText()
+	if e == nil || e.abs == "" {
+		return
+	}
+	list := func(prompt string, fn func(id string)) func() {
+		return func() {
+			var choices []command
+			for _, enc := range encoding.All {
+				c := command{title: enc.Name, run: func() { fn(enc.ID) }}
+				if enc.ID == e.enc() {
+					c.hint = "current"
+				}
+				choices = append(choices, c)
+			}
+			w.choose(prompt, choices)
+		}
+	}
+	w.choose("Encoding of "+e.title(), []command{
+		{title: "Reopen with Encoding", hint: "Read the file again as another", run: list("Reopen with encoding", func(id string) { w.reopenAs(e, id) })},
+		{title: "Save with Encoding", hint: "Write the file as another", run: list("Save with encoding", func(id string) {
+			old := e.encoding
+			e.encoding = id
+			if err := w.writeEditor(e); err != nil {
+				e.encoding = old
+				e.ed.Notice(e.ed.Selection().Caret, "Could not save as "+encodingName(id)+": "+err.Error())
+			}
+		})},
+	})
+}
+
+// reopenAs reads a tab's file again in an encoding, unless it has
+// changes unsaved.
+func (w *window) reopenAs(e *editorTab, id string) {
+	if e.ed.Dirty() {
+		e.ed.Notice(e.ed.Selection().Caret, "Save or undo the changes first: reopening reads the file again.")
+		return
+	}
+	data, err := readEditable(e.abs)
+	if err == nil {
+		var text string
+		if text, err = encoding.Decode(data, id); err == nil {
+			e.ed.Reload(text)
+			e.ed.MarkSaved()
+			e.encoding = id
+			return
+		}
+	}
+	e.ed.Notice(e.ed.Selection().Caret, "Could not read it as "+encodingName(id)+": "+err.Error())
 }

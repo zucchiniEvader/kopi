@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path"
@@ -14,6 +13,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/editor"
 	"github.com/zucchiniEvader/kopi/internal/editorconfig"
+	"github.com/zucchiniEvader/kopi/internal/encoding"
 	"github.com/zucchiniEvader/kopi/internal/lsp"
 )
 
@@ -49,8 +49,18 @@ type editorTab struct {
 	lensDone    bool
 	// diff is the change a diff tab shows, nil for a file's tab.
 	diff *diffSpec
-	// config is what the .editorconfig files say of the file.
-	config editorconfig.Config
+	// config is what the .editorconfig files say of the file; encoding
+	// the ID of the encoding it is read and written in, "" for UTF-8.
+	config   editorconfig.Config
+	encoding string
+}
+
+// enc returns the ID of the encoding of the tab's file.
+func (e *editorTab) enc() string {
+	if e.encoding == "" {
+		return encoding.UTF8
+	}
+	return e.encoding
 }
 
 // origin says where a library's document comes from: the module or jar
@@ -156,10 +166,13 @@ func (w *window) loadAbs(abs string) (*editorTab, bool) {
 		switch data, err := readEditable(abs); {
 		case err != nil:
 			e.err = err.Error()
-		case bytes.IndexByte(data[:min(len(data), 8000)], 0) >= 0 || !utf8.Valid(data):
-			e.err = "This file is binary, or not UTF-8 text."
 		default:
-			e.ed = editor.New(p, string(data))
+			text, enc, err := encoding.Detect(data)
+			if err != nil {
+				e.err = "This file is binary."
+				break
+			}
+			e.ed, e.encoding = editor.New(p, text), enc
 			w.applyFileSettings(e)
 		}
 		w.editors = append(w.editors, e)
@@ -200,6 +213,10 @@ func (e *editorTab) applyEditorConfig() {
 		b.BOM = true
 	case "utf-8":
 		b.BOM = false
+	}
+	// Another encoding, for a file whose text tells none: ASCII alone.
+	if enc, ok := encoding.ByID(c.Charset); ok && enc.ID != encoding.UTF8 && isASCII(e.ed.Text()) {
+		e.encoding = enc.ID
 	}
 }
 
@@ -334,7 +351,11 @@ func (w *window) writeEditor(e *editorTab) error {
 	if fi, err := os.Stat(p); err == nil {
 		mode = fi.Mode().Perm()
 	}
-	if err := os.WriteFile(p, []byte(e.ed.Text()), mode); err != nil {
+	data, err := encoding.Encode(e.ed.Text(), e.enc())
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(p, data, mode); err != nil {
 		return err
 	}
 	e.ed.MarkSaved()
@@ -663,6 +684,9 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 				eol = "CRLF"
 			}
 			pick(eol, "Change End of Line Sequence", w.chooseEOL)
+			if e.diff == nil {
+				pick(encodingName(e.enc()), "Change Encoding", w.chooseEncoding)
+			}
 		})
 	})
 }
