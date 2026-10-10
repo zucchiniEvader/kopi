@@ -314,7 +314,7 @@ func managedCommand(w *window, ls *langServer, gen int, s Settings) ([]string, e
 	if !ok {
 		return nil, nil
 	}
-	w.serverSays(ls, gen, "Installing "+p.Bin)
+	w.serverSays(ls, gen, "Installing "+p.Name())
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	b, err := managed.Install(ctx, cache, p, tool, os.Environ())

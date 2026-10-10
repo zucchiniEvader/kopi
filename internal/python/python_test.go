@@ -66,3 +66,40 @@ func TestFindOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestResolve(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip()
+	}
+	root := t.TempDir()
+	write := func(p string) {
+		os.MkdirAll(filepath.Dir(filepath.Join(root, p)), 0o755)
+		os.WriteFile(filepath.Join(root, p), nil, 0o755)
+	}
+	write("envs/web/pyvenv.cfg")
+	write("envs/web/bin/python")
+	write("conda/envs/ml/bin/python3")
+	os.MkdirAll(filepath.Join(root, "conda/envs/ml/conda-meta"), 0o755)
+	write("tools/python3")
+	for _, c := range []struct{ in, path, env string }{
+		{"envs/web", "envs/web/bin/python", "envs/web"},
+		{"envs/web/bin", "envs/web/bin/python", "envs/web"},
+		{filepath.Join(root, "envs/web/bin/python"), "envs/web/bin/python", "envs/web"},
+		{"conda/envs/ml", "conda/envs/ml/bin/python3", "conda/envs/ml"},
+		{"tools", "tools/python3", ""},
+	} {
+		i, err := Resolve(root, c.in)
+		env := ""
+		if c.env != "" {
+			env = filepath.Join(root, c.env)
+		}
+		if err != nil || i.Path != filepath.Join(root, c.path) || i.Env != env {
+			t.Errorf("Resolve(%q) = %+v, %v", c.in, i, err)
+		}
+	}
+	for _, in := range []string{"", "missing", "conda"} {
+		if _, err := Resolve(root, in); err == nil {
+			t.Errorf("Resolve(%q) found one", in)
+		}
+	}
+}

@@ -62,6 +62,7 @@ func (w *window) view(c *ui.Context) {
 	w.shortcutsHelp(c)
 	w.trashDialog(c)
 	w.fileDialog(c)
+	w.pythonPathDialog(c)
 	if w.deletingBranch != "" {
 		open := true
 		name := w.deletingBranch

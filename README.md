@@ -40,7 +40,8 @@ tree's Git changes.
   modules' sources.
 - **Python**: the folder's interpreter, its `.venv`, `venv` or `env`, or
   Poetry's, Pipenv's, conda's environment, else the system's, or the one
-  chosen from the status bar (**Python: Select Interpreter**): Run, Debug,
+  chosen from the status bar (**Python: Select Interpreter**), or given by
+  its path, a Python or an environment's folder anywhere: Run, Debug,
   pyright and the terminal use it, the environment active.
 - **Run and debug**: `.vscode/launch.json` as VS Code reads it, with the
   `preLaunchTask` of `tasks.json`, or the file shown: Java through

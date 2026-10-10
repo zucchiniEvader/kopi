@@ -41,7 +41,7 @@ func languageName(e *editorTab) string {
 func (w *window) serverActions(s *langServer) {
 	choices := []command{{title: "Restart " + s.spec.title(), hint: s.spec.name, run: func() { w.restartServer(s) }}}
 	if p, _, ok := installable(s.spec); ok && s.state == serverFailed {
-		choices = append(choices, command{title: "Install " + p.Bin, hint: "In Kopi's own folder", run: func() { w.installServer(s) }})
+		choices = append(choices, command{title: "Install " + p.Name(), hint: "In Kopi's own folder", run: func() { w.installServer(s) }})
 	} else if canInstall(s.spec) && s.state == serverFailed {
 		choices = append(choices, command{title: "Install " + s.spec.title(), hint: s.spec.install, run: func() { w.installServer(s) }})
 	}
@@ -77,7 +77,7 @@ func (w *window) installServer(s *langServer) {
 	if p, tool, ok := installable(s.spec); ok {
 		// In Kopi's own folder, as the server starts.
 		w.stop(s)
-		s.state, s.status, s.detail = serverStarting, "Installing "+p.Bin, ""
+		s.state, s.status, s.detail = serverStarting, "Installing "+p.Name(), ""
 		gen := s.gen
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)

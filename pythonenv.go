@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/python"
 	"github.com/zucchiniEvader/kopi/internal/shellenv"
 )
@@ -19,6 +22,11 @@ type pyState struct {
 	// current is the folder's interpreter as last found, nil to find it
 	// again: as one is chosen, the list loads, or the window comes back.
 	current *python.Interpreter
+	// The dialog taking an interpreter's path: open, its text, what is
+	// wrong with it, and whether it is being tried.
+	pathOpen      bool
+	path, pathErr string
+	pathTrying    bool
 }
 
 // interpreter returns a path's interpreter, what is known of it.
@@ -28,10 +36,9 @@ func (w *window) knownInterpreter(p string) python.Interpreter {
 			return i
 		}
 	}
-	i := python.Interpreter{Path: p, Source: "chosen"}
-	// An interpreter of an environment: …/bin/python, a pyvenv.cfg above.
-	if env := filepath.Dir(filepath.Dir(p)); fileExists(filepath.Join(env, "pyvenv.cfg")) {
-		i.Env = env
+	i, err := python.Resolve("", p)
+	if err != nil {
+		return python.Interpreter{Path: p, Source: "chosen"}
 	}
 	return i
 }
@@ -103,6 +110,12 @@ func (w *window) loadPythons(fn func()) {
 		list := python.Find(root)
 		python.Versions(list)
 		w.post(func() {
+			// Those entered by their paths stay.
+			for _, i := range w.py.list {
+				if i.Source == "chosen" && !slices.ContainsFunc(list, func(o python.Interpreter) bool { return o.Path == i.Path }) {
+					list = append(list, i)
+				}
+			}
 			w.py.list, w.py.loaded, w.py.loading, w.py.current = list, true, false, nil
 			fns := w.py.afterLoad
 			w.py.afterLoad = nil
@@ -147,11 +160,15 @@ func (w *window) choosePython() {
 			}
 			choices = append(choices, command{title: title, hint: hint, run: func() { w.setPython(i.Path) }})
 		}
-		if len(choices) == 0 {
-			w.say(lineFail, "No Python found: install it, or make an environment with python3 -m venv .venv.")
-			w.run.open = true
-			return
+		// The one chosen by its path, which the folder's are not.
+		if !slices.ContainsFunc(w.py.list, func(i python.Interpreter) bool { return i.Path == cur }) && fileExists(cur) {
+			title := "Python"
+			if i := w.pythonInterp(); i.IsEnv() {
+				title += " (" + filepath.Base(i.Env) + ")"
+			}
+			choices = append([]command{{title: title, hint: "current · chosen · " + abbreviateHome(cur), run: func() {}}}, choices...)
 		}
+		choices = append(choices, command{title: "Enter Interpreter Path…", hint: "A Python, or an environment's folder", run: w.enterPythonPath})
 		w.choose("Select a Python interpreter", choices)
 	})
 }
@@ -198,3 +215,98 @@ func (w *window) pythonSettings(user map[string]any) map[string]any {
 
 // isPython reports whether a configuration's type is Python's.
 func isPython(t string) bool { return isType(t, pythonTypes) }
+
+// enterPythonPath asks for the path of an interpreter, or of its
+// environment's folder.
+func (w *window) enterPythonPath() {
+	if w.noFolder() {
+		return
+	}
+	w.py.pathOpen, w.py.pathErr, w.py.pathTrying = true, "", false
+	if w.py.path == "" {
+		w.py.path = abbreviateHome(w.pythonInterp().Path)
+	}
+}
+
+// tryPythonPath takes the path entered, once its interpreter runs.
+func (w *window) tryPythonPath() {
+	if w.py.pathTrying {
+		return
+	}
+	root, path := w.repo.Root, w.py.path
+	w.py.pathTrying, w.py.pathErr = true, ""
+	w.background(func() {
+		i, err := python.Resolve(root, path)
+		if err == nil {
+			list := []python.Interpreter{i}
+			python.Versions(list)
+			if i = list[0]; i.Version == "" {
+				err = fmt.Errorf("%s does not run as a Python", abbreviateHome(i.Path))
+			}
+		}
+		w.post(func() {
+			w.py.pathTrying = false
+			if err != nil {
+				w.py.pathErr = err.Error()
+				return
+			}
+			if !slices.ContainsFunc(w.py.list, func(o python.Interpreter) bool { return o.Path == i.Path }) {
+				w.py.list = append(w.py.list, i)
+			}
+			w.py.pathOpen, w.py.path = false, ""
+			w.setPython(i.Path)
+		})
+	})
+}
+
+// browsePython asks for an environment's folder with the system's
+// dialog.
+func (w *window) browsePython() {
+	root := w.repo.Root
+	go func() {
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Title: "Choose a Python Environment", DefaultPath: root,
+			ButtonLabel: "Choose", Directory: true, ShowHiddenFiles: true})
+		if err != nil || len(paths) == 0 {
+			return
+		}
+		w.post(func() {
+			w.py.path = abbreviateHome(paths[0])
+			w.tryPythonPath()
+		})
+	}()
+}
+
+// pythonPathDialog is the dialog taking an interpreter's path.
+func (w *window) pythonPathDialog(c *ui.Context) {
+	if !w.py.pathOpen {
+		return
+	}
+	t := c.Theme()
+	ui.Modal(c, &w.py.pathOpen, func() {
+		ui.Column(c).Width(480).Gap(14).Children(func() {
+			ui.Column(c).Gap(4).Children(func() {
+				ui.Text(c, "Python Interpreter").FontSize(16).Bold()
+				ui.Text(c, "A Python program, or the folder of an environment (venv, conda), as ~/envs/web or backend/.venv.").FontSize(13).TextColor(t.TextMuted)
+			})
+			if nameInput(c, &w.py.path, "Path", iconFolder, w.py.pathErr) {
+				w.tryPythonPath()
+			}
+			ui.Row(c).Gap(8).Children(func() {
+				if ui.Button(c, "Browse…").Clicked() {
+					w.browsePython()
+				}
+				ui.Spacer(c)
+				if ui.Button(c, "Cancel").Clicked() {
+					w.py.pathOpen = false
+				}
+				label := "Select"
+				if w.py.pathTrying {
+					label = "Checking…"
+				}
+				if ui.PrimaryButton(c, label).Clicked() {
+					w.tryPythonPath()
+				}
+			})
+		})
+	})
+}

@@ -5,6 +5,8 @@ package python
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -192,4 +194,59 @@ func Activate(env []string, i Interpreter) []string {
 		out = append(out, kv)
 	}
 	return append(out, "VIRTUAL_ENV="+i.Env)
+}
+
+// Resolve returns the interpreter a path the user gives names: a Python
+// program; an environment's folder, venv's or conda's; or the bin folder
+// of one. "~/" is the home folder; a relative path is root's.
+func Resolve(root, p string) (Interpreter, error) {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return Interpreter{}, errors.New("no path")
+	}
+	if p == "~" || strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
+		home, _ := os.UserHomeDir()
+		p = filepath.Join(home, p[1:])
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(root, p)
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		return Interpreter{}, fmt.Errorf("%s does not exist", p)
+	}
+	if !fi.IsDir() {
+		i := Interpreter{Path: p, Source: "chosen"}
+		// …/bin/python of an environment: pyvenv.cfg, or conda-meta, above.
+		if env := filepath.Dir(filepath.Dir(p)); isEnvDir(env) {
+			i.Env = env
+		} else if env := filepath.Dir(p); runtime.GOOS == "windows" && isEnvDir(env) {
+			i.Env = env // conda's python.exe, at its root
+		}
+		return i, nil
+	}
+	dir := p
+	candidates := []string{bin(dir), filepath.Join(dir, "bin", "python3")}
+	if runtime.GOOS == "windows" {
+		candidates = append(candidates, filepath.Join(dir, "python.exe"))
+	} else {
+		candidates = append(candidates, filepath.Join(dir, "python"), filepath.Join(dir, "python3"))
+	}
+	for _, c := range candidates {
+		if isFile(c) {
+			return Resolve(root, c)
+		}
+	}
+	return Interpreter{}, fmt.Errorf("no Python in %s: give an environment's folder, or its python", p)
+}
+
+// isEnvDir reports whether a folder is an environment's, venv's or
+// conda's.
+func isEnvDir(dir string) bool {
+	return isFile(filepath.Join(dir, "pyvenv.cfg")) || isDir(filepath.Join(dir, "conda-meta"))
+}
+
+func isDir(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.IsDir()
 }

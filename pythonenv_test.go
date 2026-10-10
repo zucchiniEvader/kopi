@@ -82,3 +82,66 @@ func TestPythonVenvRun(t *testing.T) {
 	}
 	_ = os.Getenv
 }
+
+// TestPythonPath takes an interpreter by the folder of its environment,
+// outside the repository.
+func TestPythonPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the layout of Unix's environments")
+	}
+	dir := testRepo(t)
+	writeFile(t, dir, "app.py", "print(1)\n")
+	envs := t.TempDir()
+	writeFile(t, envs, "web/pyvenv.cfg", "home = /usr/bin\n")
+	py := filepath.Join(envs, "web", "bin", "python")
+	writeFile(t, envs, "web/bin/python", "#!/bin/sh\necho 3.11.9\n")
+	os.Chmod(py, 0o755)
+	writeFile(t, envs, "broken/bin/python", "#!/bin/sh\nexit 1\n")
+	os.Chmod(filepath.Join(envs, "broken", "bin", "python"), 0o755)
+	w, tt := newTestWindow(t, dir)
+	w.posted = make(chan func(), 1024)
+	defer w.stopServers()
+	defer delete(state.data.Interpreters, w.repo.Root)
+	w.py.loaded = true
+	w.openFile("app.py", 0)
+	w.choosePython()
+	tt.Frame()
+	if err := tt.Click("Enter Interpreter Path…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !w.py.pathOpen || !tt.HasText("Python Interpreter") {
+		t.Fatalf("no dialog: %q", tt.Texts())
+	}
+	// Not a Python, then not there: the dialog says so.
+	for _, c := range []struct{ path, err string }{
+		{filepath.Join(envs, "broken"), "does not run"},
+		{filepath.Join(envs, "none"), "does not exist"},
+		{envs, "no Python in"},
+	} {
+		w.py.path = c.path
+		w.tryPythonPath()
+		pump(t, w, tt, "the check of "+c.path, func() bool { return !w.py.pathTrying })
+		if !strings.Contains(w.py.pathErr, c.err) || !w.py.pathOpen {
+			t.Errorf("%s: %q", c.path, w.py.pathErr)
+		}
+	}
+	w.py.path = filepath.Join(envs, "web")
+	if err := tt.Click("Select"); err != nil {
+		t.Fatal(err)
+	}
+	pump(t, w, tt, "the interpreter", func() bool { return !w.py.pathOpen })
+	if got := state.interpreter(w.repo.Root); got != py {
+		t.Fatalf("interpreter %q", got)
+	}
+	tt.Frame()
+	if !tt.HasText("Python 3.11.9 (web)") {
+		t.Errorf("status bar %q", tt.Texts())
+	}
+	// It shows among the choices, as the current one.
+	w.choosePython()
+	tt.Frame()
+	if !tt.HasText("Python 3.11.9 (web)") || !tt.HasText("current · chosen · "+abbreviateHome(py)) {
+		t.Errorf("choices %q", tt.Texts())
+	}
+}

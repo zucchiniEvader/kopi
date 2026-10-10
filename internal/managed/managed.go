@@ -23,6 +23,19 @@ type Package struct {
 	Bin      string
 }
 
+// Name names the package, as "basedpyright": its first, without its
+// version.
+func (p Package) Name() string {
+	if len(p.Packages) == 0 {
+		return p.Bin
+	}
+	n := p.Packages[0]
+	if i := strings.LastIndex(n, "@"); i > 0 {
+		n = n[:i]
+	}
+	return n
+}
+
 // Tool is the program a package's kind installs with, as "npm"; for pip,
 // a Python.
 func (p Package) Tool() string {

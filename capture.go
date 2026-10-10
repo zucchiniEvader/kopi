@@ -72,6 +72,8 @@ func (w *window) debugSetup(setup string) {
 				})
 			case "python":
 				w.choosePython()
+			case "pythonpath":
+				w.enterPythonPath()
 			case "previewside":
 				w.openPreviewToSide()
 			case "foldall":
