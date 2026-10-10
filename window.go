@@ -111,14 +111,11 @@ type window struct {
 	// closing is set once the window may close with unsaved changes.
 	closing bool
 
-	// The language servers of Java and Go, and what starts them, nil in
-	// tests, which give their own. posted, in tests, holds what the
-	// servers' goroutines post to the main thread.
-	java       langServer
-	golang     langServer
-	javaLaunch serverLauncher
-	goLaunch   serverLauncher
-	posted     chan func()
+	// The language servers, one of each spec, which tests start with
+	// launchers of their own. posted, in tests, holds what the servers'
+	// goroutines post to the main thread.
+	langServers []*langServer
+	posted      chan func()
 
 	// The search of the editor, and the bar going to a file.
 	edFind editorFind
@@ -205,8 +202,9 @@ func openWindow(dir string) error {
 	windowsMu.Unlock()
 
 	w := newWindow(repo)
-	w.javaLaunch = launchJava
-	w.goLaunch = launchGo
+	for _, s := range w.langServers {
+		s.launch = s.spec.launch
+	}
 	w.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:          windowTitle(repo.Root),
 		Width:          1280,
@@ -274,8 +272,7 @@ func newWindow(repo *git.Repo) *window {
 	width, shown := state.layout()
 	w := &window{
 		repo:         repo,
-		java:         langServer{lang: javaLang},
-		golang:       langServer{lang: goLang},
+		langServers:  newServers(),
 		settings:     cfg.Get(),
 		sidebarShown: shown,
 		sidebarWidth: width,
@@ -308,14 +305,15 @@ func windowTitle(root string) string {
 func (w *window) applySettings(s Settings) {
 	old := w.settings
 	w.settings = s
-	if old.JavaHome != s.JavaHome || old.JdtlsPath != s.JdtlsPath {
-		// Start the server again with the Java or the jdtls chosen.
-		if w.java.state != serverIdle {
-			w.stop(&w.java)
-			for _, e := range w.editors {
-				if e.abs != "" && isJava(e.path) && e.ed != nil {
-					w.attach(e)
-				}
+	for _, ls := range w.langServers {
+		if ls.spec.restart == nil || !ls.spec.restart(old, s) || ls.state == serverIdle {
+			continue
+		}
+		// Start the server again, as with the Java or the jdtls chosen.
+		w.stop(ls)
+		for _, e := range w.editors {
+			if e.abs != "" && ls.spec.is(e.path) && e.ed != nil {
+				w.attach(e)
 			}
 		}
 	}

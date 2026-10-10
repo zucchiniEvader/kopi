@@ -14,7 +14,7 @@ import (
 func TestManyDiagnostics(t *testing.T) {
 	dir := testRepo(t)
 	w, _ := newTestWindow(t, dir)
-	s := &w.java
+	s := w.jdtls()
 	s.diags, s.errors, s.counted = map[string][]lsp.Diagnostic{}, map[string]int{}, map[string]counted{}
 	start := time.Now()
 	for i := range 1300 {

@@ -18,13 +18,32 @@ import (
 	"github.com/zucchiniEvader/kopi/internal/proc"
 )
 
-func isJava(p string) bool { return strings.HasSuffix(p, ".java") || strings.HasPrefix(p, "jdt://") }
-
-// javaLang is Java, whose server is jdtls.
-var javaLang = &language{
-	name: "Java",
-	id:   "java",
-	is:   isJava,
+// jdtlsSpec is jdtls, Java's language server, which also resolves the
+// classes of libraries and runs java-debug.
+var jdtlsSpec = &serverSpec{
+	id:        "jdtls",
+	name:      "Java",
+	languages: []string{"java"},
+	owns:      func(p string) bool { return strings.HasPrefix(p, "jdt://") },
+	launch:    launchJava,
+	ready: func(w *window, s *langServer, bundles []string) {
+		s.debugger = len(bundles) > 0
+		if r := &w.run; r.waiting && r.pending != nil {
+			p := r.pending
+			r.waiting, r.pending = false, nil
+			w.launchConfig(p.cfg, p.debug)
+		}
+	},
+	failed: func(w *window, err error) {
+		if w.run.waiting {
+			w.run.waiting, w.run.pending = false, nil
+			w.say(lineFail, "The Java language server is unavailable: %v", err)
+		}
+	},
+	// The Java or the jdtls chosen changed.
+	restart: func(old, new Settings) bool {
+		return old.JavaHome != new.JavaHome || old.JdtlsPath != new.JdtlsPath
+	},
 	options: func(bundles []string) map[string]any {
 		return map[string]any{
 			"bundles": bundles,
@@ -53,10 +72,13 @@ var javaLang = &language{
 	},
 }
 
+// jdtls returns the window's jdtls.
+func (w *window) jdtls() *langServer { return w.server("jdtls") }
+
 // openClassFile opens a class of a library at a location, with the source
 // jdtls gives, or what it decompiles.
 func (w *window) openClassFile(loc lsp.Location) {
-	j := &w.java
+	j := w.jdtls()
 	if j.state != serverReady || !strings.HasPrefix(loc.URI, "jdt://") {
 		return
 	}
@@ -94,7 +116,7 @@ func javaWorkspace(cache, root string) string {
 // cleanJava stops jdtls, and starts it again on a workspace started over:
 // what it built before, and the errors of then, are gone.
 func (w *window) cleanJava() {
-	s := &w.java
+	s := w.jdtls()
 	shutdown := s.stop
 	s.stop = nil
 	w.stop(s)
@@ -108,7 +130,7 @@ func (w *window) cleanJava() {
 		}
 		w.post(func() {
 			for _, e := range w.editors {
-				if e.abs != "" && isJava(e.path) && e.ed != nil {
+				if e.abs != "" && s.spec.is(e.path) && e.ed != nil {
 					w.attach(e)
 				}
 			}
@@ -126,7 +148,7 @@ func workspaceKey(root string) string {
 // launchJava finds Java and jdtls, downloading jdtls when the machine has
 // none, and starts it on the window's repository.
 func launchJava(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, error) {
-	status := func(text string) { w.serverSays(&w.java, gen, text) }
+	status := func(text string) { w.serverSays(w.jdtls(), gen, text) }
 	jdk, err := java.FindJDK(s.JavaHome)
 	if err != nil {
 		return nil, nil, err

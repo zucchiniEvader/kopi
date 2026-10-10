@@ -21,7 +21,7 @@ func TestGoLanguageServer(t *testing.T) {
 	w, tt := newTestWindow(t, dir)
 	w.posted = make(chan func(), 1024)
 	fake := &fakeJDTLS{}
-	w.goLaunch = func(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, error) {
+	w.gopls().launch = func(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, error) {
 		client, server := net.Pipe()
 		conn := lsp.NewConn(server, fake)
 		fake.mu.Lock()
@@ -32,12 +32,12 @@ func TestGoLanguageServer(t *testing.T) {
 	defer w.stopServers()
 	w.openFile("main.go", 0)
 	e := w.activeTab()
-	pump(t, w, tt, "the server", func() bool { return w.golang.state == serverReady && fake.has("textDocument/didOpen main.go") })
+	pump(t, w, tt, "the server", func() bool { return w.gopls().state == serverReady && fake.has("textDocument/didOpen main.go") })
 	pump(t, w, tt, "diagnostics", func() bool { return len(e.ed.Diagnostics()) == 1 })
 	if w.errorsAt("main.go") != 1 || !tt.HasText("✕ 1") {
-		t.Errorf("errors %v, texts %q", w.golang.errors, tt.Texts())
+		t.Errorf("errors %v, texts %q", w.gopls().errors, tt.Texts())
 	}
-	if w.java.state != serverIdle {
+	if w.jdtls().state != serverIdle {
 		t.Error("a Go file started the Java server")
 	}
 	w.saveEditor()
@@ -80,14 +80,14 @@ func TestRealGopls(t *testing.T) {
 	writeFile(t, dir, "main.go", main)
 	w, tt := newTestWindow(t, dir)
 	w.posted = make(chan func(), 4096)
-	w.goLaunch = launchGo
+	w.gopls().launch = launchGo
 	defer w.stopServers()
 	wait := func(what string, d time.Duration, cond func() bool) {
 		t.Helper()
 		deadline := time.Now().Add(d)
 		for !cond() {
 			if time.Now().After(deadline) {
-				t.Fatalf("waiting for %s: %s %s", what, w.golang.statusText(), w.golang.detail)
+				t.Fatalf("waiting for %s: %s %s", what, w.gopls().statusText(), w.gopls().detail)
 			}
 			select {
 			case fn := <-w.posted:
@@ -99,7 +99,7 @@ func TestRealGopls(t *testing.T) {
 	}
 	w.openFile("main.go", 0)
 	e := w.activeTab()
-	wait("the server", 10*time.Minute, func() bool { return w.golang.state == serverReady })
+	wait("the server", 10*time.Minute, func() bool { return w.gopls().state == serverReady })
 	// undefined() is the one error.
 	wait("diagnostics", time.Minute, func() bool { return len(e.ed.Diagnostics()) > 0 })
 	for _, d := range e.ed.Diagnostics() {

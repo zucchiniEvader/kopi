@@ -11,12 +11,14 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/zucchiniEvader/kopi/internal/editor"
 	"github.com/zucchiniEvader/kopi/internal/highlight"
+	"github.com/zucchiniEvader/kopi/internal/lang"
 	"github.com/zucchiniEvader/kopi/internal/lsp"
 )
 
@@ -28,23 +30,58 @@ const (
 	serverFailed          // it could not start, or it stopped
 )
 
-// language is a language with a server: its name, and what its server is
-// told.
-type language struct {
-	name string // as the status bar says it
-	id   string // the documents' languageId
-	// is reports whether a file, by its path or URI, is of the language.
-	is func(p string) bool
+// serverSpec is a language server Kopi runs: the languages it serves,
+// how it starts, and what it is told.
+type serverSpec struct {
+	id   string // "gopls"
+	name string // as the status bar says it, "Go"
+	// languages are the IDs of the languages of internal/lang it serves;
+	// owns, if set, takes other documents, by their path or URI, as
+	// jdtls the classes of libraries.
+	languages []string
+	owns      func(p string) bool
+	launch    serverLauncher
 	// options are the server's initializationOptions, with the plugins it
 	// is to load; settings answer workspace/configuration, by section.
 	options  func(bundles []string) map[string]any
 	settings map[string]any
+	// ready runs once the server is initialized, with the plugins it
+	// loaded; failed once it could not start. restart reports whether
+	// settings changed call for the server to start again.
+	ready   func(w *window, s *langServer, bundles []string)
+	failed  func(w *window, err error)
+	restart func(old, new Settings) bool
 }
 
-// langServer is a language server of the window, on the repository: jdtls
-// for Java, gopls for Go. Main thread only.
+// serverSpecs are the language servers Kopi knows.
+var serverSpecs = []*serverSpec{jdtlsSpec, goplsSpec}
+
+// is reports whether a file, by its path or URI, is the server's.
+func (sp *serverSpec) is(p string) bool {
+	if sp.owns != nil && sp.owns(p) {
+		return true
+	}
+	if l := lang.ForName(p); l != nil {
+		return slices.Contains(sp.languages, l.ID)
+	}
+	return false
+}
+
+// languageID is the languageId of a document of the server.
+func (sp *serverSpec) languageID(p string) string {
+	if l := lang.ForName(p); l != nil && slices.Contains(sp.languages, l.ID) {
+		return l.ID
+	}
+	return sp.languages[0]
+}
+
+// langServer is a language server of the window, on the repository, as
+// jdtls for Java or gopls for Go. Main thread only.
 type langServer struct {
-	lang   *language
+	spec *serverSpec
+	// launch starts the server: the spec's, nil in tests, which give
+	// their own.
+	launch serverLauncher
 	state  int
 	status string // what the status bar says
 	detail string // why it failed, or what it is doing
@@ -63,7 +100,8 @@ type langServer struct {
 	order    []string         // the tokens, oldest first
 	// legend names the server's semantic token types and modifiers.
 	legend semanticLegend
-	// debugger tells that the server loaded java-debug.
+	// debugger tells that the server loaded a debugger, as jdtls
+	// java-debug.
 	debugger bool
 }
 
@@ -104,25 +142,37 @@ func (s *langServer) busy() bool {
 	return s.state == serverStarting || s.state == serverReady && len(s.order) > 0
 }
 
+// newServers returns a window's language servers, one of each spec,
+// none started.
+func newServers() []*langServer {
+	out := make([]*langServer, len(serverSpecs))
+	for i, sp := range serverSpecs {
+		out[i] = &langServer{spec: sp}
+	}
+	return out
+}
+
 // servers are the window's language servers.
-func (w *window) servers() []*langServer { return []*langServer{&w.java, &w.golang} }
+func (w *window) servers() []*langServer { return w.langServers }
+
+// server returns the window's server of a spec, by its ID.
+func (w *window) server(id string) *langServer {
+	for _, s := range w.langServers {
+		if s.spec.id == id {
+			return s
+		}
+	}
+	panic("no language server " + id)
+}
 
 // serverFor returns the server of a file's language, nil for none.
 func (w *window) serverFor(p string) *langServer {
 	for _, s := range w.servers() {
-		if s.lang.is(p) {
+		if s.spec.is(p) {
 			return s
 		}
 	}
 	return nil
-}
-
-// launcher returns what starts a server.
-func (w *window) launcher(s *langServer) serverLauncher {
-	if s == &w.java {
-		return w.javaLaunch
-	}
-	return w.goLaunch
 }
 
 // errorsAt returns how many errors the servers found in a file, or in the
@@ -161,7 +211,7 @@ func (w *window) serverSays(s *langServer, gen int, text string) {
 // language, which it starts the first time.
 func (w *window) attach(e *editorTab) {
 	s := w.serverFor(e.path)
-	if s == nil || w.launcher(s) == nil || e.ed == nil {
+	if s == nil || s.launch == nil || e.ed == nil {
 		return
 	}
 	ed := e.ed
@@ -190,16 +240,14 @@ func (w *window) start(s *langServer) {
 	// The new server says the problems again: those of the one before,
 	// as of a workspace started over, are gone.
 	s.diags, s.errors, s.counted = map[string][]lsp.Diagnostic{}, map[string]int{}, map[string]counted{}
-	launch, settings, root := w.launcher(s), w.settings, w.repo.Root
-	java := s == &w.java
+	launch, settings, root := s.launch, w.settings, w.repo.Root
 	go func() {
 		fail := func(err error) {
 			w.post(func() {
 				if s.gen == gen {
 					s.state, s.status, s.detail, s.conn = serverFailed, "Unavailable", err.Error(), nil
-					if java && w.run.waiting {
-						w.run.waiting, w.run.pending = false, nil
-						w.say(lineFail, "The Java language server is unavailable: %v", err)
+					if s.spec.failed != nil {
+						s.spec.failed(w, err)
 					}
 				}
 			})
@@ -219,9 +267,9 @@ func (w *window) start(s *langServer) {
 				} `json:"semanticTokensProvider"`
 			} `json:"capabilities"`
 		}
-		if err := conn.Call(ctx, "initialize", initializeParams(root, s.lang.options(bundles)), &init); err != nil {
+		if err := conn.Call(ctx, "initialize", initializeParams(root, s.spec.options(bundles)), &init); err != nil {
 			conn.Close()
-			fail(fmt.Errorf("the %s language server did not start: %w", s.lang.name, err))
+			fail(fmt.Errorf("the %s language server did not start: %w", s.spec.name, err))
 			return
 		}
 		conn.Notify("initialized", struct{}{})
@@ -236,25 +284,19 @@ func (w *window) start(s *langServer) {
 				s.legend = p.Legend
 			}
 			for _, e := range w.editors {
-				if e.ed != nil && e.abs != "" && s.lang.is(e.path) {
+				if e.ed != nil && e.abs != "" && s.spec.is(e.path) {
 					w.didOpen(s, e)
 				}
 			}
-			if !java {
-				return
-			}
-			s.debugger = len(bundles) > 0
-			if r := &w.run; r.waiting && r.pending != nil {
-				p := r.pending
-				r.waiting, r.pending = false, nil
-				w.launchConfig(p.cfg, p.debug)
+			if s.spec.ready != nil {
+				s.spec.ready(w, s, bundles)
 			}
 		})
 		<-conn.Done()
 		w.post(func() {
 			if s.gen == gen && s.conn == conn {
 				s.state, s.status, s.conn = serverFailed, "Stopped", nil
-				s.detail = "The " + s.lang.name + " language server stopped."
+				s.detail = "The " + s.spec.name + " language server stopped."
 				if err := conn.Err(); err != nil && !errors.Is(err, lsp.ErrClosed) {
 					s.detail += " " + err.Error()
 				}
@@ -400,7 +442,7 @@ func (h *serverHandler) Notify(method string, params json.RawMessage) {
 		}
 		// The server's own log, which its log file has too.
 		if json.Unmarshal(params, &p) == nil && p.Type == 1 && debugFrames {
-			log.Printf("%s: %s", s.lang.name, p.Message)
+			log.Printf("%s: %s", s.spec.name, p.Message)
 		}
 	}
 }
@@ -416,7 +458,7 @@ func (h *serverHandler) Request(method string, params json.RawMessage) (any, err
 		json.Unmarshal(params, &p)
 		out := make([]any, len(p.Items))
 		for i, it := range p.Items {
-			if v, ok := h.s.lang.settings[it.Section]; ok {
+			if v, ok := h.s.spec.settings[it.Section]; ok {
 				out[i] = v
 			}
 		}
@@ -447,7 +489,7 @@ func (w *window) didOpen(s *langServer, e *editorTab) {
 	}
 	s.docs[e.uri] = 1
 	s.conn.Notify("textDocument/didOpen", lsp.DidOpenTextDocumentParams{TextDocument: lsp.TextDocumentItem{
-		URI: e.uri, LanguageID: s.lang.id, Version: 1, Text: strings.Join(bufferLines(e.ed.Buffer()), "\n"),
+		URI: e.uri, LanguageID: s.spec.languageID(e.path), Version: 1, Text: strings.Join(bufferLines(e.ed.Buffer()), "\n"),
 	}})
 	w.semantic(s, e)
 }
@@ -627,10 +669,10 @@ func (w *window) hover(s *langServer, e *editorTab, p editor.Pos) {
 func (w *window) definition(s *langServer, e *editorTab, p editor.Pos) {
 	switch s.state {
 	case serverStarting, serverIdle:
-		e.ed.Notice(p, s.lang.name+" is starting: definitions come once it runs.")
+		e.ed.Notice(p, s.spec.name+" is starting: definitions come once it runs.")
 		return
 	case serverFailed:
-		e.ed.Notice(p, "The "+s.lang.name+" language server is unavailable. "+s.detail)
+		e.ed.Notice(p, "The "+s.spec.name+" language server is unavailable. "+s.detail)
 		return
 	}
 	var raw json.RawMessage
@@ -648,7 +690,7 @@ func (w *window) definition(s *langServer, e *editorTab, p editor.Pos) {
 			case ok:
 				w.openLocation(loc)
 			case len(s.order) > 0:
-				e.ed.Notice(p, "No definition found yet: "+s.lang.name+" is still loading the project.")
+				e.ed.Notice(p, "No definition found yet: "+s.spec.name+" is still loading the project.")
 			default:
 				a, z := e.ed.Buffer().WordAt(p)
 				e.ed.Notice(p, fmt.Sprintf("No definition found for %s.", e.ed.Buffer().Slice(a, z)))
@@ -712,10 +754,10 @@ func indexOf(tabs []*editorTab, e *editorTab) int {
 func (s *langServer) statusText() string {
 	switch s.state {
 	case serverStarting, serverFailed:
-		return s.lang.name + ": " + s.status
+		return s.spec.name + ": " + s.status
 	case serverReady:
 		if n := len(s.order); n > 0 {
-			return s.lang.name + ": " + s.progress[s.order[n-1]].String()
+			return s.spec.name + ": " + s.progress[s.order[n-1]].String()
 		}
 	}
 	return "" // the language beside it says enough
@@ -828,7 +870,7 @@ func (w *window) semantic(s *langServer, e *editorTab) {
 // document of its language open.
 func (w *window) semanticAll(s *langServer) {
 	for _, e := range w.editors {
-		if s.lang.is(e.path) {
+		if s.spec.is(e.path) {
 			w.semantic(s, e)
 		}
 	}

@@ -60,7 +60,7 @@ func (w *window) debugLaunch(cfg launch.Config, main string, classpath, modulepa
 	d.vars, d.open = map[int][]dap.Variable{}, map[string]bool{"Local": true}
 	d.paused, d.frames, d.threads, d.scopes = false, nil, nil, nil
 	w.run.status = "Starting the debugger"
-	conn := w.java.conn
+	conn := w.jdtls().conn
 	launchArgs := map[string]any{
 		"type":        "java",
 		"name":        cfg.Name,

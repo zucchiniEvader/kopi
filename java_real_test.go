@@ -37,7 +37,7 @@ func TestRealJDTLS(t *testing.T) {
 	w, tt := newTestWindow(t, dir)
 	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
-	w.javaLaunch = launchJava
+	w.jdtls().launch = launchJava
 	forgetJavaWorkspace(t, w)
 	defer w.stopServers()
 	wait := func(what string, d time.Duration, cond func() bool) {
@@ -46,14 +46,14 @@ func TestRealJDTLS(t *testing.T) {
 		last := ""
 		for !cond() {
 			if time.Now().After(deadline) {
-				t.Fatalf("waiting for %s: %s %s", what, w.java.statusText(), w.java.detail)
+				t.Fatalf("waiting for %s: %s %s", what, w.jdtls().statusText(), w.jdtls().detail)
 			}
 			select {
 			case fn := <-w.posted:
 				fn()
 			case <-time.After(20 * time.Millisecond):
 			}
-			if s := w.java.statusText(); s != last {
+			if s := w.jdtls().statusText(); s != last {
 				t.Logf("%6.1fs %s", time.Since(deadline.Add(-d)).Seconds(), s)
 				last = s
 			}
@@ -63,9 +63,9 @@ func TestRealJDTLS(t *testing.T) {
 	start := time.Now()
 	w.openFile("src/Main.java", 0)
 	e := w.activeTab()
-	wait("the server", 5*time.Minute, func() bool { return w.java.state == serverReady || w.java.state == serverFailed })
-	if w.java.state == serverFailed {
-		t.Fatalf("failed: %s", w.java.detail)
+	wait("the server", 5*time.Minute, func() bool { return w.jdtls().state == serverReady || w.jdtls().state == serverFailed })
+	if w.jdtls().state == serverFailed {
+		t.Fatalf("failed: %s", w.jdtls().detail)
 	}
 	wait("the problem", 3*time.Minute, func() bool {
 		for _, d := range e.ed.Diagnostics() {
@@ -76,8 +76,8 @@ func TestRealJDTLS(t *testing.T) {
 		return false
 	})
 	t.Logf("diagnostics after %v: %+v", time.Since(start), e.ed.Diagnostics())
-	if w.java.errors["src/Main.java"] == 0 {
-		t.Errorf("errors %v", w.java.errors)
+	if w.jdtls().errors["src/Main.java"] == 0 {
+		t.Errorf("errors %v", w.jdtls().errors)
 	}
 	// Writing the method takes the problem away.
 	e.ed.SetSelection(editor.Selection{Anchor: editor.Pos{Line: 6, Col: 0}, Caret: editor.Pos{Line: 6, Col: 0}})
@@ -127,7 +127,7 @@ func TestRealJDTLSLombok(t *testing.T) {
 	w, tt := newTestWindow(t, dir)
 	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
-	w.javaLaunch = launchJava
+	w.jdtls().launch = launchJava
 	forgetJavaWorkspace(t, w)
 	defer w.stopServers()
 	wait := func(what string, d time.Duration, cond func() bool) {
@@ -135,7 +135,7 @@ func TestRealJDTLSLombok(t *testing.T) {
 		deadline := time.Now().Add(d)
 		for !cond() {
 			if time.Now().After(deadline) {
-				t.Fatalf("waiting for %s: %s %s", what, w.java.statusText(), w.java.detail)
+				t.Fatalf("waiting for %s: %s %s", what, w.jdtls().statusText(), w.jdtls().detail)
 			}
 			select {
 			case fn := <-w.posted:
@@ -147,7 +147,7 @@ func TestRealJDTLSLombok(t *testing.T) {
 	}
 	w.openFile("src/main/java/com/example/App.java", 0)
 	e := w.activeTab()
-	wait("the project", 5*time.Minute, func() bool { return w.java.state == serverReady && len(w.java.order) == 0 })
+	wait("the project", 5*time.Minute, func() bool { return w.jdtls().state == serverReady && len(w.jdtls().order) == 0 })
 	// List, a class of the JDK, has the class's color once the server
 	// says what it is.
 	wait("semantic tokens", time.Minute, func() bool { return e.ed.ClassAt(editor.Pos{Line: 8, Col: 9}) == highlight.ClassName })
@@ -198,7 +198,7 @@ func TestRealRun(t *testing.T) {
 	w, tt := newTestWindow(t, dir)
 	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
-	w.javaLaunch = launchJava
+	w.jdtls().launch = launchJava
 	forgetJavaWorkspace(t, w)
 	defer w.stopServers()
 	wait := func(what string, d time.Duration, cond func() bool) {
@@ -252,7 +252,7 @@ func TestRealDebug(t *testing.T) {
 	w, tt := newTestWindow(t, dir)
 	w.settings.JavaHome = os.Getenv("KOPI_JAVA_HOME")
 	w.posted = make(chan func(), 4096)
-	w.javaLaunch = launchJava
+	w.jdtls().launch = launchJava
 	forgetJavaWorkspace(t, w)
 	defer w.stopServers()
 	wait := func(what string, d time.Duration, cond func() bool) {
