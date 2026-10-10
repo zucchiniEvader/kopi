@@ -172,12 +172,13 @@ func (ed *Editor) textAt(x, y float32) (Pos, bool) {
 	if row >= ed.rows() {
 		return Pos{}, false
 	}
-	i := ed.lineAtRow(row)
+	i, from, to := ed.rowSpan(row)
 	tx := x - ed.gutterWidth() - padLeft + ed.scrollX
-	if tx < 0 || tx > ed.shapeLine(i).width {
+	sl := ed.shapeLine(i)
+	if tx < 0 || tx > sl.xs[to]-sl.xs[from] {
 		return Pos{}, false
 	}
-	return Pos{i, ed.colAt(i, tx)}, true
+	return ed.colAtRow(row, tx), true
 }
 
 // buildHover asks OnHover once the pointer has rested long enough, and
@@ -256,7 +257,7 @@ func (ed *Editor) HoverText() string {
 
 // paintHover draws the hover's box below the word, or above it near the
 // bottom of the view.
-func (ed *Editor) paintHover(p *ui.Painter, r ui.Rect, textX float32, lineY func(int) float32) {
+func (ed *Editor) paintHover(p *ui.Painter, r ui.Rect, textX float32, rowY func(Pos) float32) {
 	h := ed.hover
 	if !h.fired {
 		return
@@ -288,9 +289,9 @@ func (ed *Editor) paintHover(p *ui.Painter, r ui.Rect, textX float32, lineY func
 	w, hh := p.MeasureText(maxW-2*pad, spans...)
 	box := ui.Rect{W: w + 2*pad, H: min(hh+2*pad, 320)}
 	box.X = max(r.X+8, min(textX+ed.xOf(h.pos), r.X+r.W-box.W-8))
-	box.Y = lineY(h.pos.Line) + ed.lineH + 4
+	box.Y = rowY(h.pos) + ed.lineH + 4
 	if box.Y+box.H > r.Y+r.H-4 {
-		box.Y = lineY(h.pos.Line) - box.H - 4
+		box.Y = rowY(h.pos) - box.H - 4
 	}
 	p.Shadow(box, 6, 0, 2, 10, 0, ui.RGBA(0, 0, 0, 0.18))
 	p.Fill(box, st.HoverBackground, 6)
@@ -308,7 +309,7 @@ func (ed *Editor) GoToPos(p Pos) {
 	ed.sel, ed.hasGoal = Selection{p, p}, false
 	ed.revealCaretLine()
 	if ed.h > 0 && ed.lineH > 0 {
-		y := float32(ed.rowOf(p.Line))*ed.lineH - ed.scrollY
+		y := float32(ed.posRow(p))*ed.lineH - ed.scrollY
 		if y >= 0 && y+ed.lineH <= ed.h {
 			ed.reveal()
 			return
@@ -348,7 +349,7 @@ func (ed *Editor) pointLink(mods ui.Modifiers, x, y float32) {
 // middle of its line, as a popup at the caret or a test needs.
 func (ed *Editor) PointOf(p Pos) (x, y float32) {
 	p = ed.buf.Clamp(p)
-	return ed.gutterWidth() + padLeft - ed.scrollX + ed.xOf(p), padTop + float32(ed.rowOf(p.Line))*ed.lineH - ed.scrollY + ed.lineH/2
+	return ed.gutterWidth() + padLeft - ed.scrollX + ed.xOf(p), padTop + float32(ed.posRow(p))*ed.lineH - ed.scrollY + ed.lineH/2
 }
 
 // SetSemanticTokens colors the text by the meaning of its names, as a

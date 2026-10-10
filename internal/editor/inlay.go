@@ -18,6 +18,8 @@ type InlayHint struct {
 type inlayState struct {
 	lines  map[int][]InlayHint
 	shaped map[int]*shapedLine
+	// gen counts the changes of the hints.
+	gen int
 }
 
 // SetInlayHints shows hints in the text at version; nil shows none.
@@ -33,7 +35,7 @@ func (ed *Editor) SetInlayHints(version int, hints []InlayHint) {
 	for _, list := range lines {
 		slices.SortStableFunc(list, func(a, b InlayHint) int { return a.Pos.Col - b.Pos.Col })
 	}
-	ed.inlay = inlayState{lines: lines, shaped: map[int]*shapedLine{}}
+	ed.inlay = inlayState{lines: lines, shaped: map[int]*shapedLine{}, gen: ed.inlay.gen + 1}
 }
 
 // InlayHints returns the hints of line i.
@@ -66,7 +68,7 @@ func (ed *Editor) shiftInlay(a, z, end Pos) {
 			lines[i+d] = moved
 		}
 	}
-	ed.inlay = inlayState{lines: lines, shaped: map[int]*shapedLine{}}
+	ed.inlay = inlayState{lines: lines, shaped: map[int]*shapedLine{}, gen: ed.inlay.gen + 1}
 }
 
 // hintWidth is the width a hint takes in its line.

@@ -161,6 +161,7 @@ type Editor struct {
 	brackets   bracketMatch
 	fold       foldState
 	inlay      inlayState
+	wrap       wrapState
 	// OnSelectionRanges, when set, is asked for the ranges around a
 	// place, to expand the selection to, which it gives ExpandWith.
 	OnSelectionRanges func(p Pos)
@@ -300,7 +301,7 @@ func (ed *Editor) centerCaret() {
 		return
 	}
 	ed.revealCaretLine()
-	ed.scrollY = float32(ed.rowOf(ed.sel.Caret.Line))*ed.lineH - ed.h/3
+	ed.scrollY = float32(ed.posRow(ed.sel.Caret))*ed.lineH - ed.h/3
 	ed.center = false
 	ed.clampScroll()
 }
@@ -480,7 +481,9 @@ func (ed *Editor) colAt(i int, x float32) int {
 // xOf returns the x of p from the start of its line.
 func (ed *Editor) xOf(p Pos) float32 {
 	p = ed.buf.Clamp(p) // a place of the text before an edit
-	return ed.shapeLine(p.Line).xs[p.Col]
+	sl := ed.shapeLine(p.Line)
+	_, from := ed.segIndex(p) // from the left of its row, wrapped
+	return sl.xs[p.Col] - sl.xs[from]
 }
 
 // gutterWidth is the width of the line numbers' column.
@@ -498,8 +501,7 @@ func (ed *Editor) posAt(x, y float32) Pos {
 	if y-padTop+ed.scrollY < 0 {
 		row = 0
 	}
-	i := ed.lineAtRow(max(0, row))
-	return Pos{i, ed.colAt(i, x-ed.gutterWidth()-padLeft+ed.scrollX)}
+	return ed.colAtRow(max(0, row), x-ed.gutterWidth()-padLeft+ed.scrollX)
 }
 
 // caretRect is where input methods compose, relative to the view.
@@ -507,7 +509,7 @@ func (ed *Editor) caretRect() ui.Rect {
 	c := ed.sel.Caret
 	return ui.Rect{
 		X: ed.gutterWidth() + padLeft - ed.scrollX + ed.xOf(c),
-		Y: padTop + float32(ed.rowOf(c.Line))*ed.lineH - ed.scrollY,
+		Y: padTop + float32(ed.posRow(c))*ed.lineH - ed.scrollY,
 		W: 1, H: ed.lineH,
 	}
 }
@@ -517,6 +519,9 @@ func (ed *Editor) caretRect() ui.Rect {
 func (ed *Editor) maxScroll() (float32, float32) {
 	my := float32(ed.rows()-1) * ed.lineH
 	mx := max(0, ed.maxW+2*ed.charW-(ed.w-ed.gutterWidth()-padLeft))
+	if ed.wrapping() {
+		mx = 0 // the lines fit, wrapped
+	}
 	return mx, my
 }
 
@@ -533,11 +538,16 @@ func (ed *Editor) reveal() {
 	}
 	ed.revealCaretLine()
 	c := ed.sel.Caret
-	y := float32(ed.rowOf(c.Line)) * ed.lineH
+	y := float32(ed.posRow(c)) * ed.lineH
 	if y < ed.scrollY {
 		ed.scrollY = y
 	} else if bottom := y + padTop + ed.lineH; bottom > ed.scrollY+ed.h {
 		ed.scrollY = bottom - ed.h
+	}
+	if ed.wrapping() {
+		ed.scrollX = 0
+		ed.clampScroll()
+		return
 	}
 	x := ed.xOf(c)
 	ed.maxW = max(ed.maxW, x)
@@ -566,10 +576,15 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 	p.Fill(r, st.Background, 0)
 	n := ed.buf.Lines()
 	gw := ed.gutterWidth()
+	if ed.wrap.on {
+		ed.setWrapWidth(r.W - gw - padLeft - ed.charW)
+		ed.scrollX = 0
+	}
 	first := ed.lineAtRow(max(0, int((ed.scrollY-padTop)/ed.lineH)))
 	last := min(n-1, ed.lineAtRow(int((ed.scrollY+r.H)/ed.lineH)+1))
 	textX := r.X + gw + padLeft - ed.scrollX
 	lineY := func(i int) float32 { return r.Y + padTop + float32(ed.rowOf(i))*ed.lineH - ed.scrollY }
+	rowY := func(p Pos) float32 { return r.Y + padTop + float32(ed.posRow(p))*ed.lineH - ed.scrollY }
 	caretOn := ed.focused
 	if caretOn {
 		since := p.Now().Sub(ed.blinkStart)
@@ -577,50 +592,75 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 		p.After(blink - since%blink)
 	}
 	text := ui.Rect{X: r.X + gw, Y: r.Y, W: r.W - gw, H: r.H}
+	// paintLine draws line i, of shape sl, its left at x, its row's top at
+	// y: once a row, wrapped.
+	paintLine := func(i int, sl *shapedLine, x, y float32) {
+		ed.paintMarkLine(p, i, sl, text, x, y)
+		ed.paintIndentGuides(p, i, x, y)
+		ed.paintHighlights(p, i, sl, x, y)
+		ed.paintBracketMatch(p, i, sl, x, y)
+		ed.paintMatches(p, i, sl, x, y)
+		ed.paintSelection(p, ed.sel, i, sl, x, y)
+		for _, o := range ed.extra {
+			ed.paintSelection(p, o, i, sl, x, y)
+		}
+		if ed.preedit != "" && i == ed.sel.Caret.Line {
+			ed.paintComposing(p, ed.buf.Line(i), x, y, caretOn)
+			return
+		}
+		la, lz := -1, -1
+		if l := ed.link; l.active && l.from.Line == i {
+			la, lz = l.from.Col, l.to.Col
+			x0, x1 := x+sl.xs[la], x+sl.xs[lz]
+			p.Line(x0, y+ed.baseline+2, x1, y+ed.baseline+2, 1, st.Link)
+		}
+		ed.paintGlyphs(p, sl, ed.hl.spans(i), x, y+ed.baseline, la, lz)
+		ed.paintDiagnostics(p, i, sl, x, y)
+		ed.paintLens(p, i, x, y+ed.baseline)
+		ed.paintFoldEllipsis(p, i, sl, x, y)
+		ed.paintInlayHints(p, i, sl, x, y)
+	}
 	p.Clip(text, 0, func() {
 		for i := first; i <= last; i++ {
 			if ed.isHidden(i) {
 				continue
 			}
 			y := lineY(i)
-			line := ed.buf.Line(i)
+			sl := ed.shapeLine(i)
+			segs := ed.segments(i)
+			rowsOf := 1 + len(segs)
 			if ed.sel.Empty() && i == ed.sel.Caret.Line {
-				p.Fill(ui.Rect{X: text.X, Y: y, W: text.W, H: ed.lineH}, st.CurrentLine, 0)
+				p.Fill(ui.Rect{X: text.X, Y: y, W: text.W, H: float32(rowsOf) * ed.lineH}, st.CurrentLine, 0)
 			}
 			if i == ed.execLine {
-				p.Fill(ui.Rect{X: text.X, Y: y, W: text.W, H: ed.lineH}, st.ExecLine, 0)
+				p.Fill(ui.Rect{X: text.X, Y: y, W: text.W, H: float32(rowsOf) * ed.lineH}, st.ExecLine, 0)
 			}
-			sl := ed.shapeLine(i)
-			ed.paintMarkLine(p, i, sl, text, textX, y)
 			ed.maxW = max(ed.maxW, sl.width)
-			ed.paintIndentGuides(p, i, textX, y)
-			ed.paintHighlights(p, i, sl, textX, y)
-			ed.paintBracketMatch(p, i, sl, textX, y)
-			ed.paintMatches(p, i, sl, textX, y)
-			ed.paintSelection(p, ed.sel, i, sl, textX, y)
-			for _, o := range ed.extra {
-				ed.paintSelection(p, o, i, sl, textX, y)
-			}
-			if ed.preedit != "" && i == ed.sel.Caret.Line {
-				ed.paintComposing(p, line, textX, y, caretOn)
+			if len(segs) == 0 {
+				paintLine(i, sl, textX, y)
 				continue
 			}
-			la, lz := -1, -1
-			if l := ed.link; l.active && l.from.Line == i {
-				la, lz = l.from.Col, l.to.Col
-				x0, x1 := textX+sl.xs[la], textX+sl.xs[lz]
-				p.Line(x0, y+ed.baseline+2, x1, y+ed.baseline+2, 1, st.Link)
+			// Each row the line wraps to, the line moved left to its
+			// start and clipped to it.
+			for k := 0; k <= len(segs); k++ {
+				from, to := 0, len(ed.buf.Line(i))
+				if k > 0 {
+					from = segs[k-1]
+				}
+				right := text.X + text.W
+				if k < len(segs) {
+					to = segs[k]
+					right = textX + sl.xs[to] - sl.xs[from]
+				}
+				ry := y + float32(k)*ed.lineH
+				clip := ui.Rect{X: text.X, Y: ry, W: right - text.X, H: ed.lineH}
+				p.Clip(clip, 0, func() { paintLine(i, sl, textX-sl.xs[from], ry) })
 			}
-			ed.paintGlyphs(p, sl, ed.hl.spans(i), textX, y+ed.baseline, la, lz)
-			ed.paintDiagnostics(p, i, sl, textX, y)
-			ed.paintLens(p, i, textX, y+ed.baseline)
-			ed.paintFoldEllipsis(p, i, sl, textX, y)
-			ed.paintInlayHints(p, i, sl, textX, y)
 		}
 		if caretOn && ed.preedit == "" {
 			for _, o := range ed.Cursors() {
 				if c := o.Caret; c.Line >= first && c.Line <= last {
-					p.Fill(ui.Rect{X: textX + ed.xOf(c) - 1, Y: lineY(c.Line), W: 2, H: ed.lineH}, st.Caret, 0)
+					p.Fill(ui.Rect{X: textX + ed.xOf(c) - 1, Y: rowY(c), W: 2, H: ed.lineH}, st.Caret, 0)
 				}
 			}
 		}
@@ -661,9 +701,9 @@ func (ed *Editor) paintIn(p *ui.Painter, r ui.Rect) {
 		ty := r.Y + (r.H-th)*ed.scrollY/my
 		p.Fill(ui.Rect{X: r.X + r.W - 8, Y: ty, W: 6, H: th}, st.Scrollbar, 3)
 	}
-	ed.paintHover(p, r, textX, lineY)
-	ed.paintSignature(p, r, textX, lineY)
-	ed.paintCompletions(p, r, textX, lineY)
+	ed.paintHover(p, r, textX, rowY)
+	ed.paintSignature(p, r, textX, rowY)
+	ed.paintCompletions(p, r, textX, rowY)
 }
 
 // paintSelection fills the part of line i, of shape sl, at x, y, that
@@ -1142,14 +1182,13 @@ func (ed *Editor) vertical(lines int, extend bool) {
 	}
 	// By rows: the lines folded away are passed over.
 	var p Pos
-	switch row := ed.rowOf(c.Line) + lines; {
+	switch row := ed.posRow(c) + lines; {
 	case row < 0:
 		p = Pos{}
 	case row >= ed.rows():
 		p = ed.buf.End()
 	default:
-		i := ed.lineAtRow(row)
-		p = Pos{i, ed.colAt(i, ed.goalX)}
+		p = ed.colAtRow(row, ed.goalX)
 	}
 	goal := ed.goalX
 	ed.moveTo(p, extend)

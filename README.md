@@ -134,6 +134,7 @@ apply to open windows as the file changes:
     "insertFinalNewline": false,     // says otherwise
     "formatOnSave": false,         // by the file's language server
     "inlayHints": true,            // the names and types it shows in the text
+    "wordWrap": false,             // long lines wrap at the editor's width (⌥Z)
     "files.associations": { "*.tmpl": "html" },
     "languages": {                 // over the settings above, by language
       "python": { "tabSize": 4, "formatOnSave": true },
@@ -161,6 +162,7 @@ the languages are VS Code's (`python`, `typescriptreact`, `shellscript`…).
 
 A work tree's `.vscode/settings.json` goes over them: `editor.tabSize`,
 `editor.insertSpaces`, `editor.detectIndentation`, `editor.formatOnSave`,
+`editor.wordWrap`,
 `files.trimTrailingWhitespace`, `files.insertFinalNewline` and
 `files.associations`, and those of `"[python]"` blocks; its
 `.editorconfig` over all.

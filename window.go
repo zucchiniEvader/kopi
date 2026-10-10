@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -321,6 +322,13 @@ func (w *window) applySettings(s Settings) {
 	old := w.settings
 	w.settings = s
 	w.syncServers(old, s)
+	if old.WordWrap != s.WordWrap || !reflect.DeepEqual(old.Languages, s.Languages) {
+		for _, e := range w.editors {
+			if e.ed != nil && e.diff == nil {
+				e.ed.SetWordWrap(*w.fileSettings(e).WordWrap)
+			}
+		}
+	}
 	if old.InlayHints != s.InlayHints {
 		for _, e := range w.editors {
 			if ls := w.serverOf(e); ls != nil {

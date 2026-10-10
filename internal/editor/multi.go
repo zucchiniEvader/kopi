@@ -263,15 +263,14 @@ func (ed *Editor) addCursorLine(up bool) {
 		last = ed.extra[n-1]
 	}
 	c := last.Caret
-	i := c.Line + 1
+	row := ed.posRow(c) + 1
 	if up {
-		i = c.Line - 1
+		row -= 2
 	}
-	if i < 0 || i >= ed.buf.Lines() {
+	if row < 0 || row >= ed.rows() {
 		return
 	}
-	x := ed.xOf(c)
-	p := Pos{i, ed.colAt(i, x)}
+	p := ed.colAtRow(row, ed.xOf(c))
 	ed.addCursor(Selection{p, p})
 	ed.revealPos(p)
 }

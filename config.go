@@ -40,6 +40,8 @@ type Settings struct {
 	// parameters.
 	FormatOnSave bool `json:"formatOnSave"`
 	InlayHints   bool `json:"inlayHints"`
+	// WordWrap wraps the lines longer than the editor.
+	WordWrap bool `json:"wordWrap"`
 	// LanguageServers change Kopi's language servers, or add others, by
 	// their IDs; FilesAssociations take files, by patterns of their names,
 	// as of languages, by their IDs.

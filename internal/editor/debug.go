@@ -110,8 +110,16 @@ func (ed *Editor) lensItem(x, y float32) (line, item int) {
 	if x < ed.gutterWidth() || y-padTop+ed.scrollY < 0 {
 		return -1, -1
 	}
-	i := ed.lineAtRow(int((y - padTop + ed.scrollY) / ed.lineH))
+	row := int((y - padTop + ed.scrollY) / ed.lineH)
+	i := ed.lineAtRow(row)
 	tx := x - ed.gutterWidth() - padLeft + ed.scrollX
+	// A lens shows after the line's last row, wrapped.
+	if segs := ed.segments(i); len(segs) > 0 {
+		if row-ed.rowOf(i) != len(segs) {
+			return -1, -1
+		}
+		tx += ed.shapeLine(i).xs[segs[len(segs)-1]]
+	}
 	for k, s := range ed.lensSpans(i) {
 		if tx >= s[0]-2 && tx <= s[1]+2 {
 			return i, k

@@ -369,7 +369,7 @@ var kindClass = map[string]highlight.Class{
 
 // paintCompletions draws the list of completions below the word, or
 // above it near the bottom, and keeps where, for the pointer.
-func (ed *Editor) paintCompletions(p *ui.Painter, r ui.Rect, textX float32, lineY func(int) float32) {
+func (ed *Editor) paintCompletions(p *ui.Painter, r ui.Rect, textX float32, rowY func(Pos) float32) {
 	cs := &ed.comp
 	if !cs.active || len(cs.shown) == 0 {
 		return
@@ -394,9 +394,9 @@ func (ed *Editor) paintCompletions(p *ui.Painter, r ui.Rect, textX float32, line
 	w = min(w, min(640, r.W-16))
 	box := ui.Rect{W: w, H: float32(rows)*rowH + 2*pad}
 	box.X = max(r.X+8, min(textX+ed.xOf(cs.start)-tagW-pad, r.X+r.W-box.W-8))
-	box.Y = lineY(cs.start.Line) + ed.lineH + 2
+	box.Y = rowY(cs.start) + ed.lineH + 2
 	if box.Y+box.H > r.Y+r.H-4 {
-		box.Y = lineY(cs.start.Line) - box.H - 2
+		box.Y = rowY(cs.start) - box.H - 2
 	}
 	cs.box = ui.Rect{X: box.X - r.X, Y: box.Y - r.Y, W: box.W, H: box.H}
 	p.Shadow(box, 6, 0, 3, 12, 0, ui.RGBA(0, 0, 0, 0.2))

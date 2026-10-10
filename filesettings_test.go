@@ -16,6 +16,7 @@ func TestFileSettings(t *testing.T) {
 		"editor.tabSize": 3,
 		"files.trimTrailingWhitespace": true,
 		"[python][yaml]": {"editor.tabSize": 2, "editor.detectIndentation": false},
+		"[markdown]": {"editor.wordWrap": "on"},
 		"files.associations": {"*.tpl": "html"},
 	}`)
 	writeFile(t, dir, "a.py", "def f():\n        pass   \n")
@@ -39,6 +40,11 @@ func TestFileSettings(t *testing.T) {
 	w.openFile("b.js", 0)
 	if in := w.activeTab().ed.Indent(); in != (editor.Indent{Tabs: true, Size: 3}) {
 		t.Errorf("js indent %+v", in)
+	}
+	writeFile(t, dir, "notes.md", "# Notes\n")
+	w.openFile("notes.md", 0)
+	if !w.activeTab().ed.WordWrap() || w.editorOf("a.py").ed.WordWrap() {
+		t.Error("markdown does not wrap, or python does")
 	}
 	w.openFile("page.tpl", 0)
 	if id := w.activeTab().ed.Lang().ID; id != "html" {

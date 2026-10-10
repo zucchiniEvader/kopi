@@ -90,7 +90,7 @@ func (ed *Editor) checkSignature() {
 
 // paintSignature draws the signature above the caret's line, or below it
 // at the top.
-func (ed *Editor) paintSignature(p *ui.Painter, r ui.Rect, textX float32, lineY func(int) float32) {
+func (ed *Editor) paintSignature(p *ui.Painter, r ui.Rect, textX float32, rowY func(Pos) float32) {
 	sg := &ed.sig
 	if !sg.active {
 		return
@@ -111,6 +111,11 @@ func (ed *Editor) paintSignature(p *ui.Painter, r ui.Rect, textX float32, lineY 
 	w, h := p.MeasureText(maxW-2*pad, spans...)
 	box := ui.Rect{W: w + 2*pad, H: min(h+2*pad, 160)}
 	c := ed.sel.Caret
+	at := c
+	if at.Line != sg.line {
+		at = Pos{sg.line, 0}
+	}
+	lineY := func(int) float32 { return rowY(at) }
 	box.X = max(r.X+8, min(textX+ed.xOf(c)-24, r.X+r.W-box.W-8))
 	box.Y = lineY(sg.line) - box.H - 4
 	if box.Y < r.Y+4 || ed.comp.active {

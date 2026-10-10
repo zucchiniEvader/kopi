@@ -111,6 +111,9 @@ func buildMenu() *mygo.Menu {
 			{Label: "Run and Debug", Accelerator: "CmdOrCtrl+Shift+D", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = tabRun, true })},
 			mygo.Separator(),
 			{Label: "Toggle Sidebar", Accelerator: "CmdOrCtrl+Shift+B", Click: inWindow(func(w *window) { w.toggleSidebar() })},
+			{Label: "Toggle Word Wrap", Accelerator: "Alt+Z", Click: inWindow(func(w *window) {
+				w.withText(func(e *editorTab) { e.ed.SetWordWrap(!e.ed.WordWrap()) })
+			})},
 			{Label: "Toggle Run Panel", Accelerator: "CmdOrCtrl+J", Click: inWindow(func(w *window) { w.run.open = !w.run.open })},
 			mygo.Separator(),
 			{Label: "Font Size", Submenu: []*mygo.MenuItem{

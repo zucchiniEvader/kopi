@@ -25,6 +25,8 @@ type foldState struct {
 	// in order.
 	closed []FoldRange
 	hidden []FoldRange
+	// gen counts the changes of hidden.
+	gen int
 }
 
 // SetFoldRanges sets the ranges that fold, as a language server gives
@@ -111,6 +113,7 @@ func indentRanges(b *Buffer, tab int) []FoldRange {
 // updateHidden merges the closed ranges into the lines they hide.
 func (ed *Editor) updateHidden() {
 	f := &ed.fold
+	f.gen++
 	slices.SortFunc(f.closed, func(a, b FoldRange) int { return a.Start - b.Start })
 	f.hidden = f.hidden[:0]
 	for _, r := range f.closed {
@@ -136,9 +139,9 @@ func (ed *Editor) isHidden(i int) bool {
 	return false
 }
 
-// rowOf returns the row line i shows on: a hidden line, that of the line
-// folding it.
-func (ed *Editor) rowOf(i int) int {
+// foldRowOf returns the row line i shows on, the lines unwrapped: a
+// hidden line, that of the line folding it.
+func (ed *Editor) foldRowOf(i int) int {
 	row := i
 	for _, h := range ed.fold.hidden {
 		if i < h.Start {
@@ -152,8 +155,8 @@ func (ed *Editor) rowOf(i int) int {
 	return row
 }
 
-// lineAtRow returns the line shown on a row.
-func (ed *Editor) lineAtRow(row int) int {
+// foldLineAtRow returns the line shown on a row, the lines unwrapped.
+func (ed *Editor) foldLineAtRow(row int) int {
 	i := row
 	for _, h := range ed.fold.hidden {
 		if i < h.Start {
@@ -164,8 +167,8 @@ func (ed *Editor) lineAtRow(row int) int {
 	return min(max(i, 0), ed.buf.Lines()-1)
 }
 
-// rows returns how many rows the lines show on.
-func (ed *Editor) rows() int {
+// foldRows returns how many rows the lines show on, unwrapped.
+func (ed *Editor) foldRows() int {
 	n := ed.buf.Lines()
 	for _, h := range ed.fold.hidden {
 		n -= h.End - h.Start + 1

@@ -23,6 +23,7 @@ type EditorSettings struct {
 	FormatOnSave           *bool `json:"formatOnSave,omitempty"`
 	TrimTrailingWhitespace *bool `json:"trimTrailingWhitespace,omitempty"`
 	InsertFinalNewline     *bool `json:"insertFinalNewline,omitempty"`
+	WordWrap               *bool `json:"wordWrap,omitempty"`
 }
 
 // over returns s with what o sets over it.
@@ -44,6 +45,9 @@ func (s EditorSettings) over(o EditorSettings) EditorSettings {
 	}
 	if o.InsertFinalNewline != nil {
 		s.InsertFinalNewline = o.InsertFinalNewline
+	}
+	if o.WordWrap != nil {
+		s.WordWrap = o.WordWrap
 	}
 	return s
 }
@@ -93,6 +97,13 @@ func editorSettingsOf(raw map[string]json.RawMessage) EditorSettings {
 		if n > 0 {
 			s.TabSize = ptr(n)
 		}
+	}
+	// "on", "bounded" and "wordWrapColumn" wrap, as Kopi does, at the
+	// view's width.
+	var wrap string
+	if _, ok := raw["editor.wordWrap"]; ok {
+		set("editor.wordWrap", &wrap)
+		s.WordWrap = ptr(wrap != "off" && wrap != "")
 	}
 	for key, into := range map[string]**bool{
 		"editor.insertSpaces":          &s.InsertSpaces,
@@ -151,6 +162,7 @@ func (w *window) fileSettings(e *editorTab) EditorSettings {
 		FormatOnSave:           ptr(w.settings.FormatOnSave),
 		TrimTrailingWhitespace: ptr(w.settings.TrimTrailingWhitespace),
 		InsertFinalNewline:     ptr(w.settings.InsertFinalNewline),
+		WordWrap:               ptr(w.settings.WordWrap),
 	}
 	id := lang.Plain.ID
 	if e.ed != nil {
@@ -195,5 +207,6 @@ func (w *window) applyFileSettings(e *editorTab) {
 		in = editor.DetectIndent(lines, def)
 	}
 	e.ed.SetIndent(in)
+	e.ed.SetWordWrap(*s.WordWrap)
 	e.applyEditorConfig()
 }
