@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/creack/pty"
 	"github.com/hinshun/vt10x"
 )
 
@@ -53,8 +52,7 @@ type Screen struct {
 // Terminal is a shell running in a pseudo-terminal.
 type Terminal struct {
 	vt   vt10x.Terminal
-	pty  *os.File
-	cmd  *exec.Cmd
+	pty  ptyProc
 	mu   sync.Mutex // guards the pty's size
 	done chan struct{}
 	err  error
@@ -68,12 +66,25 @@ type Terminal struct {
 // maxHistory bounds the lines kept scrolled off the screen.
 const maxHistory = 5000
 
-// ErrUnsupported tells that the platform has no pseudo-terminals Kopi
-// runs: Windows, for now.
-var ErrUnsupported = errors.New("the terminal is not supported on this platform yet")
+// ptyProc is a program running in a pseudo-terminal: its output to read
+// and its input to write, as the platform gives them.
+type ptyProc interface {
+	io.ReadWriteCloser
+	Resize(cols, rows int) error
+	// Wait waits for the program to end; Kill ends it.
+	Wait() error
+	Kill()
+}
 
-// Shell returns the user's shell.
+// Shell returns the user's shell: $SHELL, else the system's; on
+// Windows, PowerShell.
 func Shell() string {
+	if runtime.GOOS == "windows" {
+		if p, err := exec.LookPath("pwsh.exe"); err == nil {
+			return p
+		}
+		return "powershell.exe"
+	}
 	if s := os.Getenv("SHELL"); s != "" {
 		return s
 	}
@@ -86,17 +97,12 @@ func Shell() string {
 // Start runs a shell in dir, cols by rows, its environment env; changed
 // is called, from another goroutine, whenever its screen changes.
 func Start(shell, dir string, env []string, cols, rows int, changed func()) (*Terminal, error) {
-	if runtime.GOOS == "windows" {
-		return nil, ErrUnsupported
-	}
-	cmd := exec.Command(shell, "-l")
-	cmd.Dir = dir
-	cmd.Env = append(env, "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=Kopi")
-	f, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	env = append(env, "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=Kopi")
+	f, err := startPty(shell, dir, env, cols, rows)
 	if err != nil {
 		return nil, err
 	}
-	t := &Terminal{pty: f, cmd: cmd, done: make(chan struct{})}
+	t := &Terminal{pty: f, done: make(chan struct{})}
 	// The terminal answers queries, as of the cursor's place, on the pty.
 	t.vt = vt10x.New(vt10x.WithSize(cols, rows), vt10x.WithWriter(f))
 	go t.read(changed)
@@ -123,7 +129,7 @@ func (t *Terminal) read(changed func()) {
 			if !errors.Is(err, io.EOF) {
 				t.err = err
 			}
-			t.cmd.Wait()
+			t.pty.Wait()
 			if changed != nil {
 				changed()
 			}
@@ -206,7 +212,7 @@ func (t *Terminal) Resize(cols, rows int) {
 		return
 	}
 	t.vt.Resize(cols, rows)
-	pty.Setsize(t.pty, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	t.pty.Resize(cols, rows)
 }
 
 // Screen returns a copy of the screen.
@@ -235,7 +241,5 @@ func (t *Terminal) Done() <-chan struct{} { return t.done }
 // Close ends the shell.
 func (t *Terminal) Close() {
 	t.pty.Close()
-	if t.cmd.Process != nil {
-		t.cmd.Process.Kill()
-	}
+	t.pty.Kill()
 }

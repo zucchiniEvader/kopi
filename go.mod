@@ -10,6 +10,7 @@ require (
 	github.com/egoist/mygo v0.3.6
 	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/yuin/goldmark v1.7.13
+	golang.org/x/sys v0.48.0
 	golang.org/x/text v0.42.0
 )
 
