@@ -37,9 +37,9 @@ tree's Git changes.
 - **Run and debug**: `.vscode/launch.json` as VS Code reads it, with the
   `preLaunchTask` of `tasks.json`, or the file shown: Java through
   Microsoft's java-debug, with Run | Debug on main methods; Go through
-  `dlv dap`, Python through debugpy, and C, C++, Rust or Swift programs
-  through `lldb-dap`; Node, TypeScript, shell, Ruby, PHP and other scripts
-  run. A Run and Debug tab with breakpoints, variables and the call stack;
+  `dlv dap`, Python through debugpy, Node through Microsoft's js-debug,
+  downloaded once, and C, C++, Rust or Swift programs through
+  `lldb-dap`; TypeScript, shell, Ruby, PHP and other scripts run. A Run and Debug tab with breakpoints, variables and the call stack;
   the program's input and output in a panel (<kbd>⌘J</kbd>), its Java
   stack traces linked to their sources.
 - **Updates**: a new version, from the releases here, checked once a day and

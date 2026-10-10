@@ -92,3 +92,30 @@ func TestRealLLDB(t *testing.T) {
 		t.Errorf("output:\n%s", w.runText())
 	}
 }
+
+// TestRealJSDebug debugs a Node program with js-debug, downloaded once:
+// KOPI_JSDEBUG=1.
+func TestRealJSDebug(t *testing.T) {
+	if os.Getenv("KOPI_JSDEBUG") == "" {
+		t.Skip("KOPI_JSDEBUG=1 debugs with the real js-debug")
+	}
+	dir := testRepo(t)
+	writeFile(t, dir, "app.js", "const answer = 6 * 7;\nconsole.log('answer', answer);\n")
+	writeFile(t, dir, ".vscode/launch.json", `{"configurations": [
+		{"type": "node", "request": "launch", "name": "App", "program": "${workspaceFolder}/app.js"}]}`)
+	w, tt := newTestWindow(t, dir)
+	w.posted = make(chan func(), 4096)
+	w.openFile("app.js", 0)
+	e := w.activeTab()
+	w.toggleBreakpoint(e, 1)
+	w.runConfigs()
+	w.launchConfig(w.chosenConfig(), true)
+	waitRun(t, w, tt, "the pause", 5*time.Minute, func() bool { return w.debug.paused && len(w.debug.frames) > 0 })
+	if f := w.debug.frames[0]; f.Line != 2 {
+		t.Errorf("stopped at %+v", f)
+	}
+	w.debugOrContinue()
+	waitRun(t, w, tt, "the output", time.Minute, func() bool { return strings.Contains(w.runText(), "answer 42") })
+	w.debugStop()
+	waitRun(t, w, tt, "the end", time.Minute, func() bool { return !w.debugging() })
+}

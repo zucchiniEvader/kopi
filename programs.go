@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/zucchiniEvader/kopi/internal/dap"
+	"github.com/zucchiniEvader/kopi/internal/jsdebug"
 	"github.com/zucchiniEvader/kopi/internal/launch"
 	"github.com/zucchiniEvader/kopi/internal/proc"
 	"github.com/zucchiniEvader/kopi/internal/shellenv"
@@ -225,6 +227,8 @@ func adapterFor(t string) (*debugAdapter, error) {
 		return debugpy, nil
 	case isType(t, nativeTypes):
 		return lldbDAP, nil
+	case isType(t, nodeTypes):
+		return jsDebug, nil
 	}
 	return nil, fmt.Errorf("Kopi does not debug configurations of type %q yet: Run runs it", t)
 }
@@ -335,6 +339,97 @@ var lldbDAP = &debugAdapter{
 	},
 }
 
+// jsDebug is Microsoft's JavaScript debugger, a server on a port, which
+// starts a child session for each program it debugs.
+var jsDebug = &debugAdapter{
+	id: "pwa-node",
+	start: func(w *window, c launch.Config) (io.ReadWriteCloser, io.Closer, error) {
+		shellenv.Load()
+		node := str(c.Raw, "runtimeExecutable")
+		if node == "" {
+			node = "node"
+		}
+		bin := findProgram(node, w.repo.Root)
+		if bin == "" {
+			return nil, nil, fmt.Errorf("no %s found: install Node.js", node)
+		}
+		cache := cacheDir()
+		script := jsdebug.Server(cache)
+		if script == "" {
+			w.post(func() { w.run.status = "Downloading the JavaScript debugger" })
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			var err error
+			if script, err = jsdebug.Download(ctx, cache); err != nil {
+				return nil, nil, err
+			}
+		}
+		cmd := exec.Command(bin, script, "0", "127.0.0.1")
+		cmd.Dir = c.Cwd
+		return listening(cmd, regexp.MustCompile(`listening at:? *(\S+:\d+)`))
+	},
+	args: func(c launch.Config) map[string]any {
+		args := baseArgs(c)
+		args["type"] = "pwa-node"
+		if _, ok := args["console"]; !ok {
+			args["console"] = "internalConsole"
+		}
+		return args
+	},
+}
+
+// childSession starts a session an adapter asks for, of a program of the
+// session running, as js-debug does for each: the session's requests go
+// to it from then.
+func (w *window) childSession(gen int, args json.RawMessage) {
+	var r struct {
+		Configuration map[string]any `json:"configuration"`
+		Request       string         `json:"request"`
+	}
+	if json.Unmarshal(args, &r) != nil || w.debug.addr == "" {
+		return
+	}
+	nc, err := net.Dial("tcp", w.debug.addr)
+	if err != nil {
+		w.post(func() { w.say(lineFail, "The debugger's session could not start: %v", err) })
+		return
+	}
+	client := dap.New(nc, &debugHandler{w: w, gen: gen})
+	ok := make(chan bool, 1)
+	w.post(func() {
+		d := &w.debug
+		if d.gen != gen {
+			client.Close()
+			ok <- false
+			return
+		}
+		if d.parent == nil {
+			d.parent = d.client
+		} else if d.client != nil {
+			d.client.Close()
+		}
+		d.client = client
+		ok <- true
+	})
+	if !<-ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := client.Call(ctx, "initialize", map[string]any{
+		"clientID": "kopi", "clientName": "Kopi", "adapterID": "pwa-node",
+		"linesStartAt1": true, "columnsStartAt1": true, "pathFormat": "path",
+		"supportsVariableType": true, "supportsRunInTerminalRequest": true, "supportsStartDebuggingRequest": true,
+	}, nil); err != nil {
+		return
+	}
+	req := r.Request
+	if req == "" {
+		req = "launch"
+	}
+	client.Call(context.Background(), req, r.Configuration, nil)
+}
+
 // startAdapter starts a debug adapter talking on its input and output.
 func startAdapter(cmd *exec.Cmd, dir string) (*process, error) {
 	cmd.Dir = dir
@@ -430,6 +525,11 @@ func (w *window) debugOther(c launch.Config) {
 				return
 			}
 			d.client, d.adapter = client, stop
+			// The address of an adapter on a port, which its child
+			// sessions connect to.
+			if nc, ok := rwc.(net.Conn); ok {
+				d.addr = nc.RemoteAddr().String()
+			}
 			w.run.status = "Debugging " + d.name
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -437,7 +537,7 @@ func (w *window) debugOther(c launch.Config) {
 		if err := client.Call(ctx, "initialize", map[string]any{
 			"clientID": "kopi", "clientName": "Kopi", "adapterID": ad.id,
 			"linesStartAt1": true, "columnsStartAt1": true, "pathFormat": "path",
-			"supportsVariableType": true, "supportsRunInTerminalRequest": true,
+			"supportsVariableType": true, "supportsRunInTerminalRequest": true, "supportsStartDebuggingRequest": true,
 		}, nil); err != nil {
 			fail(err)
 			return

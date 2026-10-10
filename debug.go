@@ -26,8 +26,12 @@ import (
 // only.
 type debugState struct {
 	client *dap.Client
-	// adapter stops the debug adapter Kopi started, nil for jdtls's.
+	// adapter stops the debug adapter Kopi started, nil for jdtls's; addr
+	// is its address on a port; parent the session that started the
+	// child client is, as js-debug's.
 	adapter io.Closer
+	addr    string
+	parent  *dap.Client
 	gen     int
 	name    string
 	paused  bool
@@ -194,6 +198,10 @@ func (h *debugHandler) Event(event string, body json.RawMessage) {
 }
 
 func (h *debugHandler) Request(command string, args json.RawMessage) (any, error) {
+	if command == "startDebugging" {
+		go h.w.childSession(h.gen, args)
+		return nil, nil
+	}
 	if command != "runInTerminal" {
 		return nil, fmt.Errorf("unsupported: %s", command)
 	}
@@ -533,6 +541,10 @@ func (w *window) debugStop() {
 	}
 	c, gen := d.client, d.gen
 	done := c.Go(context.Background(), "disconnect", map[string]any{"terminateDebuggee": true}, nil)
+	if d.parent != nil {
+		// The session that started this one ends them all.
+		done = d.parent.Go(context.Background(), "disconnect", map[string]any{"terminateDebuggee": true}, nil)
+	}
 	go func() {
 		select {
 		case <-done:
@@ -553,10 +565,13 @@ func (w *window) debugEnd() {
 	if d.client != nil {
 		d.client.Close()
 	}
+	if d.parent != nil {
+		d.parent.Close()
+	}
 	if d.adapter != nil {
 		go d.adapter.Close()
 	}
-	d.client, d.adapter = nil, nil
+	d.client, d.adapter, d.parent, d.addr = nil, nil, nil, ""
 	d.gen++
 	w.debugResumed()
 	d.threads = nil
