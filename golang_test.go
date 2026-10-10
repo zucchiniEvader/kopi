@@ -127,3 +127,27 @@ func TestRealGopls(t *testing.T) {
 		t.Errorf("went to %s", got.abs)
 	}
 }
+
+func TestSemanticClassesOfOtherServers(t *testing.T) {
+	for _, c := range []struct {
+		typ  string
+		mods []string
+		want highlight.Class
+		ok   bool
+	}{
+		{"macro", nil, highlight.Preproc, true},
+		{"namespace", nil, highlight.Type, true},
+		{"selfParameter", nil, highlight.LangConst, true},
+		{"variable", []string{"readonly", "fileScope"}, highlight.LangConst, true},
+		{"variable", []string{"readonly"}, 0, false},
+		{"parameter", nil, 0, false},
+	} {
+		mods := map[string]bool{}
+		for _, m := range c.mods {
+			mods[m] = true
+		}
+		if got, ok := semanticClass(c.typ, mods); got != c.want || ok != c.ok {
+			t.Errorf("%s %v: %v %v", c.typ, c.mods, got, ok)
+		}
+	}
+}

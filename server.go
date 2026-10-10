@@ -471,7 +471,7 @@ func initializeParams(root string, options map[string]any) map[string]any {
 				"semanticTokens": map[string]any{
 					"requests":       map[string]any{"full": true},
 					"tokenTypes":     semanticTypes,
-					"tokenModifiers": []string{"static", "readonly", "declaration", "deprecated", "abstract", "defaultLibrary"},
+					"tokenModifiers": []string{"static", "readonly", "declaration", "definition", "deprecated", "abstract", "async", "modification", "documentation", "defaultLibrary", "fileScope", "globalScope"},
 					"formats":        []string{"relative"},
 				},
 			},
@@ -918,7 +918,8 @@ type semanticLegend struct {
 
 // semanticTypes are the token types the editor colors.
 var semanticTypes = []string{"class", "interface", "enum", "record", "struct", "type", "typeParameter", "annotation", "decorator", "annotationMember",
-	"method", "function", "property", "recordComponent", "enumMember", "variable", "parameter", "namespace", "keyword", "modifier"}
+	"method", "function", "property", "recordComponent", "enumMember", "variable", "parameter", "namespace", "keyword", "modifier",
+	"macro", "event", "comment", "string", "number", "regexp", "operator", "label", "builtinType", "selfParameter", "clsParameter"}
 
 // semanticClass returns the class that colors a token of a type with
 // modifiers, false for one keeping the lexer's color.
@@ -938,6 +939,31 @@ func semanticClass(typ string, mods map[string]bool) (highlight.Class, bool) {
 		return highlight.Function, true
 	case "enumMember":
 		return highlight.LangConst, true
+	case "macro":
+		return highlight.Preproc, true
+	case "namespace":
+		return highlight.Type, true
+	case "builtinType":
+		return highlight.Type, true
+	case "selfParameter", "clsParameter":
+		return highlight.LangConst, true // self, as this
+	case "event":
+		return highlight.Property, true
+	case "comment":
+		return highlight.Comment, true
+	case "string":
+		return highlight.String, true
+	case "number":
+		return highlight.Number, true
+	case "regexp":
+		return highlight.Regexp, true
+	case "label":
+		return highlight.Property, true
+	case "variable", "parameter":
+		if mods["readonly"] && (mods["static"] || mods["fileScope"] || mods["globalScope"]) {
+			return highlight.LangConst, true // constants
+		}
+		return 0, false
 	case "property", "recordComponent", "annotationMember":
 		if mods["static"] && mods["readonly"] {
 			return highlight.LangConst, true // constants
