@@ -418,7 +418,8 @@ func initializeParams(root string, options map[string]any) map[string]any {
 				"configuration":    true,
 				"semanticTokens":   map[string]any{"refreshSupport": true},
 				"workspaceFolders": true,
-				"workspaceEdit":    map[string]any{"documentChanges": false},
+				"workspaceEdit":    map[string]any{"documentChanges": true},
+				"applyEdit":        true,
 			},
 			"textDocument": map[string]any{
 				"synchronization": map[string]any{"didSave": true},
@@ -447,6 +448,9 @@ func initializeParams(root string, options map[string]any) map[string]any {
 					"completionItemKind": map[string]any{"valueSet": seq(1, 25)},
 				},
 				"definition":         map[string]any{"linkSupport": true},
+				"formatting":         map[string]any{},
+				"rangeFormatting":    map[string]any{},
+				"rename":             map[string]any{"prepareSupport": false},
 				"publishDiagnostics": map[string]any{"relatedInformation": false},
 				"semanticTokens": map[string]any{
 					"requests":       map[string]any{"full": true},
@@ -574,7 +578,16 @@ func (h *serverHandler) Request(method string, params json.RawMessage) (any, err
 		})
 		return nil, nil
 	case "workspace/applyEdit":
-		return map[string]any{"applied": false}, nil
+		w, s, gen := h.w, h.s, h.gen
+		answer := make(chan map[string]any, 1)
+		w.post(func() {
+			if s.gen != gen {
+				answer <- map[string]any{"applied": false}
+				return
+			}
+			answer <- w.applyEditRequest(params)
+		})
+		return <-answer, nil
 	}
 	return nil, &lsp.Error{Code: -32601, Message: "unsupported: " + method}
 }

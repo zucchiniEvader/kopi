@@ -58,6 +58,7 @@ func (w *window) view(c *ui.Context) {
 	w.palette(c)
 	w.quickBar(c)
 	w.branchDialog(c)
+	w.renameDialog(c)
 	w.shortcutsHelp(c)
 	w.trashDialog(c)
 	w.fileDialog(c)

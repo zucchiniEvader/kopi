@@ -130,6 +130,18 @@ func (w *window) openFile(p string, line int) {
 // openAbs opens the file at an absolute path in an editor, the tab it has
 // if it is open, and shows it.
 func (w *window) openAbs(abs string) *editorTab {
+	e, inRepo := w.loadAbs(abs)
+	w.show(e)
+	if inRepo {
+		w.explorer.reveal(e.path)
+	}
+	return e
+}
+
+// loadAbs returns the tab of the file at an absolute path, opened in one
+// if it has none, without showing it; and whether the file is in the
+// repository.
+func (w *window) loadAbs(abs string) (*editorTab, bool) {
 	p, inRepo := w.repoPath(abs)
 	if inRepo {
 		abs = filepath.Join(w.repo.Root, filepath.FromSlash(p))
@@ -153,11 +165,7 @@ func (w *window) openAbs(abs string) *editorTab {
 		w.attach(e)
 		w.debugAttach(e)
 	}
-	w.show(e)
-	if inRepo {
-		w.explorer.reveal(p)
-	}
-	return e
+	return e, inRepo
 }
 
 // applyEditorConfig reads what the .editorconfig files say of the file,
@@ -292,9 +300,16 @@ func (w *window) saveEditor() {
 	if e == nil || e.ed == nil {
 		return
 	}
-	if err := w.writeEditor(e); err != nil {
-		go mygo.Dialog.Error("Could not save "+e.title(), err.Error())
+	save := func() {
+		if err := w.writeEditor(e); err != nil {
+			go mygo.Dialog.Error("Could not save "+e.title(), err.Error())
+		}
 	}
+	if s := w.serverOf(e); w.settings.FormatOnSave && e.abs != "" && s != nil && s.state == serverReady && s.caps.formatting {
+		w.formatDocument(e, save)
+		return
+	}
+	save()
 }
 
 func (w *window) writeEditor(e *editorTab) error {

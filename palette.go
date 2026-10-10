@@ -39,6 +39,9 @@ func (w *window) commands() []command {
 		{title: "Show Search", keys: "⌘2", run: w.focusSearch},
 		{title: "Show Git", hint: "Changes and history", keys: "⌘3", run: func() { w.tab, w.sidebarShown = tabGit, true }},
 		{title: "Save", keys: "⌘S", run: w.saveEditor},
+		{title: "Save All", keys: "⌥⌘S", run: w.saveAll},
+		{title: "Format Document", hint: "Or the selection", keys: "⇧⌥F", run: w.formatActive},
+		{title: "Rename Symbol", keys: "F2", run: w.startRename},
 		{title: "Close Tab", keys: "⌘W", run: w.closeTab},
 		{title: "Next Change", hint: "In the diff tab", keys: "⌥F5", run: func() { w.goToChange(1) }},
 		{title: "Previous Change", hint: "In the diff tab", keys: "⇧⌥F5", run: func() { w.goToChange(-1) }},
@@ -231,6 +234,7 @@ type dialogKind uint8
 const (
 	dialogNone      dialogKind = iota
 	dialogNewBranch            // a branch to make at HEAD
+	dialogRename               // the new name of a symbol
 )
 
 func (w *window) openDialog(k dialogKind) {
@@ -244,7 +248,7 @@ func (w *window) openDialog(k dialogKind) {
 // it out.
 func (w *window) branchDialog(c *ui.Context) {
 	t := c.Theme()
-	if w.dialog == dialogNone {
+	if w.dialog != dialogNewBranch {
 		return
 	}
 	create := func() {

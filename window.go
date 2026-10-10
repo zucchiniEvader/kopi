@@ -152,7 +152,9 @@ type window struct {
 	// commands, as the languages to pick one; palettePrompt asks for one.
 	paletteChoices []command
 	palettePrompt  string
-	paletteList    ui.ListState
+	// rename is the symbol the rename dialog renames.
+	rename      renameState
+	paletteList ui.ListState
 	// palettePointer is where the pointer was over the list.
 	palettePointer [2]float32
 

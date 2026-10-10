@@ -35,6 +35,8 @@ type Settings struct {
 	// is saved, unless its .editorconfig says otherwise.
 	TrimTrailingWhitespace bool `json:"trimTrailingWhitespace"`
 	InsertFinalNewline     bool `json:"insertFinalNewline"`
+	// FormatOnSave has the language server format a file as it is saved.
+	FormatOnSave bool `json:"formatOnSave"`
 	// LanguageServers change Kopi's language servers, or add others, by
 	// their IDs; FilesAssociations take files, by patterns of their names,
 	// as of languages, by their IDs.

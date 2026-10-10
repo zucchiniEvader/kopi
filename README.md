@@ -86,6 +86,8 @@ Tool…** installs the `kopi` command.
 | <kbd>⇧⌘F</kbd> | Search in files |
 | <kbd>⌘S</kbd> / <kbd>⌘W</kbd> | Save / close the tab |
 | <kbd>⌘</kbd>-click, <kbd>F12</kbd> | Go to the definition |
+| <kbd>⌃Space</kbd> / <kbd>⇧⌘Space</kbd> | Completions / the signature of the call |
+| <kbd>F2</kbd> / <kbd>⇧⌥F</kbd> | Rename the symbol / format the document |
 | <kbd>F5</kbd> / <kbd>⌃F5</kbd> | Debug / run |
 | <kbd>⇧F5</kbd> / <kbd>⇧⌘F5</kbd> | Stop / restart |
 | <kbd>F9</kbd> | Toggle a breakpoint |
@@ -116,6 +118,7 @@ apply to open windows as the file changes:
     "theme": "system",             // or "light", "dark"
     "trimTrailingWhitespace": false, // as files save, unless .editorconfig
     "insertFinalNewline": false,     // says otherwise
+    "formatOnSave": false,         // by the file's language server
     "files.associations": { "*.tmpl": "html" },
     "languageServers": {
       "pyright": { "command": ["basedpyright-langserver", "--stdio"],

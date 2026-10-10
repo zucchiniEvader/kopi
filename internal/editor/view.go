@@ -451,7 +451,10 @@ func (ed *Editor) colAt(i int, x float32) int {
 }
 
 // xOf returns the x of p from the start of its line.
-func (ed *Editor) xOf(p Pos) float32 { return ed.shape(ed.buf.Line(p.Line)).xs[p.Col] }
+func (ed *Editor) xOf(p Pos) float32 {
+	p = ed.buf.Clamp(p) // a place of the text before an edit
+	return ed.shape(ed.buf.Line(p.Line)).xs[p.Col]
+}
 
 // gutterWidth is the width of the line numbers' column.
 func (ed *Editor) gutterWidth() float32 {
@@ -1475,6 +1478,8 @@ func (ed *Editor) replace(a, z Pos, s string) Pos {
 		ed.OnEdit(a, z, s)
 	}
 	end := ed.buf.Replace(a, z, s)
+	// The hover tells of the text as it was.
+	ed.hover = hoverState{}
 	ed.shiftSnippet(a, z, end)
 	ed.shiftDiagnostics(a, z, end)
 	ed.hl.shift(a, z, end)

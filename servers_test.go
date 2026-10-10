@@ -26,6 +26,8 @@ type fakeServer struct {
 	got  []string
 	// config is what it asked of workspace/configuration.
 	config any
+	// answers answer requests, by their methods.
+	answers map[string]any
 }
 
 func (f *fakeServer) launcher() serverLauncher {
@@ -82,7 +84,11 @@ func (f *fakeServer) Request(method string, params json.RawMessage) (any, error)
 	if method == "initialize" {
 		return map[string]any{"capabilities": f.caps}, nil
 	}
-	return nil, nil
+	f.mu.Lock()
+	f.got = append(f.got, method)
+	a := f.answers[method]
+	f.mu.Unlock()
+	return a, nil
 }
 
 func hasPrefix(list []string, prefix string) bool {
