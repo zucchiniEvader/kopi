@@ -28,7 +28,7 @@ func (w *window) captureIfAsked() {
 			}
 			w.win.Update(func() { w.debugSetup(setup) })
 			time.Sleep(1200 * time.Millisecond)
-			if strings.Contains(setup, "complete") {
+			if strings.Contains(setup, "complete") || strings.Contains(setup, "terminal") {
 				time.Sleep(2 * time.Second)
 			}
 			if prof != nil {
@@ -61,6 +61,15 @@ func (w *window) debugSetup(setup string) {
 				w.withText(func(e *editorTab) { e.ed.SetWordWrap(true) })
 			case "preview":
 				w.openPreview()
+			case "terminal":
+				w.toggleTerminal()
+				time.AfterFunc(1500*time.Millisecond, func() {
+					w.win.Update(func() {
+						if t := w.run.terminal.term; t != nil {
+							t.Write([]byte("printf '\\033[1;32mgreen\\033[0m \\033[44m blue \\033[0m\\n'; ls --color=auto -G\n"))
+						}
+					})
+				})
 			case "previewside":
 				w.openPreviewToSide()
 			case "foldall":

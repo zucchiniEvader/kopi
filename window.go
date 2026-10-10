@@ -256,6 +256,7 @@ func openWindow(dir string) error {
 			w.debug.client.Close()
 		}
 		w.runKill()
+		w.closeTerminal()
 		w.stopServers()
 		offSettings()
 		windowsMu.Lock()

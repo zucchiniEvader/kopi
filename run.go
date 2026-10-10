@@ -60,6 +60,9 @@ type runState struct {
 	// waiting tells a run waiting for the language server; next is the
 	// one to start once the program running stops.
 	waiting bool
+	// view is what the panel shows, the run's output or the terminal.
+	view     int
+	terminal termState
 	// keepLines keeps the panel's lines as a run starts, after its task.
 	keepLines bool
 	pending   *pendingRun
@@ -625,7 +628,18 @@ func (w *window) runPanel(c *ui.Context, pal *palette) {
 	})
 	ui.Column(c).Height(r.height).Shrink(0).Background(pal.codeBg).Label("Run").Children(func() {
 		ui.Row(c).Height(34).Shrink(0).Padding(0, 8, 0, 12).Gap(4).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
-			ui.Text(c, "RUN").FontSize(11).Bold().TextColor(t.TextMuted).Margin(0, 6, 0, 0)
+			w.panelTabs(c)
+			if r.view == panelTerminal {
+				ui.Spacer(c)
+				if iconButton(c, iconRefresh, "Restart the Shell").Size(26, 26).Clicked() {
+					w.startTerminal()
+					r.terminal.focus = true
+				}
+				if iconButton(c, iconClose, "Close Panel (⌘J)").Size(26, 26).Clicked() {
+					r.open = false
+				}
+				return
+			}
 			if len(r.configs) > 0 {
 				w.configButton(c).MaxWidth(220)
 			} else {
@@ -663,6 +677,10 @@ func (w *window) runPanel(c *ui.Context, pal *palette) {
 				r.open = false
 			}
 		})
+		if r.view == panelTerminal {
+			w.terminalView(c, pal)
+			return
+		}
 		r.list.FollowEnd = true
 		ui.List(c, &r.list, len(r.lines), func(i int) {
 			w.runRow(c, pal, r.lines[i])

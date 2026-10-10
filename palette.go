@@ -26,6 +26,7 @@ func (w *window) commands() []command {
 		{title: "Stop", keys: "⇧F5", run: w.stopAll},
 		{title: "Show Run and Debug", keys: "⇧⌘D", run: func() { w.tab, w.sidebarShown = tabRun, true }},
 		{title: "Toggle Run Panel", keys: "⌘J", run: func() { w.run.open = !w.run.open }},
+		{title: "Toggle Terminal", hint: "A shell in the folder, in the panel", keys: "⌃`", run: w.toggleTerminal},
 		{title: "Open launch.json", run: w.openLaunchConfig},
 		{title: "Language Server: Restart", hint: "Of the file shown", run: func() { w.withServer(w.restartServer) }},
 		{title: "Language Server: Install", hint: "Of the file shown", run: func() { w.withServer(w.installServer) }},

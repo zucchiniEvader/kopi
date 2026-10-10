@@ -109,6 +109,7 @@ Tool…** installs the `kopi` command.
 | <kbd>F9</kbd> | Toggle a breakpoint |
 | <kbd>F10</kbd> / <kbd>F11</kbd> / <kbd>⇧F11</kbd> | Step over / into / out |
 | <kbd>⌘J</kbd> | The run panel |
+| <kbd>⌃`</kbd> | The terminal, a shell in the folder, in the panel |
 | <kbd>⌘1</kbd> … <kbd>⌘3</kbd>, <kbd>⇧⌘D</kbd> | Explorer, search, Git (changes and history), run and debug |
 | <kbd>↩</kbd> / <kbd>⇧⌘↩</kbd> | Commit, in the message / anywhere |
 | <kbd>⌥F5</kbd> / <kbd>⇧⌥F5</kbd> | Next / previous change, in a diff tab |

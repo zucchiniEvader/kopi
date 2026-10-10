@@ -116,6 +116,7 @@ func buildMenu() *mygo.Menu {
 			{Label: "Toggle Word Wrap", Accelerator: "Alt+Z", Click: inWindow(func(w *window) {
 				w.withText(func(e *editorTab) { e.ed.SetWordWrap(!e.ed.WordWrap()) })
 			})},
+			{Label: "Toggle Terminal", Accelerator: "Ctrl+`", Click: inWindow(func(w *window) { w.toggleTerminal() })},
 			{Label: "Toggle Run Panel", Accelerator: "CmdOrCtrl+J", Click: inWindow(func(w *window) { w.run.open = !w.run.open })},
 			mygo.Separator(),
 			{Label: "Font Size", Submenu: []*mygo.MenuItem{

@@ -6,7 +6,9 @@ tool github.com/egoist/mygo/cmd/mygo
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
+	github.com/creack/pty v1.1.24
 	github.com/egoist/mygo v0.3.6
+	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/yuin/goldmark v1.7.13
 	golang.org/x/text v0.42.0
 )
