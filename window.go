@@ -112,7 +112,7 @@ type window struct {
 	// focusRight that the right pane has the focus.
 	otherEditor int
 	focusRight  bool
-	nav          navHistory
+	nav         navHistory
 	// closing is set once the window may close with unsaved changes.
 	closing bool
 
