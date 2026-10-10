@@ -157,3 +157,24 @@ func TestSignature(t *testing.T) {
 		t.Errorf("after nothing %q", label)
 	}
 }
+
+func TestCompletionAtCursors(t *testing.T) {
+	ed, tt := openAs(t, "a.go", "pr\npr\nx")
+	ed.SetSelection(Selection{Pos{0, 2}, Pos{0, 2}})
+	ed.addCursor(Selection{Pos{1, 2}, Pos{1, 2}})
+	ed.addCursor(Selection{Pos{2, 1}, Pos{2, 1}})
+	ed.OnComplete = func(p Pos, trigger string) {}
+	ed.Complete()
+	ed.ShowCompletions(Pos{0, 2}, []CompletionItem{{Label: "println", From: Pos{0, 0}, Text: "println(${1:x})", Snippet: true}}, false)
+	tt.Key(0, ui.KeyEnter)
+	if got := ed.Text(); got != "println(x)\nprintln(x)\nxprintln(x)" {
+		t.Fatalf("text %q", got)
+	}
+	if n := len(ed.Cursors()); n != 3 {
+		t.Errorf("cursors %d", n)
+	}
+	tt.Key(ui.Cmd, ui.KeyZ)
+	if got := ed.Text(); got != "pr\npr\nx" {
+		t.Errorf("undone %q", got)
+	}
+}

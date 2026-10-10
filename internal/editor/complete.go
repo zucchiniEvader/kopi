@@ -255,6 +255,26 @@ func matchScore(text, typed string) (int, bool) {
 	return score, true
 }
 
+// acceptAtCursors puts a completion's text at every cursor, in place of
+// the word typed before it, as typed before the primary one, and its
+// other edits once; as one step of undo, but its other edits.
+func (ed *Editor) acceptAtCursors(it CompletionItem, typed, text string) {
+	ed.eachCursor(true, func() {
+		p := ed.sel.Caret
+		a := p
+		if strings.HasSuffix(ed.buf.Line(p.Line)[:p.Col], typed) {
+			a.Col -= len(typed)
+		}
+		ed.edit(a, p, text, editOther)
+	})
+	if len(it.More) > 0 {
+		ed.ApplyEdits(it.More)
+	}
+	if ed.OnAcceptCompletion != nil {
+		ed.OnAcceptCompletion(it)
+	}
+}
+
 // completionKey handles a key while the list shows, false for one it
 // leaves to the editor.
 func (ed *Editor) completionKey(m ui.Modifiers, k ui.Key) bool {
@@ -317,6 +337,10 @@ func (ed *Editor) acceptCompletion(i int) {
 	}
 	if it.Snippet {
 		text, stops = parseSnippet(text)
+	}
+	if len(ed.extra) > 0 && from.Line == c.Line {
+		ed.acceptAtCursors(it, ed.buf.Line(c.Line)[from.Col:c.Col], text)
+		return
 	}
 	// What follows the caret, as typed by a pair closing itself, goes
 	// with what the completion inserts.
