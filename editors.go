@@ -240,7 +240,13 @@ func (w *window) openText(uri, name, text string) *editorTab {
 
 // show shows a tab, and gives its editor the keys.
 func (w *window) show(e *editorTab) {
-	w.activeEditor = slices.Index(w.editors, e)
+	i := slices.Index(w.editors, e)
+	if w.split() && i == w.otherEditor {
+		// Shown in the other pane: the focus goes there.
+		w.focusOther()
+		return
+	}
+	w.activeEditor = i
 	if e.ed != nil {
 		e.ed.Focus()
 	}
@@ -412,11 +418,26 @@ func (w *window) closeEditor(i int) {
 func (w *window) removeEditor(i int) {
 	w.didClose(w.editors[i])
 	w.editors = slices.Delete(w.editors, i, i+1)
+	closedFocused := i == w.activeEditor
 	switch {
 	case len(w.editors) == 0:
 		w.activeEditor = -1
 	case w.activeEditor > i || w.activeEditor == len(w.editors):
 		w.activeEditor--
+	}
+	// The other pane's tab, moved; closed, the panes join.
+	switch {
+	case w.otherEditor == i:
+		w.otherEditor, w.focusRight = -1, false
+	case w.otherEditor > i:
+		w.otherEditor--
+	}
+	if closedFocused && w.otherEditor >= 0 {
+		// The focused pane's tab closed: the other pane alone.
+		w.activeEditor, w.otherEditor, w.focusRight = w.otherEditor, -1, false
+	}
+	if w.otherEditor == w.activeEditor {
+		w.otherEditor, w.focusRight = -1, false
 	}
 	if e := w.activeTab(); e != nil && e.ed != nil {
 		e.ed.Focus()
@@ -555,7 +576,7 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 				}
 				hints := tabHints(w.editors)
 				for i, e := range w.editors {
-					b := tab(i == w.activeEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
+					b := tab(i == w.activeEditor || w.split() && i == w.otherEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
 					if e.diff != nil {
 						b.Label(e.title()).Tooltip(e.diff.path + " (" + e.diff.label + ")")
 					}
@@ -576,7 +597,7 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 						}
 					}
 					if b.Clicked() {
-						w.activeEditor = i
+						w.show(e)
 						if e.ed != nil {
 							e.ed.Focus()
 						}

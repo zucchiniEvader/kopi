@@ -967,7 +967,7 @@ func (w *window) openLocation(loc lsp.Location) {
 		return
 	}
 	if e := w.editorOf(loc.URI); e != nil {
-		w.activeEditor = indexOf(w.editors, e)
+		w.show(e)
 		if e.ed != nil {
 			e.ed.GoToPos(editorPos(e.ed.Buffer(), loc.Range.Start))
 			e.ed.Focus()

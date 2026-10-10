@@ -111,6 +111,7 @@ func buildMenu() *mygo.Menu {
 			{Label: "Run and Debug", Accelerator: "CmdOrCtrl+Shift+D", Click: inWindow(func(w *window) { w.tab, w.sidebarShown = tabRun, true })},
 			mygo.Separator(),
 			{Label: "Toggle Sidebar", Accelerator: "CmdOrCtrl+Shift+B", Click: inWindow(func(w *window) { w.toggleSidebar() })},
+			{Label: "Split Editor", Accelerator: "CmdOrCtrl+\\", Click: inWindow(func(w *window) { w.toggleSplit() })},
 			{Label: "Open Markdown Preview", Accelerator: "CmdOrCtrl+Shift+V", Click: inWindow(func(w *window) { w.openPreview() })},
 			{Label: "Toggle Word Wrap", Accelerator: "Alt+Z", Click: inWindow(func(w *window) {
 				w.withText(func(e *editorTab) { e.ed.SetWordWrap(!e.ed.WordWrap()) })

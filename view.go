@@ -144,12 +144,10 @@ func (w *window) mainArea(c *ui.Context, pal *palette) {
 	switch e := w.activeTab(); {
 	case e == nil:
 		w.nothingOpen(c, pal)
-	case e.diff != nil:
-		w.diffArea(c, pal, e)
-	case e.preview != nil:
-		w.previewArea(c, pal, e)
+	case w.split():
+		w.splitArea(c, pal)
 	default:
-		w.editorArea(c, pal, e)
+		w.tabArea(c, pal, e)
 	}
 }
 

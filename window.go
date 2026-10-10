@@ -108,6 +108,10 @@ type window struct {
 	// places the caret went, for Back and Forward.
 	editors      []*editorTab
 	activeEditor int
+	// otherEditor is the tab of the other pane, split, -1 unsplit;
+	// focusRight that the right pane has the focus.
+	otherEditor int
+	focusRight  bool
 	nav          navHistory
 	// closing is set once the window may close with unsaved changes.
 	closing bool
@@ -297,6 +301,7 @@ func newWindow(repo *git.Repo) *window {
 		commitTimes:  map[string]commitTime{},
 		tab:          tabExplorer,
 		activeEditor: -1,
+		otherEditor:  -1,
 	}
 	// The window opens on the explorer, which takes the keys.
 	w.explorer.reset()
