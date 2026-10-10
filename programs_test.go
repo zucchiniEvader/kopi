@@ -119,3 +119,53 @@ func TestRealJSDebug(t *testing.T) {
 	w.debugStop()
 	waitRun(t, w, tt, "the end", time.Minute, func() bool { return !w.debugging() })
 }
+
+// TestRealDelve debugs a Go program with dlv dap, found on the PATH:
+// KOPI_DLV=1.
+func TestRealDelve(t *testing.T) {
+	if os.Getenv("KOPI_DLV") == "" {
+		t.Skip("KOPI_DLV=1 debugs with the real dlv")
+	}
+	dir := testRepo(t)
+	writeFile(t, dir, "go.mod", "module demo\n\ngo 1.22\n")
+	writeFile(t, dir, "main.go", "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tanswer := 6 * 7\n\tfmt.Println(\"answer\", answer)\n}\n")
+	w, tt := newTestWindow(t, dir)
+	w.posted = make(chan func(), 4096)
+	w.openFile("main.go", 0)
+	e := w.activeTab()
+	w.toggleBreakpoint(e, 6)
+	w.runConfigs()
+	w.launchConfig(w.chosenConfig(), true)
+	waitRun(t, w, tt, "the pause", 5*time.Minute, func() bool { return w.debug.paused && len(w.debug.frames) > 0 })
+	if f := w.debug.frames[0]; f.Line != 7 || !strings.Contains(f.Name, "main") {
+		t.Errorf("stopped at %+v", f)
+	}
+	w.debugOrContinue()
+	waitRun(t, w, tt, "the end", time.Minute, func() bool { return !w.debugging() && strings.Contains(w.runText(), "answer 42") })
+}
+
+// TestRealDebugpy debugs a Python program with debugpy, of the python
+// $KOPI_DEBUGPY names.
+func TestRealDebugpy(t *testing.T) {
+	py := os.Getenv("KOPI_DEBUGPY")
+	if py == "" {
+		t.Skip("KOPI_DEBUGPY=<python with debugpy> debugs with the real debugpy")
+	}
+	dir := testRepo(t)
+	writeFile(t, dir, "app.py", "answer = 6 * 7\nprint('answer', answer)\n")
+	writeFile(t, dir, ".vscode/launch.json", `{"configurations": [
+		{"type": "debugpy", "request": "launch", "name": "App", "program": "${workspaceFolder}/app.py", "python": "`+py+`"}]}`)
+	w, tt := newTestWindow(t, dir)
+	w.posted = make(chan func(), 4096)
+	w.openFile("app.py", 0)
+	e := w.activeTab()
+	w.toggleBreakpoint(e, 1)
+	w.runConfigs()
+	w.launchConfig(w.chosenConfig(), true)
+	waitRun(t, w, tt, "the pause", 5*time.Minute, func() bool { return w.debug.paused && len(w.debug.frames) > 0 })
+	if f := w.debug.frames[0]; f.Line != 2 {
+		t.Errorf("stopped at %+v", f)
+	}
+	w.debugOrContinue()
+	waitRun(t, w, tt, "the end", time.Minute, func() bool { return !w.debugging() && strings.Contains(w.runText(), "answer 42") })
+}
