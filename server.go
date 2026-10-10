@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/zucchiniEvader/kopi/internal/managed"
 	"io"
 	"log"
 	"os"
@@ -50,6 +51,9 @@ type serverSpec struct {
 	// install says how to install it.
 	commands [][]string
 	install  string
+	// managed are the packages Kopi installs the server from itself, in
+	// its own folder, the first whose installer the machine has.
+	managed []managed.Package
 	// logPath is the file of the server's log for a repository.
 	logPath func(root string) string
 	// alongside serves its languages beside the server of each, as a

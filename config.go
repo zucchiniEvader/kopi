@@ -45,8 +45,11 @@ type Settings struct {
 	// LanguageServers change Kopi's language servers, or add others, by
 	// their IDs; FilesAssociations take files, by patterns of their names,
 	// as of languages, by their IDs.
-	LanguageServers   map[string]ServerSetting `json:"languageServers,omitempty"`
-	FilesAssociations map[string]string        `json:"files.associations,omitempty"`
+	LanguageServers map[string]ServerSetting `json:"languageServers,omitempty"`
+	// AutoInstallServers has Kopi install a language server missing, in
+	// a folder of its own, when its language's package manager can.
+	AutoInstallServers bool              `json:"autoInstallServers"`
+	FilesAssociations  map[string]string `json:"files.associations,omitempty"`
 	// Languages set the indent and the clean-ups of the files of each
 	// language, by its ID, over the settings above.
 	Languages map[string]EditorSettings `json:"languages,omitempty"`
@@ -57,11 +60,12 @@ type Settings struct {
 
 func defaultSettings() Settings {
 	return Settings{
-		CodeFontSize:    13,
-		InlayHints:      true,
-		SidebarPosition: "left",
-		IconTheme:       "material",
-		Theme:           "system",
+		CodeFontSize:       13,
+		InlayHints:         true,
+		AutoInstallServers: true,
+		SidebarPosition:    "left",
+		IconTheme:          "material",
+		Theme:              "system",
 	}
 }
 

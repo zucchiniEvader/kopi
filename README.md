@@ -25,8 +25,12 @@ tree's Git changes.
   on the machine (the PATH of the login shell):
   typescript-language-server, pyright, rust-analyzer, clangd, the
   servers of HTML, CSS and JSON, yaml-language-server, bash-language-server
-  and some 20 more, or one of `languageServers`. The status bar says when a
-  server is missing, and **Language Server: Install** installs it.
+  and some 20 more, or one of `languageServers`. A server missing that
+  comes with pip or npm Kopi installs itself, in a folder of its own, as a
+  file of its language opens: basedpyright (with its own Node, so Python
+  alone does), typescript-language-server, the servers of HTML, CSS, JSON,
+  YAML, Bash, Dockerfiles, PHP, Svelte and Elm. The status bar says when
+  another is missing, and **Language Server: Install** installs it.
 - **Java**: Eclipse JDT Language Server (jdtls), downloaded once, on Java 21
   or later: problems as you type, hovers, go to definition (<kbd>⌘</kbd>-click,
   <kbd>F12</kbd>) into the JDK's and the libraries' sources, Maven, Gradle and
@@ -142,6 +146,7 @@ apply to open windows as the file changes:
     "formatOnSave": false,         // by the file's language server
     "inlayHints": true,            // the names and types it shows in the text
     "wordWrap": false,             // long lines wrap at the editor's width (⌥Z)
+    "autoInstallServers": true,    // install a server missing, with pip or npm
     "files.associations": { "*.tmpl": "html" },
     "keybindings": [               // keys for the command bar's commands
       { "key": "cmd+shift+r", "command": "Rename Symbol" }

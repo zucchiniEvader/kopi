@@ -418,3 +418,49 @@ func TestProjectFolders(t *testing.T) {
 		t.Errorf("told %d times", n)
 	}
 }
+
+// TestRealManagedPyright has Kopi install basedpyright itself, with pip,
+// as a Python file opens on a machine without it: KOPI_MANAGED=1.
+func TestRealManagedPyright(t *testing.T) {
+	if os.Getenv("KOPI_MANAGED") == "" {
+		t.Skip("KOPI_MANAGED=1 installs basedpyright for real")
+	}
+	if findProgram("basedpyright-langserver", "") != "" || findProgram("pyright-langserver", "") != "" {
+		t.Skip("a pyright is on the PATH")
+	}
+	t.Setenv("KOPI_NAME", "kopi-test-managed")
+	os.RemoveAll(cacheDir())
+	defer os.RemoveAll(cacheDir())
+	dir := testRepo(t)
+	writeFile(t, dir, "main.py", "def twice(x: int) -> int:\n    return 2 * x\n\ny = twice(2)\n")
+	w, tt := newTestWindow(t, dir)
+	w.posted = make(chan func(), 4096)
+	py := w.server("pyright")
+	py.launch = py.spec.launch
+	defer w.stopServers()
+	sawInstalling := false
+	wait := func(what string, d time.Duration, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(d)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("waiting for %s: %s %s", what, py.statusText(), py.detail)
+			}
+			select {
+			case fn := <-w.posted:
+				fn()
+			case <-time.After(20 * time.Millisecond):
+			}
+			sawInstalling = sawInstalling || strings.Contains(py.statusText(), "Installing basedpyright")
+			tt.Frame()
+		}
+	}
+	w.openFile("main.py", 0)
+	e := w.activeTab()
+	wait("the server", 5*time.Minute, func() bool { return py.state == serverReady })
+	if !sawInstalling {
+		t.Error("the status never said it installed")
+	}
+	e.ed.Hover(editor.Pos{Line: 3, Col: 5})
+	wait("the hover", time.Minute, func() bool { return strings.Contains(e.ed.HoverText(), "twice") })
+}

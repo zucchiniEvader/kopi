@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,7 +10,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/zucchiniEvader/kopi/internal/managed"
 	"github.com/zucchiniEvader/kopi/internal/proc"
 	"github.com/zucchiniEvader/kopi/internal/shellenv"
 )
@@ -37,6 +40,9 @@ type errNotInstalled struct {
 
 func (e errNotInstalled) Error() string {
 	s := fmt.Sprintf("%s is not installed: Kopi looks for %s on the PATH.", e.spec.title(), e.spec.commands[0][0])
+	if len(e.spec.managed) > 0 {
+		s += fmt.Sprintf(" Kopi installs it itself with %s, which it did not find either, unless the setting autoInstallServers is off.", e.spec.managed[0].Tool())
+	}
 	if e.spec.install != "" {
 		s += " Install it with " + e.spec.install + ", or the command Language Server: Install."
 	}
@@ -58,19 +64,21 @@ func stdio(id, name string, languages []string, install string, commands ...[]st
 	sp := &serverSpec{id: id, name: name, languages: languages, install: install, commands: commands,
 		logPath: func(root string) string { return serverLog(id, root) }}
 	sp.launch = func(w *window, gen int, s Settings) (io.ReadWriteCloser, []string, error) {
-		return launchCommand(w, w.server(id), s)
+		return launchCommand(w, w.server(id), gen, s)
 	}
 	return sp
 }
 
 // launchCommand finds a server's command, the settings' or the first of
 // its commands found, and starts it on the window's repository.
-func launchCommand(w *window, ls *langServer, s Settings) (io.ReadWriteCloser, []string, error) {
+func launchCommand(w *window, ls *langServer, gen int, s Settings) (io.ReadWriteCloser, []string, error) {
 	shellenv.Load()
 	sp := ls.spec
 	root := w.repo.Root
 	commands := sp.commands
-	if set, ok := s.LanguageServers[sp.id]; ok && len(set.Command) > 0 {
+	set, overridden := s.LanguageServers[sp.id]
+	overridden = overridden && len(set.Command) > 0
+	if overridden {
 		commands = [][]string{set.Command}
 	}
 	var argv []string
@@ -78,6 +86,12 @@ func launchCommand(w *window, ls *langServer, s Settings) (io.ReadWriteCloser, [
 		if p := findProgram(c[0], root); p != "" {
 			argv = append([]string{p}, c[1:]...)
 			break
+		}
+	}
+	if argv == nil && !overridden {
+		var err error
+		if argv, err = managedCommand(w, ls, gen, s); err != nil {
+			return nil, nil, err
 		}
 	}
 	if argv == nil {
@@ -134,38 +148,38 @@ var scriptLanguages = []string{"javascript", "javascriptreact", "typescript", "t
 // catalog are the language servers Kopi looks for, after jdtls and gopls,
 // which it installs itself. A language takes the first serving it.
 var catalog = []*serverSpec{
-	stdio("typescript", "TypeScript", scriptLanguages, "npm install -g typescript-language-server typescript",
-		[]string{"typescript-language-server", "--stdio"}, []string{"vtsls", "--stdio"}),
-	stdio("pyright", "Python", []string{"python"}, "npm install -g pyright",
-		[]string{"basedpyright-langserver", "--stdio"}, []string{"pyright-langserver", "--stdio"}, []string{"pylsp"}),
-	alongside(stdio("ruff", "Ruff", []string{"python"}, "pip install ruff",
-		[]string{"ruff", "server"})),
+	withManaged(stdio("typescript", "TypeScript", scriptLanguages, "npm install -g typescript-language-server typescript",
+		[]string{"typescript-language-server", "--stdio"}, []string{"vtsls", "--stdio"}), npm("typescript-language-server", "typescript-language-server", "typescript@5")),
+	withManaged(stdio("pyright", "Python", []string{"python"}, "npm install -g pyright",
+		[]string{"basedpyright-langserver", "--stdio"}, []string{"pyright-langserver", "--stdio"}, []string{"pylsp"}), pip("basedpyright-langserver", "basedpyright"), npm("pyright-langserver", "pyright")),
+	withManaged(alongside(stdio("ruff", "Ruff", []string{"python"}, "pip install ruff",
+		[]string{"ruff", "server"})), pip("ruff", "ruff")),
 	stdio("rust-analyzer", "Rust", []string{"rust"}, "rustup component add rust-analyzer",
 		[]string{"rust-analyzer"}),
 	stdio("clangd", "C/C++", []string{"c", "cpp", "objective-c", "objective-cpp", "cuda-cpp"}, "brew install llvm, or Xcode's command line tools",
 		[]string{"clangd"}),
-	stdio("html", "HTML", []string{"html"}, "npm install -g vscode-langservers-extracted",
-		[]string{"vscode-html-language-server", "--stdio"}),
-	stdio("css", "CSS", []string{"css", "scss", "less"}, "npm install -g vscode-langservers-extracted",
-		[]string{"vscode-css-language-server", "--stdio"}),
-	stdio("json", "JSON", []string{"json", "jsonc"}, "npm install -g vscode-langservers-extracted",
-		[]string{"vscode-json-language-server", "--stdio"}),
-	stdio("yaml", "YAML", []string{"yaml"}, "npm install -g yaml-language-server",
-		[]string{"yaml-language-server", "--stdio"}),
-	stdio("bash", "Shell", []string{"shellscript"}, "npm install -g bash-language-server",
-		[]string{"bash-language-server", "start"}),
+	withManaged(stdio("html", "HTML", []string{"html"}, "npm install -g vscode-langservers-extracted",
+		[]string{"vscode-html-language-server", "--stdio"}), npm("vscode-html-language-server", "vscode-langservers-extracted")),
+	withManaged(stdio("css", "CSS", []string{"css", "scss", "less"}, "npm install -g vscode-langservers-extracted",
+		[]string{"vscode-css-language-server", "--stdio"}), npm("vscode-css-language-server", "vscode-langservers-extracted")),
+	withManaged(stdio("json", "JSON", []string{"json", "jsonc"}, "npm install -g vscode-langservers-extracted",
+		[]string{"vscode-json-language-server", "--stdio"}), npm("vscode-json-language-server", "vscode-langservers-extracted")),
+	withManaged(stdio("yaml", "YAML", []string{"yaml"}, "npm install -g yaml-language-server",
+		[]string{"yaml-language-server", "--stdio"}), npm("yaml-language-server", "yaml-language-server")),
+	withManaged(stdio("bash", "Shell", []string{"shellscript"}, "npm install -g bash-language-server",
+		[]string{"bash-language-server", "start"}), npm("bash-language-server", "bash-language-server")),
 	stdio("marksman", "Markdown", []string{"markdown"}, "brew install marksman",
 		[]string{"marksman", "server"}),
 	stdio("taplo", "TOML", []string{"toml"}, "brew install taplo",
 		[]string{"taplo", "lsp", "stdio"}),
 	stdio("lua", "Lua", []string{"lua"}, "brew install lua-language-server",
 		[]string{"lua-language-server"}),
-	stdio("dockerfile", "Dockerfile", []string{"dockerfile"}, "npm install -g dockerfile-language-server-nodejs",
-		[]string{"docker-langserver", "--stdio"}),
+	withManaged(stdio("dockerfile", "Dockerfile", []string{"dockerfile"}, "npm install -g dockerfile-language-server-nodejs",
+		[]string{"docker-langserver", "--stdio"}), npm("docker-langserver", "dockerfile-language-server-nodejs")),
 	stdio("ruby-lsp", "Ruby", []string{"ruby"}, "gem install ruby-lsp",
 		[]string{"ruby-lsp"}, []string{"solargraph", "stdio"}),
-	stdio("intelephense", "PHP", []string{"php"}, "npm install -g intelephense",
-		[]string{"intelephense", "--stdio"}),
+	withManaged(stdio("intelephense", "PHP", []string{"php"}, "npm install -g intelephense",
+		[]string{"intelephense", "--stdio"}), npm("intelephense", "intelephense")),
 	stdio("kotlin", "Kotlin", []string{"kotlin"}, "brew install kotlin-language-server",
 		[]string{"kotlin-language-server"}),
 	stdio("csharp", "C#", []string{"csharp"}, "dotnet tool install -g csharp-ls",
@@ -184,12 +198,12 @@ var catalog = []*serverSpec{
 		[]string{"ocamllsp"}),
 	stdio("terraform-ls", "Terraform", []string{"terraform"}, "brew install hashicorp/tap/terraform-ls",
 		[]string{"terraform-ls", "serve"}),
-	stdio("svelte", "Svelte", []string{"svelte"}, "npm install -g svelte-language-server",
-		[]string{"svelteserver", "--stdio"}),
+	withManaged(stdio("svelte", "Svelte", []string{"svelte"}, "npm install -g svelte-language-server",
+		[]string{"svelteserver", "--stdio"}), npm("svelteserver", "svelte-language-server")),
 	stdio("nil", "Nix", []string{"nix"}, "nix profile install nixpkgs#nil",
 		[]string{"nil"}, []string{"nixd"}),
-	stdio("elm", "Elm", []string{"elm"}, "npm install -g @elm-tooling/elm-language-server",
-		[]string{"elm-language-server"}),
+	withManaged(stdio("elm", "Elm", []string{"elm"}, "npm install -g @elm-tooling/elm-language-server",
+		[]string{"elm-language-server"}), npm("elm-language-server", "@elm-tooling/elm-language-server")),
 	stdio("gleam", "Gleam", []string{"gleam"}, "the Gleam compiler",
 		[]string{"gleam", "lsp"}),
 	stdio("erlang-ls", "Erlang", []string{"erlang"}, "brew install erlang_ls",
@@ -278,4 +292,77 @@ func init() {
 	for _, sp := range append(append([]*serverSpec{}, serverSpecs...), catalog...) {
 		sp.roots = projectRoots[sp.id]
 	}
+}
+
+// managedCommand returns the command of a server Kopi installed itself,
+// installing it first, with the settings' leave, when it has not; nil
+// for none, or the error installing it. It runs as the server starts,
+// off the window's thread.
+func managedCommand(w *window, ls *langServer, gen int, s Settings) ([]string, error) {
+	sp := ls.spec
+	cache := cacheDir()
+	for _, p := range sp.managed {
+		if b := managed.Find(cache, p); b != "" {
+			return append([]string{b}, argsOf(sp, p.Bin)...), nil
+		}
+	}
+	// A linter beside the server installs only when asked.
+	if !s.AutoInstallServers || sp.alongside {
+		return nil, nil
+	}
+	p, tool, ok := installable(sp)
+	if !ok {
+		return nil, nil
+	}
+	w.serverSays(ls, gen, "Installing "+p.Bin)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	b, err := managed.Install(ctx, cache, p, tool, os.Environ())
+	if err != nil {
+		return nil, err
+	}
+	return append([]string{b}, argsOf(sp, p.Bin)...), nil
+}
+
+// installable returns the first package of a server whose installer the
+// machine has, and that installer.
+func installable(sp *serverSpec) (managed.Package, string, bool) {
+	shellenv.Load()
+	for _, p := range sp.managed {
+		names := []string{p.Tool()}
+		if p.Kind == "pip" {
+			names = []string{"python3", "python"}
+		}
+		for _, n := range names {
+			if t := findProgram(n, ""); t != "" {
+				return p, t, true
+			}
+		}
+	}
+	return managed.Package{}, "", false
+}
+
+// argsOf returns the arguments a server's command of a program takes.
+func argsOf(sp *serverSpec, bin string) []string {
+	for _, c := range sp.commands {
+		if c[0] == bin {
+			return c[1:]
+		}
+	}
+	return nil
+}
+
+// pip and npm are the packages of servers Kopi installs.
+func pip(bin string, packages ...string) managed.Package {
+	return managed.Package{Kind: "pip", Packages: packages, Bin: bin}
+}
+
+func npm(bin string, packages ...string) managed.Package {
+	return managed.Package{Kind: "npm", Packages: packages, Bin: bin}
+}
+
+// withManaged has a server install from the packages given.
+func withManaged(sp *serverSpec, packages ...managed.Package) *serverSpec {
+	sp.managed = packages
+	return sp
 }

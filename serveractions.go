@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/zucchiniEvader/kopi/internal/managed"
 	"github.com/zucchiniEvader/kopi/internal/shellenv"
 )
 
@@ -37,7 +40,9 @@ func languageName(e *editorTab) string {
 // in the status bar.
 func (w *window) serverActions(s *langServer) {
 	choices := []command{{title: "Restart " + s.spec.title(), hint: s.spec.name, run: func() { w.restartServer(s) }}}
-	if canInstall(s.spec) && s.state == serverFailed {
+	if p, _, ok := installable(s.spec); ok && s.state == serverFailed {
+		choices = append(choices, command{title: "Install " + p.Bin, hint: "In Kopi's own folder", run: func() { w.installServer(s) }})
+	} else if canInstall(s.spec) && s.state == serverFailed {
 		choices = append(choices, command{title: "Install " + s.spec.title(), hint: s.spec.install, run: func() { w.installServer(s) }})
 	}
 	if s.spec.logPath != nil {
@@ -69,6 +74,28 @@ func canInstall(sp *serverSpec) bool {
 // installServer runs the command installing a language server, in the
 // run panel, and starts the server once it installed it.
 func (w *window) installServer(s *langServer) {
+	if p, tool, ok := installable(s.spec); ok {
+		// In Kopi's own folder, as the server starts.
+		w.stop(s)
+		s.state, s.status, s.detail = serverStarting, "Installing "+p.Bin, ""
+		gen := s.gen
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+			_, err := managed.Install(ctx, cacheDir(), p, tool, os.Environ())
+			w.post(func() {
+				if s.gen != gen {
+					return
+				}
+				if err != nil {
+					s.state, s.status, s.detail = serverFailed, "Unavailable", err.Error()
+					return
+				}
+				w.restartServer(s)
+			})
+		}()
+		return
+	}
 	if !canInstall(s.spec) {
 		if e := w.activeText(); e != nil {
 			msg := "Kopi cannot install " + s.spec.title() + " itself."
