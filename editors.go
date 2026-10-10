@@ -13,6 +13,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/zucchiniEvader/kopi/internal/editor"
+	"github.com/zucchiniEvader/kopi/internal/editorconfig"
 	"github.com/zucchiniEvader/kopi/internal/lsp"
 )
 
@@ -47,6 +48,8 @@ type editorTab struct {
 	lensDone    bool
 	// diff is the change a diff tab shows, nil for a file's tab.
 	diff *diffSpec
+	// config is what the .editorconfig files say of the file.
+	config editorconfig.Config
 }
 
 // origin says where a library's document comes from: the module or jar
@@ -144,6 +147,7 @@ func (w *window) openAbs(abs string) *editorTab {
 			e.err = "This file is binary, or not UTF-8 text."
 		default:
 			e.ed = editor.New(p, string(data))
+			e.applyEditorConfig()
 		}
 		w.editors = append(w.editors, e)
 		w.attach(e)
@@ -154,6 +158,40 @@ func (w *window) openAbs(abs string) *editorTab {
 		w.explorer.reveal(p)
 	}
 	return e
+}
+
+// applyEditorConfig reads what the .editorconfig files say of the file,
+// and has its editor indent, end its lines and start its text so.
+func (e *editorTab) applyEditorConfig() {
+	c := editorconfig.For(e.abs, "")
+	e.config = c
+	in := e.ed.Indent()
+	switch c.IndentStyle {
+	case "tab":
+		in.Tabs = true
+		if c.TabWidth > 0 {
+			in.Size = c.TabWidth
+		}
+	case "space":
+		in.Tabs = false
+	}
+	if !in.Tabs && c.IndentSize > 0 {
+		in.Size = c.IndentSize
+	}
+	e.ed.SetIndent(in)
+	b := e.ed.Buffer()
+	switch c.EndOfLine {
+	case "crlf":
+		b.CRLF = true
+	case "lf":
+		b.CRLF = false
+	}
+	switch c.Charset {
+	case "utf-8-bom":
+		b.BOM = true
+	case "utf-8":
+		b.BOM = false
+	}
 }
 
 // openText opens a read-only document the language server gives, by its
@@ -263,6 +301,17 @@ func (w *window) writeEditor(e *editorTab) error {
 	if e.abs == "" || e.ed.ReadOnly {
 		return nil
 	}
+	trim, final := w.settings.TrimTrailingWhitespace, (*bool)(nil)
+	if w.settings.InsertFinalNewline {
+		final = &w.settings.InsertFinalNewline
+	}
+	if c := e.config; c.TrimTrailingWhitespace != nil {
+		trim = *c.TrimTrailingWhitespace
+	}
+	if c := e.config; c.InsertFinalNewline != nil {
+		final = c.InsertFinalNewline
+	}
+	e.ed.CleanUp(trim, final)
 	p := e.abs
 	mode := os.FileMode(0o644)
 	if fi, err := os.Stat(p); err == nil {
@@ -571,16 +620,28 @@ func (w *window) editorArea(c *ui.Context, pal *palette, e *editorTab) {
 			caret := e.ed.Selection().Caret
 			col := utf8.RuneCountInString(e.ed.Buffer().Line(caret.Line)[:caret.Col]) + 1
 			small(fmt.Sprintf("Ln %d, Col %d", caret.Line+1, col))
+			// The indent, the language and the line breaks change with a
+			// click, for a file.
+			pick := func(text, tip string, fn func()) {
+				el := small(text)
+				if e.diff == nil {
+					el.Cursor(ui.CursorPointer).Tooltip(tip)
+					if el.Clicked() {
+						fn()
+					}
+				}
+			}
+			pick(indentLabel(e.ed.Indent()), "Change Indentation", w.chooseIndent)
 			lang := e.ed.Language()
 			if lang == "" {
 				lang = "Plain Text"
 			}
-			small(lang)
+			pick(lang, "Change Language Mode", w.chooseLanguage)
 			eol := "LF"
 			if e.ed.Buffer().CRLF {
 				eol = "CRLF"
 			}
-			small(eol)
+			pick(eol, "Change End of Line Sequence", w.chooseEOL)
 		})
 	})
 }

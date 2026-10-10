@@ -48,6 +48,10 @@ func (w *window) commands() []command {
 		{title: "Increase Code Font Size", keys: "⌘+", run: func() { changeFontSize(1) }},
 		{title: "Decrease Code Font Size", keys: "⌘-", run: func() { changeFontSize(-1) }},
 		{title: "Reset Code Font Size", keys: "⌘0", run: func() { changeFontSize(0) }},
+		{title: "Change Language Mode", hint: "Of the file shown", run: w.chooseLanguage},
+		{title: "Change Indentation", hint: "Tabs or spaces, and their width", run: w.chooseIndent},
+		{title: "Detect Indentation from Content", run: w.detectIndent},
+		{title: "Change End of Line Sequence", hint: "LF or CRLF", run: w.chooseEOL},
 		{title: "Open Settings", keys: "⌘,", run: func() { w.openSettings(cfg.ensure()) }},
 		{title: "Refresh Changes", keys: "⌘R", run: w.refresh},
 		{title: "Keyboard Shortcuts", run: func() { w.help = true }},
@@ -104,14 +108,18 @@ func (w *window) openSettings(path string) {
 // palette shows the command bar while it is open.
 func (w *window) palette(c *ui.Context) {
 	if !w.paletteOpen {
-		w.paletteQuery = ""
+		w.paletteQuery, w.paletteChoices = "", nil
 		return
 	}
 	t := c.Theme()
 	pal := paletteFor(t)
 	q := strings.TrimSpace(w.paletteQuery)
+	source, prompt := w.commands(), "Type a command…"
+	if w.paletteChoices != nil {
+		source, prompt = w.paletteChoices, w.palettePrompt
+	}
 	var cmds []command
-	for _, cmd := range w.commands() {
+	for _, cmd := range source {
 		if fuzzyMatch(cmd.title, q) {
 			cmds = append(cmds, cmd)
 		}
@@ -127,7 +135,7 @@ func (w *window) palette(c *ui.Context) {
 			return
 		}
 		w.paletteOpen = false
-		w.paletteQuery = ""
+		w.paletteQuery, w.paletteChoices = "", nil
 		cmds[i].run()
 	}
 	ui.DialogBase(c, &w.paletteOpen, func(backdrop, panel ui.Element) {
@@ -136,7 +144,7 @@ func (w *window) palette(c *ui.Context) {
 			Shadow(0, 20, 60, 0, ui.RGBA(0, 0, 0, 0.28)).Clip().Label("Command bar")
 		ui.Row(c).Padding(10, 14).Gap(10).BorderWidth(0, 0, 1, 0).BorderColor(pal.cardBorder).Children(func() {
 			ui.Icon(c, iconCommand).FontSize(16).TextColor(t.TextMuted)
-			input := ui.TextInputBase(c, &w.paletteQuery).Placeholder("Type a command…").Label("Command").FontSize(15).Grow(1).AutoFocus()
+			input := ui.TextInputBase(c, &w.paletteQuery).Placeholder(prompt).Label("Command").FontSize(15).Grow(1).AutoFocus()
 			if input.Changed() {
 				w.paletteRow = 0
 			}
@@ -192,8 +200,14 @@ func (w *window) palette(c *ui.Context) {
 		})
 	})
 	if !w.paletteOpen {
-		w.paletteQuery = ""
+		w.paletteQuery, w.paletteChoices = "", nil
 	}
+}
+
+// choose opens the command bar on choices, asking with prompt.
+func (w *window) choose(prompt string, choices []command) {
+	w.paletteChoices, w.palettePrompt = choices, prompt
+	w.paletteOpen, w.paletteQuery, w.paletteRow = true, "", 0
 }
 
 // paletteMoved reports whether the pointer moved over an item, so that a

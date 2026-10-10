@@ -20,8 +20,8 @@ func (p Pos) Less(q Pos) bool { return p.Line < q.Line || p.Line == q.Line && p.
 type Buffer struct {
 	lines []string
 	// CRLF tells that the text had Windows line breaks, which Text writes
-	// back.
-	CRLF bool
+	// back; BOM that it started with UTF-8's byte order mark.
+	CRLF, BOM bool
 	// version changes with every edit.
 	version int
 }
@@ -29,6 +29,7 @@ type Buffer struct {
 // NewBuffer returns a buffer holding s.
 func NewBuffer(s string) *Buffer {
 	b := &Buffer{CRLF: strings.Contains(s, "\r\n")}
+	s, b.BOM = strings.CutPrefix(s, "\uFEFF")
 	b.lines = strings.Split(normalize(s), "\n")
 	return b
 }
@@ -43,10 +44,14 @@ func normalize(s string) string {
 
 // Text returns the whole text, with the line breaks it came with.
 func (b *Buffer) Text() string {
+	sep, bom := "\n", ""
 	if b.CRLF {
-		return strings.Join(b.lines, "\r\n")
+		sep = "\r\n"
 	}
-	return strings.Join(b.lines, "\n")
+	if b.BOM {
+		bom = "\uFEFF"
+	}
+	return bom + strings.Join(b.lines, sep)
 }
 
 // Lines returns how many lines the buffer holds: at least one.

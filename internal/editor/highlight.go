@@ -25,6 +25,9 @@ func (h *highlighter) language() string {
 	return ""
 }
 
+// setPath colors the text as a file at p, as of another language.
+func (h *highlighter) setPath(p string) { h.path, h.done, h.sem = p, false, nil }
+
 // update colors b again if it changed since the last time.
 func (h *highlighter) update(b *Buffer) {
 	if h.done && h.version == b.version {

@@ -30,6 +30,10 @@ type Settings struct {
 	JdtlsPath       string `json:"jdtlsPath"`
 	SidebarPosition string `json:"sidebarPosition"` // left or right
 	Theme           string `json:"theme"`           // system, light or dark
+	// TrimTrailingWhitespace and InsertFinalNewline clean a file up as it
+	// is saved, unless its .editorconfig says otherwise.
+	TrimTrailingWhitespace bool `json:"trimTrailingWhitespace"`
+	InsertFinalNewline     bool `json:"insertFinalNewline"`
 }
 
 func defaultSettings() Settings {

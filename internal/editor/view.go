@@ -179,8 +179,22 @@ func New(path, text string) *Editor {
 func (ed *Editor) Lang() *lang.Language { return ed.lang }
 
 // SetLang sets the language of the text, whose comments, brackets and
-// indent edits follow.
-func (ed *Editor) SetLang(l *lang.Language) { ed.lang = l }
+// indent edits follow, and which colors it.
+func (ed *Editor) SetLang(l *lang.Language) {
+	if l == ed.lang {
+		return
+	}
+	ed.lang = l
+	// The lexer of a file of the language.
+	name := "file"
+	switch {
+	case len(l.Extensions) > 0:
+		name += l.Extensions[0]
+	case len(l.Filenames) > 0:
+		name = l.Filenames[0]
+	}
+	ed.hl.setPath(name)
+}
 
 // Indent returns how the text indents.
 func (ed *Editor) Indent() Indent { return ed.indent }
@@ -1369,9 +1383,15 @@ func (ed *Editor) undo() {
 		return
 	}
 	s := h.undo[len(h.undo)-1]
-	h.undo = h.undo[:len(h.undo)-1]
-	ed.replace(s.at, after(s.at, s.inserted), s.removed)
-	h.redo = append(h.redo, s)
+	for {
+		h.undo = h.undo[:len(h.undo)-1]
+		ed.replace(s.at, after(s.at, s.inserted), s.removed)
+		h.redo = append(h.redo, s)
+		if n := len(h.undo); s.group == 0 || n == 0 || h.undo[n-1].group != s.group {
+			break
+		}
+		s = h.undo[len(h.undo)-1]
+	}
 	ed.sel = s.before
 	ed.hasGoal = false
 	ed.reveal()
@@ -1383,9 +1403,15 @@ func (ed *Editor) redo() {
 		return
 	}
 	s := h.redo[len(h.redo)-1]
-	h.redo = h.redo[:len(h.redo)-1]
-	ed.replace(s.at, after(s.at, s.removed), s.inserted)
-	h.undo = append(h.undo, s)
+	for {
+		h.redo = h.redo[:len(h.redo)-1]
+		ed.replace(s.at, after(s.at, s.removed), s.inserted)
+		h.undo = append(h.undo, s)
+		if n := len(h.redo); s.group == 0 || n == 0 || h.redo[n-1].group != s.group {
+			break
+		}
+		s = h.redo[len(h.redo)-1]
+	}
 	ed.sel = s.after
 	ed.hasGoal = false
 	ed.reveal()

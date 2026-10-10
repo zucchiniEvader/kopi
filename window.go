@@ -145,7 +145,11 @@ type window struct {
 	paletteOpen  bool
 	paletteQuery string
 	paletteRow   int
-	paletteList  ui.ListState
+	// paletteChoices, when set, are what the bar offers in place of the
+	// commands, as the languages to pick one; palettePrompt asks for one.
+	paletteChoices []command
+	palettePrompt  string
+	paletteList    ui.ListState
 	// palettePointer is where the pointer was over the list.
 	palettePointer [2]float32
 

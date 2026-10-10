@@ -38,6 +38,9 @@ type step struct {
 	before, after     Selection
 	kind              editKind
 	when              time.Time
+	// group joins the steps of one change, as the edits of a format,
+	// which undo and redo together; 0 for none.
+	group int
 }
 
 // history holds the steps to undo and to redo.
@@ -47,6 +50,8 @@ type history struct {
 	// saved is the ID of the step last undone to when the text was saved,
 	// 0 for none.
 	saved int
+	// group is the group the steps recorded join, 0 for none.
+	group, nextGroup int
 }
 
 // current returns the ID of the step the text is at, 0 for the start.
@@ -61,7 +66,8 @@ func (h *history) current() int {
 // delete, in a row, as one word does.
 func (h *history) record(s *step) {
 	h.redo = nil
-	if n := len(h.undo); n > 0 && s.kind != editOther {
+	s.group = h.group
+	if n := len(h.undo); n > 0 && s.kind != editOther && s.group == 0 {
 		last := h.undo[n-1]
 		if last.kind == s.kind && last.id != h.saved && s.when.Sub(last.when) < time.Second {
 			switch {
