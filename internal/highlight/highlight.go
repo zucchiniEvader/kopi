@@ -43,8 +43,9 @@ type Seg struct {
 	Class      Class
 }
 
-// MaxBytes bounds the files worth highlighting.
-const MaxBytes = 1 << 20
+// MaxBytes bounds the files worth highlighting: those over 128 KB color
+// on a goroutine of the editor.
+const MaxBytes = 4 << 20
 
 var (
 	lexerMu    sync.Mutex

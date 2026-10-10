@@ -300,6 +300,10 @@ func (ed *Editor) build(c *ui.Context, e ui.Element) {
 			ed.preedit = ""
 		}
 	}
+	if ed.hl.invalidate == nil {
+		svc := ed.svc
+		ed.hl.invalidate = svc.Invalidate
+	}
 	ed.hl.update(ed.buf)
 }
 

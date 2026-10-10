@@ -1,6 +1,15 @@
 package editor
 
-import "github.com/zucchiniEvader/kopi/internal/highlight"
+import (
+	"slices"
+	"sync"
+
+	"github.com/zucchiniEvader/kopi/internal/highlight"
+)
+
+// syncBytes bounds the texts colored as they change, before the frame:
+// longer ones are colored on a goroutine, keeping their colors till then.
+const syncBytes = 128 << 10
 
 // highlighter colors a buffer's lines by the classes of their tokens,
 // again whenever the buffer changes.
@@ -9,6 +18,13 @@ type highlighter struct {
 	version int
 	done    bool
 	lines   [][]highlight.Seg
+	// invalidate asks for a frame once a goroutine colored the text.
+	invalidate func()
+	// working tells a goroutine colors the text; mu guards what it
+	// colored, of the version ready.
+	working bool
+	mu      sync.Mutex
+	ready   *colored
 	// sem are the classes a language server gave, by their meaning, which
 	// go over the lexer's: a name is a class, a method or a field.
 	sem [][]highlight.Seg
@@ -25,16 +41,54 @@ func (h *highlighter) language() string {
 	return ""
 }
 
+// colored are the classes of the lines of a version of a buffer.
+type colored struct {
+	path    string
+	version int
+	lines   [][]highlight.Seg
+}
+
 // setPath colors the text as a file at p, as of another language.
 func (h *highlighter) setPath(p string) { h.path, h.done, h.sem = p, false, nil }
 
-// update colors b again if it changed since the last time.
+// update colors b again if it changed since the last time: at once when
+// it is short, else on a goroutine.
 func (h *highlighter) update(b *Buffer) {
 	if h.done && h.version == b.version {
 		return
 	}
-	h.done, h.version = true, b.version
-	h.lines = highlight.Lines(h.path, b.lines)
+	if h.working {
+		h.mu.Lock()
+		r := h.ready
+		h.ready = nil
+		h.mu.Unlock()
+		if r == nil {
+			return // the goroutine is still at it
+		}
+		h.working = false
+		if r.version == b.version && r.path == h.path {
+			h.done, h.version, h.lines = true, r.version, r.lines
+			return
+		}
+	}
+	size := 0
+	for _, l := range b.lines {
+		size += len(l) + 1
+	}
+	if size <= syncBytes || h.invalidate == nil {
+		h.done, h.version = true, b.version
+		h.lines = highlight.Lines(h.path, b.lines)
+		return
+	}
+	h.working = true
+	path, version, lines := h.path, b.version, slices.Clone(b.lines)
+	go func() {
+		out := highlight.Lines(path, lines)
+		h.mu.Lock()
+		h.ready = &colored{path, version, out}
+		h.mu.Unlock()
+		h.invalidate()
+	}()
 }
 
 // spans returns the classes of line i's runs of bytes.
@@ -89,10 +143,23 @@ func overlay(lex, sem []highlight.Seg) []highlight.Seg {
 // text ending at end: the lines edited lose theirs until the server sends
 // them anew.
 func (h *highlighter) shift(a, z, end Pos) {
-	if a.Line >= len(h.sem) {
-		return
+	h.sem = shiftLines(h.sem, a, z, end, false)
+	// The lexer's classes stay till the text is colored again, the lines
+	// edited keeping theirs.
+	h.lines = shiftLines(h.lines, a, z, end, true)
+}
+
+// shiftLines moves the classes of lines after an edit replacing a to z
+// with text ending at end, the lines edited without theirs, but the first
+// with keep.
+func shiftLines(lines [][]highlight.Seg, a, z, end Pos, keep bool) [][]highlight.Seg {
+	if a.Line >= len(lines) {
+		return lines
 	}
-	last := min(z.Line+1, len(h.sem))
+	last := min(z.Line+1, len(lines))
 	fresh := make([][]highlight.Seg, end.Line-a.Line+1)
-	h.sem = append(h.sem[:a.Line:a.Line], append(fresh, h.sem[last:]...)...)
+	if keep {
+		fresh[0] = lines[a.Line]
+	}
+	return append(lines[:a.Line:a.Line], append(fresh, lines[last:]...)...)
 }
