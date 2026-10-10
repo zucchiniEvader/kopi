@@ -210,3 +210,36 @@ func (w *window) applyFileSettings(e *editorTab) {
 	e.ed.SetWordWrap(*s.WordWrap)
 	e.applyEditorConfig()
 }
+
+// workspaceSettingsTemplate is the .vscode/settings.json Kopi writes for
+// a work tree without one.
+const workspaceSettingsTemplate = `{
+  // The settings of this folder's files, over Kopi's: those of the
+  // editor and the files, as VS Code names them, and of each language.
+  // "editor.tabSize": 4,
+  // "editor.insertSpaces": true,
+  // "editor.formatOnSave": true,
+  // "editor.wordWrap": "on",
+  // "files.trimTrailingWhitespace": true,
+  // "files.insertFinalNewline": true,
+  // "files.associations": { "*.tmpl": "html" },
+  // "[python]": { "editor.tabSize": 4 }
+}
+`
+
+// openWorkspaceSettings opens the work tree's .vscode/settings.json,
+// written first when it has none.
+func (w *window) openWorkspaceSettings() {
+	if w.noFolder() {
+		return
+	}
+	p := filepath.Join(w.repo.Root, ".vscode", "settings.json")
+	if _, err := os.Stat(p); err != nil {
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(workspaceSettingsTemplate), 0o644); err != nil {
+			w.say(lineFail, "Could not write %s: %v", p, err)
+			return
+		}
+	}
+	w.openAbs(p)
+}

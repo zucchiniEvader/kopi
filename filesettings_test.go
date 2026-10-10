@@ -56,3 +56,16 @@ func TestFileSettings(t *testing.T) {
 		t.Errorf("served by %v", s)
 	}
 }
+
+func TestOpenWorkspaceSettings(t *testing.T) {
+	dir := testRepo(t)
+	w, _ := newTestWindow(t, dir)
+	w.openWorkspaceSettings()
+	e := w.activeTab()
+	if e == nil || e.path != ".vscode/settings.json" || e.ed.Lang().ID != "jsonc" {
+		t.Fatalf("tab %+v", e)
+	}
+	if ws := parseWorkspaceSettings([]byte(workspaceSettingsTemplate)); ws.all.TabSize != nil {
+		t.Error("the template sets something")
+	}
+}
