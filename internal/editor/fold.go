@@ -326,17 +326,13 @@ func (ed *Editor) paintFoldChevron(p *ui.Painter, i int, x, y float32, hovered b
 	if _, ok := ed.foldAt(i, false); !ok && !closed {
 		return
 	}
-	cx, cy := x+foldGutter/2, y+ed.lineH/2
-	color := ed.style.LineNumber
+	// ›, pointing at the lines it hides, or ⌄.
+	mark := "⌄"
 	if closed {
-		// ›, pointing at the lines it hides.
-		p.Line(cx-2, cy-4, cx+2, cy, 1.4, color)
-		p.Line(cx+2, cy, cx-2, cy+4, 1.4, color)
-		return
+		mark = "›"
 	}
-	// ⌄
-	p.Line(cx-4, cy-2, cx, cy+2, 1.4, color)
-	p.Line(cx, cy+2, cx+4, cy-2, 1.4, color)
+	sl := ed.shape(mark)
+	p.Glyphs(sl.glyphs, x+(foldGutter-sl.width)/2, y+ed.baseline, ed.style.LineNumber)
 }
 
 // paintFoldEllipsis marks a folded line, of shape sl, with ⋯ after its

@@ -28,6 +28,9 @@ func (w *window) captureIfAsked() {
 			}
 			w.win.Update(func() { w.debugSetup(setup) })
 			time.Sleep(1200 * time.Millisecond)
+			if strings.Contains(setup, "complete") {
+				time.Sleep(2 * time.Second)
+			}
 			if prof != nil {
 				pprof.StopCPUProfile()
 				prof.Close()
@@ -59,7 +62,10 @@ func (w *window) debugSetup(setup string) {
 			case "foldall":
 				w.withText(func(e *editorTab) { e.ed.FoldAll() })
 			case "complete":
-				w.withText(func(e *editorTab) { e.ed.Complete() })
+				// Once the server has the file.
+				time.AfterFunc(2*time.Second, func() {
+					w.win.Update(func() { w.withText(func(e *editorTab) { e.ed.Complete() }) })
+				})
 			default:
 				w.debugSetup(name)
 			}
