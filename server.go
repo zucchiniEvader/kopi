@@ -56,6 +56,10 @@ type serverSpec struct {
 	// linter does: its problems, code actions and formatting, not its
 	// hovers or completions; missing, it says nothing.
 	alongside bool
+	// roots name the files marking the folder of a project, as go.mod:
+	// a file's nearest one is a workspace folder of the server, for the
+	// projects of a repository of several.
+	roots []string
 	// ready runs once the server is initialized, with the plugins it
 	// loaded; failed once it could not start. restart reports whether
 	// settings changed call for the server to start again.
@@ -108,13 +112,15 @@ type langServer struct {
 	// disabled keeps the server from starting, as the settings say.
 	disabled bool
 	state    int
-	// caps are what the server does, as it said once initialized.
-	caps   serverCaps
-	status string // what the status bar says
-	detail string // why it failed, or what it is doing
-	gen    int    // counts starts, to drop what older servers send
-	conn   *lsp.Conn
-	stop   func()
+	// caps are what the server does, as it said once initialized;
+	// folders the workspace folders it was told of, by path.
+	caps    serverCaps
+	folders map[string]bool
+	status  string // what the status bar says
+	detail  string // why it failed, or what it is doing
+	gen     int    // counts starts, to drop what older servers send
+	conn    *lsp.Conn
+	stop    func()
 	// docs holds the versions of the documents opened, by URI; diags the
 	// problems of each document; errors the files with errors and the
 	// directories holding them, by path in the repository; counted what
@@ -338,6 +344,7 @@ func (w *window) attach(e *editorTab) {
 	for _, s := range w.serversOf(e) {
 		if s.launch != nil {
 			w.start(s)
+			w.addFolder(s, e)
 			w.didOpen(s, e)
 		}
 	}
@@ -357,6 +364,15 @@ func (w *window) start(s *langServer) {
 	// as of a workspace started over, are gone.
 	s.diags, s.errors, s.counted = map[string][]lsp.Diagnostic{}, map[string]int{}, map[string]counted{}
 	launch, settings, root := s.launch, w.settings, w.repo.Root
+	// The projects of the files open, as the server's first folders.
+	s.folders = map[string]bool{}
+	var folders []string
+	for _, e := range w.editors {
+		if f := w.projectOf(s, e); f != "" && !s.folders[f] {
+			s.folders[f] = true
+			folders = append(folders, f)
+		}
+	}
 	go func() {
 		fail := func(err error) {
 			w.post(func() {
@@ -392,7 +408,7 @@ func (w *window) start(s *langServer) {
 		if o := settings.LanguageServers[s.spec.id].Options; o != nil {
 			options = o
 		}
-		if err := conn.Call(ctx, "initialize", initializeParams(root, options), &init); err != nil {
+		if err := conn.Call(ctx, "initialize", initializeParams(root, folders, options), &init); err != nil {
 			conn.Close()
 			fail(fmt.Errorf("the %s language server did not start: %w", s.spec.name, err))
 			return
@@ -455,15 +471,17 @@ func shutdown(conn *lsp.Conn) {
 	conn.Close()
 }
 
-func initializeParams(root string, options map[string]any) map[string]any {
+func initializeParams(root string, folders []string, options map[string]any) map[string]any {
 	uri := lsp.FileURI(root)
+	wf := []map[string]string{{"uri": uri, "name": filepath.Base(root)}}
+	for _, f := range folders {
+		wf = append(wf, map[string]string{"uri": lsp.FileURI(f), "name": filepath.Base(f)})
+	}
 	return map[string]any{
-		"processId": os.Getpid(),
-		"rootUri":   uri,
-		"workspaceFolders": []map[string]string{
-			{"uri": uri, "name": filepath.Base(root)},
-		},
-		"clientInfo": map[string]string{"name": "Kopi"},
+		"processId":        os.Getpid(),
+		"rootUri":          uri,
+		"workspaceFolders": wf,
+		"clientInfo":       map[string]string{"name": "Kopi"},
 		"capabilities": map[string]any{
 			"workspace": map[string]any{
 				"configuration":    true,
@@ -1313,4 +1331,39 @@ func hintLabel(raw json.RawMessage) string {
 		b.WriteString(p.Value)
 	}
 	return b.String()
+}
+
+// projectOf returns the folder of the project of a tab's file for a
+// server, by the server's markers: below the repository's root, "" for
+// none or the root itself.
+func (w *window) projectOf(s *langServer, e *editorTab) string {
+	if len(s.spec.roots) == 0 || e.abs == "" || w.noFolder() {
+		return ""
+	}
+	if _, ok := w.repoPath(e.abs); !ok {
+		return ""
+	}
+	for dir := filepath.Dir(e.abs); dir != w.repo.Root && len(dir) > len(w.repo.Root); dir = filepath.Dir(dir) {
+		for _, m := range s.spec.roots {
+			if matches, _ := filepath.Glob(filepath.Join(dir, m)); len(matches) > 0 {
+				return dir
+			}
+		}
+	}
+	return ""
+}
+
+// addFolder tells a server running of the project of a tab's file, as a
+// workspace folder, unless it knows it.
+func (w *window) addFolder(s *langServer, e *editorTab) {
+	f := w.projectOf(s, e)
+	if f == "" || s.folders[f] || s.state != serverReady || !s.caps.workspaceFolders {
+		// A server starting starts with the folders of the files open.
+		return
+	}
+	s.folders[f] = true
+	s.conn.Notify("workspace/didChangeWorkspaceFolders", map[string]any{"event": map[string]any{
+		"added":   []map[string]string{{"uri": lsp.FileURI(f), "name": filepath.Base(f)}},
+		"removed": []any{},
+	}})
 }

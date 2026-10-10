@@ -160,7 +160,11 @@ A server of `languageServers` changes Kopi's of that ID (its `command`,
 `command` and `languages`, serves those languages before Kopi's; one
 `alongside` serves beside the server of its languages, as Ruff beside
 pyright: its problems show with the server's, its code actions with
-the server's, and it formats when the server does not. The IDs of
+the server's, and it formats when the server does not. In a repository of
+several projects, a server learns of the folder of each project of the
+files open, by the files marking it (`go.mod`, `Cargo.toml`,
+`package.json`, `pyproject.toml`…, or a server's `roots`), as a
+workspace folder. The IDs of
 the languages are VS Code's (`python`, `typescriptreact`, `shellscript`…).
 
 A work tree's `.vscode/settings.json` goes over them: `editor.tabSize`,

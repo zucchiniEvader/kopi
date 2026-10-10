@@ -27,8 +27,10 @@ type fakeServer struct {
 	got  []string
 	// config is what it asked of workspace/configuration.
 	config any
-	// answers answer requests, by their methods.
+	// answers answer requests, by their methods; init is what initialize
+	// told it.
 	answers map[string]any
+	init    json.RawMessage
 }
 
 func (f *fakeServer) launcher() serverLauncher {
@@ -63,6 +65,18 @@ func (f *fakeServer) Notify(method string, params json.RawMessage) {
 		if ch.Range != nil {
 			s += " (range)"
 		}
+	case "workspace/didChangeWorkspaceFolders":
+		var p struct {
+			Event struct {
+				Added []struct {
+					Name string `json:"name"`
+				} `json:"added"`
+			} `json:"event"`
+		}
+		json.Unmarshal(params, &p)
+		for _, a := range p.Event.Added {
+			s += " " + a.Name
+		}
 	case "initialized":
 		// It asks for its settings, as pyright does.
 		f.mu.Lock()
@@ -83,6 +97,9 @@ func (f *fakeServer) Notify(method string, params json.RawMessage) {
 
 func (f *fakeServer) Request(method string, params json.RawMessage) (any, error) {
 	if method == "initialize" {
+		f.mu.Lock()
+		f.init = params
+		f.mu.Unlock()
 		return map[string]any{"capabilities": f.caps}, nil
 	}
 	f.mu.Lock()
@@ -354,4 +371,43 @@ func TestServerAlongside(t *testing.T) {
 	pump(t, w, tt, "the changes", func() bool {
 		return hasPrefix(main.heard(), "textDocument/didChange") && hasPrefix(lint.heard(), "textDocument/didChange")
 	})
+}
+
+// TestProjectFolders tells a server of the projects of a repository of
+// several, as its workspace folders.
+func TestProjectFolders(t *testing.T) {
+	dir := testRepo(t)
+	writeFile(t, dir, "svc/a/go.mod", "module a\n")
+	writeFile(t, dir, "svc/a/a.go", "package a\n")
+	writeFile(t, dir, "svc/b/go.mod", "module b\n")
+	writeFile(t, dir, "svc/b/b.go", "package b\n")
+	w, tt := newTestWindow(t, dir)
+	w.posted = make(chan func(), 1024)
+	defer w.stopServers()
+	fake := &fakeServer{caps: map[string]any{"workspace": map[string]any{
+		"workspaceFolders": map[string]any{"supported": true, "changeNotifications": true}}}}
+	g := w.gopls()
+	g.launch = fake.launcher()
+	w.openFile("svc/a/a.go", 0)
+	pump(t, w, tt, "the server", func() bool { return g.state == serverReady })
+	fake.mu.Lock()
+	init := string(fake.init)
+	fake.mu.Unlock()
+	if !strings.Contains(init, `"name":"a"`) || strings.Contains(init, `"name":"b"`) {
+		t.Errorf("initialize %s", init)
+	}
+	w.openFile("svc/b/b.go", 0)
+	pump(t, w, tt, "the folder", func() bool { return hasPrefix(fake.heard(), "workspace/didChangeWorkspaceFolders b") })
+	// Once.
+	w.openFile("main.go", 0)
+	w.openFile("svc/b/b.go", 0)
+	n := 0
+	for _, h := range fake.heard() {
+		if strings.HasPrefix(h, "workspace/didChangeWorkspaceFolders") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("told %d times", n)
+	}
 }

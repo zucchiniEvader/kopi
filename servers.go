@@ -24,8 +24,10 @@ type ServerSetting struct {
 	Options   map[string]any `json:"initializationOptions,omitempty"`
 	Settings  map[string]any `json:"settings,omitempty"`
 	Disabled  bool           `json:"disabled,omitempty"`
-	// Alongside serves the languages beside their server, as a linter.
-	Alongside bool `json:"alongside,omitempty"`
+	// Alongside serves the languages beside their server, as a linter;
+	// Roots name the files marking its projects' folders, as go.mod.
+	Alongside bool     `json:"alongside,omitempty"`
+	Roots     []string `json:"roots,omitempty"`
 }
 
 // errNotInstalled tells that none of a server's commands was found.
@@ -207,7 +209,7 @@ func alongside(sp *serverSpec) *serverSpec {
 // userSpec is a server of the settings' own, by its ID.
 func userSpec(id string, set ServerSetting) *serverSpec {
 	sp := stdio(id, id, set.Languages, "", set.Command)
-	sp.alongside = set.Alongside
+	sp.alongside, sp.roots = set.Alongside, set.Roots
 	return sp
 }
 
@@ -217,10 +219,13 @@ func userSpec(id string, set ServerSetting) *serverSpec {
 func specsFor(s Settings) []*serverSpec {
 	var out []*serverSpec
 	for _, sp := range append(slices.Clone(serverSpecs), catalog...) {
-		if set, ok := s.LanguageServers[sp.id]; ok && (len(set.Languages) > 0 || set.Alongside != sp.alongside) {
+		if set, ok := s.LanguageServers[sp.id]; ok && (len(set.Languages) > 0 || set.Alongside != sp.alongside || len(set.Roots) > 0) {
 			c := *sp
 			if len(set.Languages) > 0 {
 				c.languages = set.Languages
+			}
+			if len(set.Roots) > 0 {
+				c.roots = set.Roots
 			}
 			c.alongside = c.alongside || set.Alongside
 			sp = &c
@@ -248,4 +253,29 @@ func specsFor(s Settings) []*serverSpec {
 func isNotInstalled(err error) bool {
 	var e errNotInstalled
 	return errors.As(err, &e)
+}
+
+// projectRoots are the files marking the projects of each server's
+// languages, by its ID.
+var projectRoots = map[string][]string{
+	"gopls":         {"go.mod", "go.work"},
+	"rust-analyzer": {"Cargo.toml"},
+	"typescript":    {"package.json", "tsconfig.json", "jsconfig.json"},
+	"pyright":       {"pyproject.toml", "pyrightconfig.json", "setup.py", "setup.cfg"},
+	"ruff":          {"pyproject.toml", "ruff.toml", ".ruff.toml"},
+	"clangd":        {"compile_commands.json", "compile_flags.txt", ".clangd"},
+	"svelte":        {"package.json"},
+	"dart":          {"pubspec.yaml"},
+	"elixir-ls":     {"mix.exs"},
+	"hls":           {"stack.yaml", "cabal.project", "package.yaml"},
+	"zls":           {"build.zig"},
+	"kotlin":        {"build.gradle.kts", "build.gradle", "settings.gradle.kts"},
+	"csharp":        {"*.sln", "*.csproj"},
+	"metals":        {"build.sbt", "build.sc"},
+}
+
+func init() {
+	for _, sp := range append(append([]*serverSpec{}, serverSpecs...), catalog...) {
+		sp.roots = projectRoots[sp.id]
+	}
 }

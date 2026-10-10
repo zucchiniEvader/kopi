@@ -21,6 +21,8 @@ type serverCaps struct {
 	completion, signatureHelp, rename, codeAction                 bool
 	formatting, rangeFormatting, documentSymbol, workspaceSymbol  bool
 	documentHighlight, inlayHint, foldingRange, selectionRange    bool
+	// workspaceFolders tells it takes folders added as it runs.
+	workspaceFolders bool
 	// completionTriggers are the characters asking for completions as
 	// they are typed, signatureTriggers for the signature;
 	// completionResolve that it tells more of a completion chosen.
@@ -50,7 +52,13 @@ func parseCaps(raw json.RawMessage) serverCaps {
 		InlayHintProvider               json.RawMessage `json:"inlayHintProvider"`
 		FoldingRangeProvider            json.RawMessage `json:"foldingRangeProvider"`
 		SelectionRangeProvider          json.RawMessage `json:"selectionRangeProvider"`
-		CompletionProvider              *struct {
+		Workspace                       struct {
+			WorkspaceFolders struct {
+				Supported           bool            `json:"supported"`
+				ChangeNotifications json.RawMessage `json:"changeNotifications"`
+			} `json:"workspaceFolders"`
+		} `json:"workspace"`
+		CompletionProvider *struct {
 			TriggerCharacters []string `json:"triggerCharacters"`
 			ResolveProvider   bool     `json:"resolveProvider"`
 		} `json:"completionProvider"`
@@ -97,6 +105,8 @@ func parseCaps(raw json.RawMessage) serverCaps {
 	out.inlayHint = provides(c.InlayHintProvider)
 	out.foldingRange = provides(c.FoldingRangeProvider)
 	out.selectionRange = provides(c.SelectionRangeProvider)
+	wf := c.Workspace.WorkspaceFolders
+	out.workspaceFolders = wf.Supported && provides(wf.ChangeNotifications)
 	if p := c.CompletionProvider; p != nil {
 		out.completion = true
 		out.completionTriggers = p.TriggerCharacters
