@@ -57,7 +57,7 @@ func (w *window) sessionOf() session {
 	var ss session
 	ss.Active = -1
 	for _, e := range w.editors {
-		if e.abs == "" || e.diff != nil || e.ed == nil {
+		if e.abs == "" || e.diff != nil || e.ed == nil || e.viewOf != nil {
 			continue
 		}
 		rel, ok := w.repoPath(e.abs)

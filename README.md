@@ -103,7 +103,7 @@ Tool…** installs the `kopi` command.
 | <kbd>⌥⌘[</kbd> / <kbd>⌥⌘]</kbd> | Fold / unfold the block at the caret (or its chevron in the gutter) |
 | <kbd>⌃⇧⌘→</kbd> / <kbd>⌃⇧⌘←</kbd> | Expand / shrink the selection |
 | <kbd>⇧⌘V</kbd> | Preview the Markdown file shown |
-| <kbd>⌘\</kbd> | Split the editor: the tab shown to a pane on the right, or the panes joined |
+| <kbd>⌘\</kbd> | Split the editor: the file shown, again, in a pane on the right; or the panes joined |
 | <kbd>F5</kbd> / <kbd>⌃F5</kbd> | Debug / run |
 | <kbd>⇧F5</kbd> / <kbd>⇧⌘F5</kbd> | Stop / restart |
 | <kbd>F9</kbd> | Toggle a breakpoint |

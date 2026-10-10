@@ -54,8 +54,10 @@ type editorTab struct {
 	config   editorconfig.Config
 	encoding string
 	// preview, set for the tab previewing a Markdown file, is what it
-	// shows.
+	// shows; viewOf, set for a second view of a file, as split panes
+	// show it, is the tab of the file.
 	preview *previewState
+	viewOf  *editorTab
 }
 
 // enc returns the ID of the encoding of the tab's file.
@@ -163,6 +165,10 @@ func (w *window) loadAbs(abs string) (*editorTab, bool) {
 		p = abs
 	}
 	e := w.editorOf(p)
+	// The view of the file with the focus, of those shown.
+	if a := w.activeTab(); a != nil && a.path == p {
+		e = a
+	}
 	if e == nil {
 		e = &editorTab{path: p, abs: abs, uri: lsp.FileURI(abs), library: !inRepo}
 		e.stamp, _ = stampOf(abs)
@@ -416,7 +422,24 @@ func (w *window) closeEditor(i int) {
 }
 
 func (w *window) removeEditor(i int) {
-	w.didClose(w.editors[i])
+	closing := w.editors[i]
+	// The server keeps the document while a view of it is open; a view
+	// of the tab closing stands for it.
+	others := false
+	for _, o := range w.editors {
+		if o != closing && o.uri != "" && o.uri == closing.uri && o.ed != nil {
+			others = true
+		}
+		if o.viewOf == closing {
+			o.viewOf = nil
+		}
+	}
+	if !others {
+		w.didClose(closing)
+	}
+	if closing.ed != nil {
+		closing.ed.Close()
+	}
 	w.editors = slices.Delete(w.editors, i, i+1)
 	closedFocused := i == w.activeEditor
 	switch {
@@ -576,7 +599,7 @@ func (w *window) editorTabs(c *ui.Context, pal *palette) {
 				}
 				hints := tabHints(w.editors)
 				for i, e := range w.editors {
-					b := tab(i == w.activeEditor || w.split() && i == w.otherEditor, e.library).Key(e.path).Label(e.path).Tooltip(e.path)
+					b := tab(i == w.activeEditor || w.split() && i == w.otherEditor, e.library).Key(e).Label(e.path).Tooltip(e.path)
 					if e.diff != nil {
 						b.Label(e.title()).Tooltip(e.diff.path + " (" + e.diff.label + ")")
 					}

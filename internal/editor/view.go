@@ -81,7 +81,10 @@ func defaultStyle(t *ui.Theme) Style {
 // selection, scroll and the shapes of its lines. View shows it.
 type Editor struct {
 	buf  *Buffer
-	hist history
+	// hist is the text's history, which the views of the text share;
+	// peers are the other views of the text.
+	hist  *history
+	peers []*Editor
 	sel  Selection
 	hl   *highlighter
 	// lang is the language of the text, whose comments, brackets and
@@ -212,7 +215,7 @@ type dragState struct {
 // New returns an editor of text, highlighted as the language of the file
 // at path.
 func New(path, text string) *Editor {
-	ed := &Editor{buf: NewBuffer(text), hl: newHighlighter(path), shaped: map[string]*shapedLine{}, execLine: -1, lensHover: [2]int{-1, -1}}
+	ed := &Editor{buf: NewBuffer(text), hist: &history{}, hl: newHighlighter(path), shaped: map[string]*shapedLine{}, execLine: -1, lensHover: [2]int{-1, -1}}
 	ed.lang = lang.Detect(path, ed.buf.Line(0))
 	ed.indent = DetectIndent(ed.buf.lines, Indent{Tabs: ed.lang.Tabs, Size: ed.lang.TabSize})
 	return ed
@@ -1585,7 +1588,7 @@ func (ed *Editor) edit(a, z Pos, s string, kind editKind) {
 
 func (ed *Editor) undo() {
 	ed.clearCursors()
-	h := &ed.hist
+	h := ed.hist
 	if len(h.undo) == 0 || ed.ReadOnly {
 		return
 	}
@@ -1606,7 +1609,7 @@ func (ed *Editor) undo() {
 
 func (ed *Editor) redo() {
 	ed.clearCursors()
-	h := &ed.hist
+	h := ed.hist
 	if len(h.redo) == 0 || ed.ReadOnly {
 		return
 	}
@@ -1627,10 +1630,17 @@ func (ed *Editor) redo() {
 
 // replace replaces the text from a to z with s, telling OnEdit first.
 func (ed *Editor) replace(a, z Pos, s string) Pos {
-	if ed.OnEdit != nil {
-		ed.OnEdit(a, z, s)
+	// The text's hook, of whichever view has it.
+	for _, x := range ed.views() {
+		if x.OnEdit != nil {
+			x.OnEdit(a, z, s)
+			break
+		}
 	}
 	end := ed.buf.Replace(a, z, s)
+	for _, p := range ed.peers {
+		p.peerEdited(a, z, end)
+	}
 	ed.shiftFolds(a, z, end)
 	ed.shiftInlay(a, z, end)
 	// The hover and the highlights tell of the text as it was.

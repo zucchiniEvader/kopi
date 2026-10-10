@@ -41,10 +41,19 @@ func (w *window) toggleSplit() {
 		return
 	}
 	e := w.activeTab()
-	if e == nil || len(w.editors) < 2 {
-		if e != nil && e.ed != nil {
-			e.ed.Notice(e.ed.Selection().Caret, "Open another file to split the editor.")
-		}
+	if e == nil {
+		return
+	}
+	if e.ed != nil && e.abs != "" {
+		// The file shown, in a second view on the right.
+		v := w.newView(e)
+		w.otherEditor = indexOf(w.editors, e)
+		w.activeEditor = indexOf(w.editors, v)
+		w.focusRight = true
+		v.ed.Focus()
+		return
+	}
+	if len(w.editors) < 2 {
 		return
 	}
 	left := w.activeEditor - 1
@@ -52,6 +61,25 @@ func (w *window) toggleSplit() {
 		left = 1
 	}
 	w.otherEditor, w.focusRight = left, true
+}
+
+// newView opens a second view of a file's tab, after it: the file's text
+// and history shared, a selection and a scroll of its own.
+func (w *window) newView(e *editorTab) *editorTab {
+	v := &editorTab{path: e.path, abs: e.abs, uri: e.uri, ed: e.ed.NewView(), viewOf: e,
+		stamp: e.stamp, config: e.config, encoding: e.encoding}
+	v.ed.OnKey = w.customKey
+	i := indexOf(w.editors, e)
+	w.editors = append(w.editors[:i+1], append([]*editorTab{v}, w.editors[i+1:]...)...)
+	if w.otherEditor > i {
+		w.otherEditor++
+	}
+	if w.activeEditor > i {
+		w.activeEditor++
+	}
+	w.attach(v)
+	w.debugAttach(v)
+	return v
 }
 
 // openPreviewToSide opens the preview of the Markdown file shown in the

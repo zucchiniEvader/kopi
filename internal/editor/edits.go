@@ -34,7 +34,7 @@ func (ed *Editor) ApplyEdits(edits []Edit) {
 		}
 		return 0
 	})
-	h := &ed.hist
+	h := ed.hist
 	h.nextGroup++
 	h.group = h.nextGroup
 	defer func() { h.group = 0 }()
