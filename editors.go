@@ -160,7 +160,7 @@ func (w *window) loadAbs(abs string) (*editorTab, bool) {
 			e.err = "This file is binary, or not UTF-8 text."
 		default:
 			e.ed = editor.New(p, string(data))
-			e.applyEditorConfig()
+			w.applyFileSettings(e)
 		}
 		w.editors = append(w.editors, e)
 		w.attach(e)
@@ -306,7 +306,7 @@ func (w *window) saveEditor() {
 			go mygo.Dialog.Error("Could not save "+e.title(), err.Error())
 		}
 	}
-	if s := w.serverOf(e); w.settings.FormatOnSave && e.abs != "" && s != nil && s.state == serverReady && s.caps.formatting {
+	if s := w.serverOf(e); *w.fileSettings(e).FormatOnSave && e.abs != "" && s != nil && s.state == serverReady && s.caps.formatting {
 		w.formatDocument(e, save)
 		return
 	}
@@ -317,9 +317,10 @@ func (w *window) writeEditor(e *editorTab) error {
 	if e.abs == "" || e.ed.ReadOnly {
 		return nil
 	}
-	trim, final := w.settings.TrimTrailingWhitespace, (*bool)(nil)
-	if w.settings.InsertFinalNewline {
-		final = &w.settings.InsertFinalNewline
+	fs := w.fileSettings(e)
+	trim, final := *fs.TrimTrailingWhitespace, (*bool)(nil)
+	if *fs.InsertFinalNewline {
+		final = fs.InsertFinalNewline
 	}
 	if c := e.config; c.TrimTrailingWhitespace != nil {
 		trim = *c.TrimTrailingWhitespace

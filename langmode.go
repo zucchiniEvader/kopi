@@ -42,9 +42,28 @@ func (w *window) chooseLanguage() {
 		if l == cur {
 			hint += " · current"
 		}
-		choices = append(choices, command{title: l.Name, hint: hint, run: func() { e.ed.SetLang(l) }})
+		choices = append(choices, command{title: l.Name, hint: hint, run: func() { w.setLanguage(e, l) }})
 	}
 	w.choose("Select a language", choices)
+}
+
+// setLanguage takes a tab's document as of a language, served by the
+// language server of that one.
+func (w *window) setLanguage(e *editorTab, l *lang.Language) {
+	if e.ed.Lang() == l {
+		return
+	}
+	// Away from the server of the language it was of.
+	w.didClose(e)
+	ed := e.ed
+	ed.OnEdit, ed.OnHover, ed.OnDefinition, ed.OnComplete, ed.OnAcceptCompletion = nil, nil, nil, nil, nil
+	ed.OnSignature, ed.OnCaret, ed.OnSelectionRanges = nil, nil, nil
+	ed.CompletionTriggers, ed.SignatureTriggers = nil, nil
+	ed.SetDiagnostics(nil)
+	ed.SetSemanticTokens(ed.Buffer().Version(), nil)
+	ed.SetFoldRanges(ed.Buffer().Version(), nil)
+	ed.SetLang(l)
+	w.attach(e)
 }
 
 // chooseIndent offers to indent the file shown by tabs or spaces, of a

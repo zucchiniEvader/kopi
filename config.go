@@ -42,6 +42,9 @@ type Settings struct {
 	// as of languages, by their IDs.
 	LanguageServers   map[string]ServerSetting `json:"languageServers,omitempty"`
 	FilesAssociations map[string]string        `json:"files.associations,omitempty"`
+	// Languages set the indent and the clean-ups of the files of each
+	// language, by its ID, over the settings above.
+	Languages map[string]EditorSettings `json:"languages,omitempty"`
 }
 
 func defaultSettings() Settings {

@@ -133,6 +133,10 @@ apply to open windows as the file changes:
     "insertFinalNewline": false,     // says otherwise
     "formatOnSave": false,         // by the file's language server
     "files.associations": { "*.tmpl": "html" },
+    "languages": {                 // over the settings above, by language
+      "python": { "tabSize": 4, "formatOnSave": true },
+      "go": { "detectIndentation": false, "insertSpaces": false }
+    },
     "languageServers": {
       "pyright": { "command": ["basedpyright-langserver", "--stdio"],
                    "settings": { "basedpyright": { "analysis": { "typeCheckingMode": "strict" } } } },
@@ -147,6 +151,12 @@ A server of `languageServers` changes Kopi's of that ID (its `command`,
 `initializationOptions`, `settings`, `languages`), or, with a new ID, a
 `command` and `languages`, serves those languages before Kopi's. The IDs of
 the languages are VS Code's (`python`, `typescriptreact`, `shellscript`…).
+
+A work tree's `.vscode/settings.json` goes over them: `editor.tabSize`,
+`editor.insertSpaces`, `editor.detectIndentation`, `editor.formatOnSave`,
+`files.trimTrailingWhitespace`, `files.insertFinalNewline` and
+`files.associations`, and those of `"[python]"` blocks; its
+`.editorconfig` over all.
 
 Files open in another editor with `$KOPI_EDITOR` or `editorCommand` (`{file}`,
 `{line}` and `{repo}` are replaced), else VS Code, else the app the system

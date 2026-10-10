@@ -126,6 +126,13 @@ func associated(p string) *Language {
 	assocMu.Lock()
 	m := associations
 	assocMu.Unlock()
+	return Associated(m, p)
+}
+
+// Associated returns the language associations, patterns of names or
+// paths to languages' IDs, give a file by its path, nil for none.
+func Associated(m map[string]string, p string) *Language {
+	index()
 	base := path.Base(p)
 	for pattern, id := range m {
 		l := byID[id]
