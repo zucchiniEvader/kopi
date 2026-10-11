@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.3.0
+
+Kopi is an editor of every language, no more of Java and Go alone.
+
+- Some 90 languages, by their files' names, extensions and first lines,
+  each with its comments, brackets, auto-closing and indent; the language
+  of a file changes from the status bar, as do its indent, line breaks and
+  encoding (GBK, UTF-16, Big5, Shift JIS and others). `.editorconfig` and
+  the folder's `.vscode/settings.json` are read, and settings may be set by
+  language.
+- Language servers of some 30 languages, or the user's own: problems,
+  hovers, completions with snippets, signature help, go to definition,
+  references, implementations, symbols, rename, formatting (on save too),
+  quick fixes, highlights, inlay hints, folding ranges and semantic colors.
+  Linters serve beside them, as Ruff beside pyright; a repository of
+  several projects gives each its folder.
+- A server missing that comes with pip or npm Kopi installs itself, in a
+  folder of its own: basedpyright (Python alone suffices), and the servers
+  of TypeScript, HTML, CSS, JSON, YAML, Bash, Dockerfiles, PHP, Svelte and
+  Elm. `autoInstallServers: false` turns it off.
+- Python: the folder's environment is found (.venv, venv, Poetry, Pipenv,
+  conda, uv) and used to run, debug, check and in the terminal; another is
+  chosen from the status bar, or given by its path.
+- Run and debug the programs of other languages: Go with dlv, Python with
+  debugpy, C, C++ and Rust with lldb-dap, Node with js-debug; the
+  `preLaunchTask` of `tasks.json`.
+- A terminal in the panel, the user's shell, with scrollback, selecting and
+  copying; on Windows through ConPTY.
+- The editor: several cursors (⌘D, ⌥-click), folding, expanding the
+  selection, moving, copying and deleting lines, matching brackets, indent
+  guides and word wrap (⌥Z).
+- The path bar, over the editor: Back and Forward, moved from the tabs, then
+  the folders, the file and the symbols holding the caret.
+- The editor splits in two panes, a file shown twice or two side by side.
+- Markdown files preview, beside them or in their tab.
+- Keybindings of one's own, for the command bar's commands.
+- A folder's window opens again with the tabs it had.
+
 ## 0.2.7
 
 - A folder outside any repository that holds some, as ~/work with a/ and b/,
