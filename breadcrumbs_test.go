@@ -31,8 +31,9 @@ func TestPathBar(t *testing.T) {
 	}
 	w.openFile("pkg/sub/a.txt", 0)
 	tt.Frame()
-	// A folder reveals in the explorer.
-	w.sidebarShown = false
+	// A folder reveals in the explorer: from another tab of the sidebar,
+	// which has no row of it to click instead.
+	w.tab, w.explorer.open = tabSearch, map[string]bool{}
 	tt.Frame()
 	if err := tt.Click("pkg"); err != nil {
 		t.Fatal(err)

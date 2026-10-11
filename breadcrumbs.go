@@ -189,10 +189,11 @@ func (w *window) crumbPath(e *editorTab) (dirs []string, file string, inRepo boo
 	return dirs, name, inRepo
 }
 
-// revealDir shows a folder of the repository in the explorer.
+// revealDir shows a folder of the repository in the explorer, open.
 func (w *window) revealDir(rel string) {
 	w.tab, w.sidebarShown = tabExplorer, true
 	w.explorer.reveal(rel)
+	w.explorer.open[rel] = true
 	w.explorer.scroll = true
 }
 
